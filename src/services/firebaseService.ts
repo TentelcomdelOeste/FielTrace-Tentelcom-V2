@@ -92,6 +92,8 @@ export const firebaseService = {
         materiales: evidence.baseFields?.materiales || '',
         customFields: evidence.customFields || [],
         photoPath: evidence.photoPath || '', // Solo referencia de archivo, nunca la foto física
+        category: evidence.category || 'OTROS',
+        categoryLabel: evidence.categoryLabel || 'Otros',
         createdAt: evidence.createdAt ? new Date(evidence.createdAt).toISOString() : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         syncStatus: 'synced',
