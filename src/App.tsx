@@ -1636,6 +1636,26 @@ export default function App() {
     );
 
 
+  const getReservationPhotoGroups = () => {
+    const reservationPhotos = evidences
+      .filter((ev: any) => !!ev.photoUrl && ev.category === 'RESERVA' && ev.reserveId)
+      .sort((a: any, b: any) => {
+        const numberDiff = Number(a.reserveNumber || 0) - Number(b.reserveNumber || 0);
+        if (numberDiff !== 0) return numberDiff;
+        const sideOrder: Record<string, number> = { initial: 1, final: 2, roll: 3 };
+        return (sideOrder[a.reserveSide || ''] || 99) - (sideOrder[b.reserveSide || ''] || 99);
+      });
+
+    const groups = new Map<string, any[]>();
+    reservationPhotos.forEach((ev: any) => {
+      const key = ev.reserveId || `legacy-${ev.reserveNumber || ev.id || ev.uuid}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(ev);
+    });
+    return Array.from(groups.values());
+  };
+
+
   return (
     <div className={`min-h-screen ${currentStep === 'camera' ? 'bg-transparent' : 'bg-white'} flex flex-col font-sans`}>
       {/* Main Content Viewport */}
@@ -3486,25 +3506,8 @@ export default function App() {
                 </div>
               ) : (
                 <div className={storageEvidenceCategory === 'RESERVA' ? "space-y-5 pb-8" : "grid grid-cols-2 gap-3 pb-8"}>
-                  {storageEvidenceCategory === 'RESERVA' ? (() => {
-                    const reservationPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'RESERVA' && ev.reserveId)
-                      .sort((a: any, b: any) => {
-                        const numberDiff = Number(a.reserveNumber || 0) - Number(b.reserveNumber || 0);
-                        if (numberDiff !== 0) return numberDiff;
-                        const sideOrder: Record<string, number> = { initial: 1, final: 2, roll: 3 };
-                        return (sideOrder[a.reserveSide || ''] || 99) - (sideOrder[b.reserveSide || ''] || 99);
-                      });
-                    const groups = Array.from(
-                      reservationPhotos.reduce((map: Map<string, any[]>, ev: any) => {
-                        const key = ev.reserveId || `legacy-${ev.reserveNumber || ev.id || ev.uuid}`;
-                        if (!map.has(key)) map.set(key, []);
-                        map.get(key)!.push(ev);
-                        return map;
-                      }, new Map<string, any[]>()).values()
-                    );
-
-                    return groups.map((group: any[], groupIndex: number) => {
+                  {storageEvidenceCategory === 'RESERVA' ? (
+                    getReservationPhotoGroups().map((group: any[], groupIndex: number) => {
                       const reserveNumber = Number(group[0]?.reserveNumber || groupIndex + 1);
                       return (
                         <div key={group[0]?.reserveId || `reserve-group-${reserveNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
@@ -3536,8 +3539,8 @@ export default function App() {
                           </div>
                         </div>
                       );
-                    });
-                  })() : (
+                    })
+                  ) : (
                     evidences
                       .filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
                       .map((ev: any, index: number) => (
