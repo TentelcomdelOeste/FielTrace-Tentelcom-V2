@@ -914,13 +914,26 @@ export default function App() {
 
   const getReserveReelNumber = (reserveId: string) => {
     // Fuente principal: la PUNTA INICIAL de la misma reserva.
-    // Así FINAL y ROLLO siempre heredan exactamente el mismo carrete.
+    // Compatibilidad: también acepta registros creados por versiones anteriores
+    // que pudieron guardar el carrete con el campo de fibra o en localStorage.
     const initial = evidences.find(ev =>
       ev.category === 'RESERVA' &&
       ev.reserveId === reserveId &&
       ev.reserveSide === 'initial'
     );
-    return initial?.reserveReelNumber?.trim() || '';
+
+    const storedValue =
+      initial?.reserveReelNumber?.trim() ||
+      initial?.fiberReelNumber?.trim() ||
+      '';
+
+    if (storedValue) return storedValue;
+
+    try {
+      return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim() || '';
+    } catch {
+      return '';
+    }
   };
 
   const getReserveFiberCount = (reserveId: string) => {
@@ -929,8 +942,20 @@ export default function App() {
       ev.reserveId === reserveId &&
       ev.reserveSide === 'initial'
     );
-    const count = Number(initial?.reserveFiberCount || 0);
-    return Number.isFinite(count) && count > 0 ? String(count) : '';
+
+    const count =
+      Number(initial?.reserveFiberCount || 0) > 0
+        ? Number(initial?.reserveFiberCount)
+        : Number(initial?.fiberCount || 0);
+
+    if (Number.isFinite(count) && count > 0) return String(count);
+
+    try {
+      const stored = Number(localStorage.getItem(`fieldtrace_reserve_fiber_count_${reserveId}`) || 0);
+      return Number.isFinite(stored) && stored > 0 ? String(stored) : '';
+    } catch {
+      return '';
+    }
   };
 
   const openReserveSide = (side: 'initial' | 'final' | 'roll', reserveId?: string) => {
