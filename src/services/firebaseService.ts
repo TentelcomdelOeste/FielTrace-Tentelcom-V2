@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  * Firebase Initialization and Firestore service for Field Trace (Phase 3)
  * Cloud persistence: deleting locally never issues a remote delete.
- * NO photos are uploaded or stored in Firebase. Only evidence metadata.
+ * Evidence photos are stored in Firebase Storage; Firestore stores metadata and references.
  */
 
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -24,6 +25,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfigData.firestoreDatabaseId || '(default)');
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // Authenticate anonymously so Firestore security rules (request.auth != null) pass successfully
 export async function ensureAuthenticated(): Promise<string | null> {
@@ -43,6 +45,24 @@ export async function ensureAuthenticated(): Promise<string | null> {
 ensureAuthenticated().catch(console.error);
 
 export const firebaseService = {
+  /** Sube la fotografía original a Firebase Storage y devuelve su URL pública/autenticada. */
+  async uploadEvidencePhoto(imageBase64: string, projectUuid: string, evidenceUuid: string, fileName: string): Promise<{ storagePath: string; downloadUrl: string }> {
+    if (!imageBase64) throw new Error('No hay imagen para subir.');
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión para subir la fotografía.');
+
+    const response = await fetch(imageBase64);
+    const blob = await response.blob();
+    const extension = blob.type === 'image/png' ? 'png' : 'jpg';
+    const safeName = (fileName || `FT_${evidenceUuid}`).replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\\.(jpeg|jpg|png)$/i, '');
+    const storagePath = `projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`;
+    const storageRef = ref(storage, storagePath);
+    await uploadBytes(storageRef, blob, { contentType: blob.type || 'image/jpeg', cacheControl: 'public,max-age=31536000,immutable' });
+    const downloadUrl = await getDownloadURL(storageRef);
+    console.log(`[Firebase Storage] ✓ Fotografía ${evidenceUuid} subida: ${storagePath}`);
+    return { storagePath, downloadUrl };
+  },
+
   isOnline(): boolean {
     return navigator.onLine;
   },
@@ -91,7 +111,9 @@ export const firebaseService = {
         observaciones: evidence.baseFields?.observaciones || '',
         materiales: evidence.baseFields?.materiales || '',
         customFields: evidence.customFields || [],
-        photoPath: evidence.photoPath || '', // Solo referencia de archivo, nunca la foto física
+        photoPath: evidence.photoPath || '',
+        photoStoragePath: evidence.photoStoragePath || '',
+        photoUrl: evidence.photoUrl || '',
         category: evidence.category || 'OTROS',
         categoryLabel: evidence.categoryLabel || 'Otros',
         createdAt: evidence.createdAt ? new Date(evidence.createdAt).toISOString() : new Date().toISOString(),
