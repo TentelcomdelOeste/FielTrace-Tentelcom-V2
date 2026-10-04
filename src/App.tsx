@@ -1484,7 +1484,7 @@ export default function App() {
       };
     }
     const count = categoryEvidences.length;
-    return { ...category, count, completed: count > 0 };
+    return { ...category, count, completed: count > 0, reserveCompletedCount: 0, reserveCount: 0 };
   });
   const completedEvidenceCategories = evidenceCategoryProgress.filter(category => category.completed).length;
   const pendingEvidenceCategories = evidenceCategoryProgress.length - completedEvidenceCategories;
