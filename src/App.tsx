@@ -853,7 +853,9 @@ export default function App() {
     if (fromEvidence) return fromEvidence;
 
     try {
-      return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim() || '';
+      return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim()
+        || localStorage.getItem(`fieldtrace_reserve_reel_number_${Number(evidences.find(ev => ev.reserveId === reserveId)?.reserveNumber || 0)}`)?.trim()
+        || '';
     } catch {
       return '';
     }
@@ -877,7 +879,9 @@ export default function App() {
           side,
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
-          reelNumber: getReserveReelNumber(existing.reserveId)
+          reelNumber: (reserveCaptureDraft?.reserveId === existing.reserveId && reserveCaptureDraft.reelNumber.trim())
+            ? reserveCaptureDraft.reelNumber.trim()
+            : getReserveReelNumber(existing.reserveId)
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
@@ -920,7 +924,9 @@ export default function App() {
       side,
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
-      reelNumber: getReserveReelNumber(selected.reserveId) || initialEvidence?.reserveReelNumber || selected.reserveReelNumber || ''
+      reelNumber: (reserveCaptureDraft?.reserveId === selected.reserveId && reserveCaptureDraft.reelNumber.trim())
+        ? reserveCaptureDraft.reelNumber.trim()
+        : (getReserveReelNumber(selected.reserveId) || initialEvidence?.reserveReelNumber || selected.reserveReelNumber || '')
     });
     setShowReserveCaptureModal(false);
     setCurrentStep('camera');
@@ -3619,7 +3625,21 @@ export default function App() {
                       inputMode="numeric"
                       autoFocus={!reserveCaptureDraft.reelNumber}
                       value={reserveCaptureDraft.reelNumber}
-                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setReserveCaptureDraft(prev => {
+                          if (!prev) return prev;
+                          try {
+                            if (prev.reserveId && value.trim()) {
+                              localStorage.setItem(`fieldtrace_reserve_reel_${prev.reserveId}`, value.trim());
+                              localStorage.setItem(`fieldtrace_reserve_reel_number_${prev.reserveNumber}`, value.trim());
+                            }
+                          } catch {
+                            // IndexedDB/evidence remains the source of truth.
+                          }
+                          return { ...prev, reelNumber: value };
+                        });
+                      }}
                       readOnly={reserveCaptureDraft.side !== 'initial'}
                       placeholder="Ej. 00125"
                       className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
