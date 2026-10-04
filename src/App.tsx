@@ -851,51 +851,22 @@ export default function App() {
   const getReserveReelNumber = (reserveId: string) => {
     // Fuente principal: la PUNTA INICIAL de la misma reserva.
     // Así FINAL y ROLLO siempre heredan exactamente el mismo carrete.
-    const sameReserve = evidences
-      .filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)
-      .sort((a, b) => {
-        const aInitial = a.reserveSide === 'initial' ? 0 : 1;
-        const bInitial = b.reserveSide === 'initial' ? 0 : 1;
-        return aInitial - bInitial;
-      });
-
-    const fromEvidence = sameReserve
-      .map(ev => ev.reserveReelNumber?.trim())
-      .find(Boolean);
-    if (fromEvidence) return fromEvidence;
-
-    try {
-      const reserveNumber = Number(sameReserve[0]?.reserveNumber || 0);
-      return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim()
-        || (reserveNumber
-          ? localStorage.getItem(`fieldtrace_reserve_reel_number_${reserveNumber}`)?.trim()
-          : '')
-        || '';
-    } catch {
-      return '';
-    }
+    const initial = evidences.find(ev =>
+      ev.category === 'RESERVA' &&
+      ev.reserveId === reserveId &&
+      ev.reserveSide === 'initial'
+    );
+    return initial?.reserveReelNumber?.trim() || '';
   };
 
   const getReserveFiberCount = (reserveId: string) => {
-    const sameReserve = evidences
-      .filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)
-      .sort((a, b) => {
-        const aInitial = a.reserveSide === 'initial' ? 0 : 1;
-        const bInitial = b.reserveSide === 'initial' ? 0 : 1;
-        return aInitial - bInitial;
-      });
-
-    const fromEvidence = sameReserve
-      .map(ev => Number(ev.reserveFiberCount || 0))
-      .find(value => Number.isFinite(value) && value > 0);
-
-    if (fromEvidence) return String(fromEvidence);
-
-    try {
-      return localStorage.getItem(`fieldtrace_reserve_fiber_count_${reserveId}`)?.trim() || '';
-    } catch {
-      return '';
-    }
+    const initial = evidences.find(ev =>
+      ev.category === 'RESERVA' &&
+      ev.reserveId === reserveId &&
+      ev.reserveSide === 'initial'
+    );
+    const count = Number(initial?.reserveFiberCount || 0);
+    return Number.isFinite(count) && count > 0 ? String(count) : '';
   };
 
   const openReserveSide = (side: 'initial' | 'final' | 'roll', reserveId?: string) => {
@@ -955,15 +926,20 @@ export default function App() {
     // Se busca primero la PUNTA INICIAL y luego cualquier evidencia del mismo grupo.
     const inheritedReel = getReserveReelNumber(selected.reserveId);
 
+    const inheritedFiberCount = getReserveFiberCount(selected.reserveId);
+    if (!inheritedReel || !inheritedFiberCount) {
+      alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras. Registre nuevamente la PUNTA INICIAL.');
+      return;
+    }
+
     setReserveCaptureDraft({
       side,
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
       reelNumber: inheritedReel,
-      fiberCount: getReserveFiberCount(selected.reserveId)
+      fiberCount: inheritedFiberCount
     });
-    setShowReserveCaptureModal(false);
-    setCurrentStep('camera');
+    setShowReserveCaptureModal(true);
   };
 
   const confirmFiberCapture = () => {
@@ -3667,7 +3643,7 @@ export default function App() {
                     Cancelar
                   </button>
                 </>
-              ) : (
+              ) : reserveCaptureDraft.side !== 'initial' ? (
                 <>
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
@@ -3675,7 +3651,9 @@ export default function App() {
                       RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
                     </h3>
                     <p className="text-xs text-gray-500 mt-2">
-                      Seleccione la evidencia que falta para completar esta reserva.
+                      {reserveCaptureDraft.side === 'final'
+                        ? 'Fotografía de PUNTA FINAL. Los datos se heredan de la PUNTA INICIAL.'
+                        : 'Fotografía de ROLLO DETALLADO. Los datos se heredan de la PUNTA INICIAL.'}
                     </p>
                   </div>
 
@@ -3683,32 +3661,12 @@ export default function App() {
                     <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Número de carrete</label>
                     <input
                       type="text"
-                      inputMode="numeric"
-                      autoFocus={!reserveCaptureDraft.reelNumber}
                       value={reserveCaptureDraft.reelNumber}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setReserveCaptureDraft(prev => {
-                          if (!prev) return prev;
-                          try {
-                            if (prev.reserveId && value.trim()) {
-                              localStorage.setItem(`fieldtrace_reserve_reel_${prev.reserveId}`, value.trim());
-                              localStorage.setItem(`fieldtrace_reserve_reel_number_${prev.reserveNumber}`, value.trim());
-                            }
-                          } catch {
-                            // IndexedDB/evidence remains the source of truth.
-                          }
-                          return { ...prev, reelNumber: value };
-                        });
-                      }}
-                      readOnly={reserveCaptureDraft.side !== 'initial'}
-                      placeholder="Ej. 00125"
-                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
+                      readOnly
+                      className="w-full rounded-2xl border-2 border-gray-200 bg-gray-100 px-4 py-3 text-lg font-black text-gray-950 outline-none"
                     />
-                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
-                      {reserveCaptureDraft.side !== 'initial'
-                        ? `✓ Carrete heredado de la PUNTA INICIAL: ${reserveCaptureDraft.reelNumber || 'PENDIENTE'}`
-                        : (reserveCaptureDraft.reelNumber ? '✓ Este carrete se reutilizará en las 3 fotos de la reserva.' : 'Ingrese el carrete una sola vez; se reutilizará en inicial, final y rollo.')}
+                    <p className="text-[9px] font-bold uppercase text-green-600 mt-1">
+                      ✓ Carrete heredado de la PUNTA INICIAL
                     </p>
                   </div>
 
@@ -3716,73 +3674,40 @@ export default function App() {
                     <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
                     <input
                       type="number"
-                      inputMode="numeric"
-                      min="1"
-                      step="1"
                       value={reserveCaptureDraft.fiberCount}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setReserveCaptureDraft(prev => {
-                          if (!prev) return prev;
-                          try {
-                            if (prev.reserveId && value.trim()) {
-                              localStorage.setItem(`fieldtrace_reserve_fiber_count_${prev.reserveId}`, value.trim());
-                            }
-                          } catch {}
-                          return { ...prev, fiberCount: value };
-                        });
-                      }}
-                      readOnly={reserveCaptureDraft.side !== 'initial'}
-                      placeholder="Ej. 12, 24, 48"
-                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
+                      readOnly
+                      className="w-full rounded-2xl border-2 border-gray-200 bg-gray-100 px-4 py-3 text-lg font-black text-gray-950 outline-none"
                     />
-                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
-                      {reserveCaptureDraft.side !== 'initial'
-                        ? `✓ Cantidad de fibras heredada de la PUNTA INICIAL: ${reserveCaptureDraft.fiberCount || 'PENDIENTE'}`
-                        : (reserveCaptureDraft.fiberCount ? '✓ Se reutilizará en las 3 fotos de la reserva.' : 'Ingrese una sola vez la cantidad de fibras; se reutilizará en inicial, final y rollo.')}
+                    <p className="text-[9px] font-bold uppercase text-green-600 mt-1">
+                      ✓ Cantidad de fibras heredada de la PUNTA INICIAL
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2.5">
-                    <button
-                      type="button"
-                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'initial') || !reserveCaptureDraft.reelNumber.trim() || !reserveCaptureDraft.fiberCount.trim()}
-                      onClick={() => openReserveSide('initial', reserveCaptureDraft.reserveId)}
-                      className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide disabled:bg-gray-200 disabled:text-gray-400"
-                    >
-                      {reserveHasSide(reserveCaptureDraft.reserveId, 'initial') ? 'Punta inicial ✓' : 'Punta inicial'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'final') || !reserveCaptureDraft.reelNumber.trim() || !reserveCaptureDraft.fiberCount.trim()}
-                      onClick={() => openReserveSide('final', reserveCaptureDraft.reserveId)}
-                      className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
-                    >
-                      {reserveHasSide(reserveCaptureDraft.reserveId, 'final') ? 'Punta final ✓' : 'Punta final'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'roll') || !reserveCaptureDraft.reelNumber.trim() || !reserveCaptureDraft.fiberCount.trim()}
-                      onClick={() => openReserveSide('roll', reserveCaptureDraft.reserveId)}
-                      className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
-                    >
-                      {reserveHasSide(reserveCaptureDraft.reserveId, 'roll') ? 'Rollo detallado ✓' : 'Rollo detallado'}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReserveCaptureModal(false);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide"
+                  >
+                    GUARDAR Y ABRIR CÁMARA
+                  </button>
 
                   <button
                     type="button"
                     onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '' })}
                     className="w-full py-3 rounded-2xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase"
                   >
-                    Cambiar reserva
+                    CAMBIAR RESERVA
                   </button>
 
                   <button type="button" onClick={() => { setShowReserveCaptureModal(false); setReserveCaptureDraft(null); }} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">
-                    Cancelar
+                    CANCELAR
                   </button>
                 </>
-              )}
+              ) : (
+                <>
             </motion.div>
           </motion.div>
         )}
