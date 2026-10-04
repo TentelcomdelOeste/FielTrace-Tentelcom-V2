@@ -46,13 +46,12 @@ ensureAuthenticated().catch(console.error);
 
 export const firebaseService = {
   /** Sube la fotografía original a Firebase Storage y devuelve su URL pública/autenticada. */
-  async uploadEvidencePhoto(imageBase64: string, projectUuid: string, evidenceUuid: string, fileName: string): Promise<{ storagePath: string; downloadUrl: string }> {
-    if (!imageBase64) throw new Error('No hay imagen para subir.');
+  async uploadEvidencePhoto(image: string | Blob, projectUuid: string, evidenceUuid: string, fileName: string): Promise<{ storagePath: string; downloadUrl: string }> {
+    if (!image) throw new Error('No hay imagen para subir.');
     const uid = await ensureAuthenticated();
     if (!uid) throw new Error('No fue posible autenticar la sesión para subir la fotografía.');
 
-    const response = await fetch(imageBase64);
-    const blob = await response.blob();
+    const blob = image instanceof Blob ? image : await (await fetch(image)).blob();
     const extension = blob.type === 'image/png' ? 'png' : 'jpg';
     const safeName = (fileName || `FT_${evidenceUuid}`).replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\\.(jpeg|jpg|png)$/i, '');
     const storagePath = `projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`;
