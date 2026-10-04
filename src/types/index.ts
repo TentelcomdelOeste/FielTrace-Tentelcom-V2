@@ -113,6 +113,15 @@ export interface Evidence {
   category?: EvidenceCategory;
   /** Texto visible de la categoría al momento de la captura. */
   categoryLabel?: string;
+  /** Identificador de la pareja de punta de fibra (Inicial + Final). */
+  fiberPairId?: string;
+  /** Número visible de la punta dentro del proyecto. */
+  fiberPairNumber?: number;
+  /** Metraje digitado por el técnico para esta punta. */
+  fiberMeterage?: number;
+  /** Lado de la pareja documentado por esta evidencia. */
+  fiberSide?: 'initial' | 'final';
+
   photo?: {
     fileName: string;
     uri?: string;
