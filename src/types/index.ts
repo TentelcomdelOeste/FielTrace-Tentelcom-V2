@@ -72,8 +72,7 @@ export enum SyncOperation {
 }
 
 export type EvidenceCategory =
-  | 'PUNTAS_FIBRA_INICIAL'
-  | 'PUNTAS_FIBRA_FINAL'
+  | 'PUNTAS_FIBRA'
   | 'ACEROS'
   | 'DESECHOS'
   | 'NAPS'
@@ -85,8 +84,7 @@ export type EvidenceCategory =
   | 'OTROS';
 
 export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }> = [
-  { id: 'PUNTAS_FIBRA_INICIAL', label: 'Puntas de fibra – Inicial' },
-  { id: 'PUNTAS_FIBRA_FINAL', label: 'Puntas de fibra – Final' },
+  { id: 'PUNTAS_FIBRA', label: 'Puntas de fibra' },
   { id: 'ACEROS', label: 'Aceros' },
   { id: 'DESECHOS', label: 'Desechos' },
   { id: 'NAPS', label: 'NAPS' },
