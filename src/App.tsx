@@ -1275,7 +1275,10 @@ export default function App() {
       const hora = capturedAt.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
-      if (selectedEvidenceCategory?.id === 'RESERVA' && reserveCaptureDraft?.reserveId && reserveCaptureDraft.reelNumber?.trim()) {
+      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
+      if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
+
+      if (selectedEvidenceCategory.id === 'RESERVA' && reserveCaptureDraft?.reserveId && reserveCaptureDraft.reelNumber?.trim()) {
         try {
           localStorage.setItem(
             `fieldtrace_reserve_reel_${reserveCaptureDraft.reserveId}`,
@@ -1285,9 +1288,6 @@ export default function App() {
           // localStorage may be unavailable in restricted browser contexts; IndexedDB remains the source of truth.
         }
       }
-
-      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
-      if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
       const captureCategoryId: EvidenceCategory =
         evidenceCategory === 'PUNTAS_FIBRA'
           ? (fiberCaptureDraft?.side === 'final' ? 'PUNTAS_FIBRA_FINAL' : 'PUNTAS_FIBRA_INICIAL')
