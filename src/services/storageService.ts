@@ -497,7 +497,21 @@ export const storageService = {
   },
 
   async deleteEvidence(id: number): Promise<void> {
+    const existing = await manager.get<Evidence>(STORE_EVIDENCES, id);
+    if (!existing) throw new Error('Evidence not found');
+
+    // La eliminación definitiva requiere borrar primero la foto remota y su metadata.
+    // Si Firebase falla, conservamos el registro local para no perder la referencia.
+    if (navigator.onLine && (existing.photoStoragePath || existing.uuid)) {
+      await firebaseService.deleteEvidenceFromCloud(existing);
+    } else if (!navigator.onLine) {
+      throw new Error('Se necesita conexión a Internet para eliminar definitivamente la evidencia de Firebase Storage.');
+    }
+
     await manager.delete(STORE_EVIDENCES, id);
+    if (existing.photoPath) {
+      try { await manager.delete(STORE_PHOTOS, existing.photoPath); } catch (_) {}
+    }
   },
 
   async deleteAllEvidencesByProject(projectId: number): Promise<number> {
