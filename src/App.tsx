@@ -3534,15 +3534,27 @@ export default function App() {
               </div>
               <button type="button" onClick={() => { setShowStorageEvidenceViewer(false); setStorageEvidenceCategory(null); }} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
             </div>
+
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {evidences.filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory)).length === 0 ? (
+              {evidences.filter((ev: any) => {
+                if (!ev.photoUrl) return false;
+                if (!storageEvidenceCategory) return true;
+                if (storageEvidenceCategory === 'PUNTAS_FIBRA_INICIAL' || storageEvidenceCategory === 'PUNTAS_FIBRA_FINAL') {
+                  return ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL';
+                }
+                return ev.category === storageEvidenceCategory;
+              }).length === 0 ? (
                 <div className="py-20 text-center">
                   <CloudUpload className="w-10 h-10 mx-auto text-gray-300 mb-3" />
                   <p className="text-[11px] font-black uppercase text-gray-500">No hay fotografías en Storage todavía</p>
                   <p className="text-[9px] font-bold text-gray-400 mt-2">Toma una fotografía y espera a que termine la subida.</p>
                 </div>
               ) : (
-                <div className={storageEvidenceCategory === 'RESERVA' ? "space-y-5 pb-8" : "grid grid-cols-2 gap-3 pb-8"}>
+                <div className={
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'PUNTAS_FIBRA_INICIAL' || storageEvidenceCategory === 'PUNTAS_FIBRA_FINAL'
+                    ? "space-y-5 pb-8"
+                    : "grid grid-cols-2 gap-3 pb-8"
+                }>
                   {storageEvidenceCategory === 'RESERVA' ? (() => {
                     const reservationPhotos = evidences
                       .filter((ev: any) => !!ev.photoUrl && ev.category === 'RESERVA' && ev.reserveId)
@@ -3567,15 +3579,10 @@ export default function App() {
                         <div key={group[0]?.reserveId || `reserve-group-${reserveNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
                           <div className="flex items-center justify-between gap-3 px-1 pb-3">
                             <div>
-                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
-                                RESERVA {String(reserveNumber).padStart(2, '0')}
-                              </p>
-                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
-                                {group.length}/3 FOTOS · GRUPO INDEPENDIENTE
-                              </p>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">RESERVA {String(reserveNumber).padStart(2, '0')}</p>
+                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">{group.length}/3 FOTOS · GRUPO INDEPENDIENTE</p>
                             </div>
                           </div>
-
                           <div className="grid grid-cols-2 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
@@ -3583,9 +3590,61 @@ export default function App() {
                                   <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">
-                                    {ev.reserveSide === 'initial' ? 'PUNTA INICIAL' : ev.reserveSide === 'final' ? 'PUNTA FINAL' : 'ROLLO DETALLADO'}
-                                  </p>
+                                  <p className="text-[9px] font-black uppercase text-gray-900">{ev.reserveSide === 'initial' ? 'PUNTA INICIAL' : ev.reserveSide === 'final' ? 'PUNTA FINAL' : 'ROLLO DETALLADO'}</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : (storageEvidenceCategory === 'PUNTAS_FIBRA_INICIAL' || storageEvidenceCategory === 'PUNTAS_FIBRA_FINAL') ? (() => {
+                    const fiberPhotos = evidences
+                      .filter((ev: any) =>
+                        !!ev.photoUrl &&
+                        (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') &&
+                        ev.fiberPairId
+                      )
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { initial: 1, final: 2 };
+                        return (sideOrder[a.fiberSide || ''] || 99) - (sideOrder[b.fiberSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      fiberPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.fiberPairId || `legacy-fiber-${ev.fiberPairNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const pairNumber = Number(group[0]?.fiberPairNumber || groupIndex + 1);
+                      const hasInitial = group.some(ev => ev.fiberSide === 'initial' || ev.category === 'PUNTAS_FIBRA_INICIAL');
+                      const hasFinal = group.some(ev => ev.fiberSide === 'final' || ev.category === 'PUNTAS_FIBRA_FINAL');
+                      return (
+                        <div key={group[0]?.fiberPairId || `fiber-group-${pairNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">PUNTA {String(pairNumber).padStart(2, '0')}</p>
+                              <p className="text-[8px] font-bold uppercase mt-1 ${hasInitial && hasFinal ? 'text-gray-400' : 'text-amber-600'}">
+                                {hasInitial && hasFinal ? '2/2 FOTOS · PAREJA COMPLETA' : `{group.length}/2 FOTOS · FALTA ${!hasInitial ? 'INICIAL' : 'FINAL'}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">{ev.fiberSide === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}</p>
+                                  <p className="text-[8px] font-black text-blue-600 mt-1">{ev.fiberMeterage ?? '-'} M</p>
                                   <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
@@ -3605,9 +3664,7 @@ export default function App() {
                           <div className="p-2.5">
                             <p className="text-[9px] font-black uppercase text-gray-900 truncate">{ev.categoryLabel || 'Otros'}</p>
                             {ev.fiberPairId && (
-                              <p className="text-[8px] font-black uppercase text-blue-600 mt-1">
-                                PUNTA {String(ev.fiberPairNumber || '').padStart(2, '0')} · {ev.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {ev.fiberMeterage ?? '-'} M
-                              </p>
+                              <p className="text-[8px] font-black uppercase text-blue-600 mt-1">PUNTA {String(ev.fiberPairNumber || '').padStart(2, '0')} · {ev.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {ev.fiberMeterage ?? '-'} M</p>
                             )}
                             <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                           </div>
