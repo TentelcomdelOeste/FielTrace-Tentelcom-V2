@@ -232,6 +232,7 @@ export default function App() {
     metraje: string;
   } | null>(null);
   const [showFiberCaptureModal, setShowFiberCaptureModal] = useState(false);
+  const [showFiberPairSelector, setShowFiberPairSelector] = useState(false);
   const [reserveCaptureDraft, setReserveCaptureDraft] = useState<{
     side: 'initial' | 'final' | 'roll';
     reserveId: string;
@@ -756,21 +757,22 @@ export default function App() {
   };
 
   const isFiberCategory = (category: EvidenceCategory) =>
-    category === 'PUNTAS_FIBRA_INICIAL' || category === 'PUNTAS_FIBRA_FINAL';
+    category === 'PUNTAS_FIBRA' || category === 'PUNTAS_FIBRA_INICIAL' || category === 'PUNTAS_FIBRA_FINAL';
 
   const openEvidenceCapture = (category: EvidenceCategory) => {
     setEvidenceCategory(category);
 
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
-
-      // Abrir selector para que el técnico elija qué reserva incompleta desea continuar.
-      setReserveCaptureDraft({
-        side: 'initial',
-        reserveId: '',
-        reserveNumber: 0
-      });
+      setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0 });
       setShowReserveCaptureModal(true);
+      return;
+    }
+
+    if (category === 'PUNTAS_FIBRA') {
+      setReserveCaptureDraft(null);
+      setFiberCaptureDraft(null);
+      setShowFiberPairSelector(true);
       return;
     }
 
@@ -780,37 +782,48 @@ export default function App() {
       setCurrentStep('camera');
       return;
     }
+  };
 
-    if (category === 'PUNTAS_FIBRA_INICIAL') {
-      const usedNumbers = evidences
-        .filter(ev => ev.category === 'PUNTAS_FIBRA_INICIAL' && ev.fiberPairNumber != null)
-        .map(ev => Number(ev.fiberPairNumber))
+  const openFiberSide = (side: 'initial' | 'final', pairId?: string) => {
+    if (side === 'initial') {
+      if (pairId) {
+        const existingInitial = evidences.some(ev =>
+          ev.category === 'PUNTAS_FIBRA_INICIAL' && ev.fiberPairId === pairId
+        );
+        if (existingInitial) {
+          alert('Esta punta ya tiene PUNTA INICIAL.');
+          return;
+        }
+      }
+
+      const fiberPairsFromEvidence = evidences
+        .filter(ev => (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') && ev.fiberPairId)
+        .map(ev => Number(ev.fiberPairNumber || 0))
         .filter(Number.isFinite);
-      const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-      const pairId = crypto.randomUUID ? crypto.randomUUID() : `fiber_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      setReserveCaptureDraft(null);
-      setFiberCaptureDraft({ side: 'initial', pairId, pairNumber: nextNumber, metraje: '' });
-      setShowFiberCaptureModal(true);
-      return;
+      const nextNumber = fiberPairsFromEvidence.length ? Math.max(...fiberPairsFromEvidence) + 1 : 1;
+      const id = pairId || (crypto.randomUUID ? crypto.randomUUID() : `fiber_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+
+      setFiberCaptureDraft({ side: 'initial', pairId: id, pairNumber: pairId
+        ? Number(evidences.find(ev => ev.fiberPairId === pairId)?.fiberPairNumber || nextNumber)
+        : nextNumber, metraje: '' });
+    } else {
+      const pendingPairs = fiberPairs.filter(pair => !pair.hasFinal);
+      const selected = pairId ? pendingPairs.find(pair => pair.pairId === pairId) : pendingPairs[0];
+
+      if (!selected) {
+        alert('Primero registre una PUNTA INICIAL para poder tomar su fotografía FINAL.');
+        return;
+      }
+
+      setFiberCaptureDraft({
+        side: 'final',
+        pairId: selected.pairId,
+        pairNumber: selected.pairNumber,
+        metraje: ''
+      });
     }
 
-    const pendingPairs = evidences
-      .filter(ev => ev.category === 'PUNTAS_FIBRA_INICIAL' && ev.fiberPairId)
-      .filter(initial => !evidences.some(ev => ev.category === 'PUNTAS_FIBRA_FINAL' && ev.fiberPairId === initial.fiberPairId));
-
-    if (!pendingPairs.length) {
-      alert('Primero registre una PUNTA INICIAL para poder tomar su fotografía FINAL.');
-      return;
-    }
-
-    const first = pendingPairs.sort((a, b) => Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0))[0];
-    setReserveCaptureDraft(null);
-    setFiberCaptureDraft({
-      side: 'final',
-      pairId: first.fiberPairId || '',
-      pairNumber: Number(first.fiberPairNumber || 1),
-      metraje: ''
-    });
+    setShowFiberPairSelector(false);
     setShowFiberCaptureModal(true);
   };
 
@@ -1222,6 +1235,16 @@ export default function App() {
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
       const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
       if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
+      const captureCategoryId: EvidenceCategory =
+        evidenceCategory === 'PUNTAS_FIBRA'
+          ? (fiberCaptureDraft?.side === 'final' ? 'PUNTAS_FIBRA_FINAL' : 'PUNTAS_FIBRA_INICIAL')
+          : selectedEvidenceCategory.id;
+      const captureCategoryLabel =
+        captureCategoryId === 'PUNTAS_FIBRA_FINAL'
+          ? 'Puntas de fibra – Final'
+          : captureCategoryId === 'PUNTAS_FIBRA_INICIAL'
+            ? 'Puntas de fibra – Inicial'
+            : selectedEvidenceCategory.label;
 
       const viewfinderEl = document.getElementById('camera-viewfinder');
       const vfRect = viewfinderEl ? viewfinderEl.getBoundingClientRect() : null;
@@ -1235,8 +1258,8 @@ export default function App() {
         projectId: selectedProject.id!,
         projectName: selectedProject.name,
         photoPath: fileName,
-        category: selectedEvidenceCategory.id,
-        categoryLabel: selectedEvidenceCategory.label,
+        category: captureCategoryId,
+        categoryLabel: captureCategoryLabel,
         fiberPairId: isFiberCategory(selectedEvidenceCategory.id) ? (fiberCaptureDraft?.pairId || '') : undefined,
         fiberPairNumber: isFiberCategory(selectedEvidenceCategory.id) ? fiberCaptureDraft?.pairNumber : undefined,
         fiberMeterage: isFiberCategory(selectedEvidenceCategory.id) ? Number(fiberCaptureDraft?.metraje || 0) : undefined,
@@ -1339,9 +1362,10 @@ export default function App() {
 
           // Las reservas son fotografías individuales. Después de cada captura
           // regresamos al proyecto para evitar que el técnico tome fotos extra.
-          if (selectedEvidenceCategory.id === 'RESERVA') {
+          if (selectedEvidenceCategory.id === 'RESERVA' || evidenceCategory === 'PUNTAS_FIBRA') {
             setShowReserveCaptureModal(false);
             setReserveCaptureDraft(null);
+            setFiberCaptureDraft(null);
             setCurrentStep('history');
           }
         } catch (e: any) {
@@ -1555,20 +1579,20 @@ export default function App() {
       };
     }
 
-    if (category.id === 'PUNTAS_FIBRA_INICIAL' || category.id === 'PUNTAS_FIBRA_FINAL') {
-      const isInitial = category.id === 'PUNTAS_FIBRA_INICIAL';
+    if (category.id === 'PUNTAS_FIBRA') {
       return {
         ...category,
-        count: categoryEvidences.length,
+        count: fiberPairs.reduce((total, pair) => total + (pair.hasInitial ? 1 : 0) + (pair.hasFinal ? 1 : 0), 0),
         completed: fiberPairs.length > 0 && pendingFiberPairs.length === 0,
         fiberPairCount: fiberPairs.length,
         fiberCompleteCount: completedFiberPairs.length,
         fiberPendingCount: pendingFiberPairs.length,
         fiberPendingLabels,
-        fiberRole: isInitial ? 'initial' : 'final',
+        fiberRole: null,
         reserveCompletedCount: 0,
         reserveCount: 0,
         reservePendingCount: 0,
+        pendingReserveLabels: [],
       };
     }
 
@@ -1876,7 +1900,7 @@ export default function App() {
                                       ? `✓ ${category.reserveCompletedCount || 0}/${category.reserveCount} reservas completas · ${category.count} fotos`
                                       : `⚠ ${category.reserveCompletedCount || 0}/${category.reserveCount} reservas completas · ${(category.pendingReserveLabels || []).join(' · ')}`)
                                   : 'Pendiente · 0 fotos')
-                              : (category.id === 'PUNTAS_FIBRA_INICIAL' || category.id === 'PUNTAS_FIBRA_FINAL')
+                              : category.id === 'PUNTAS_FIBRA'
                                 ? (category.fiberPairCount
                                     ? (category.completed
                                         ? `✓ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.count} fotos`
@@ -3316,6 +3340,44 @@ export default function App() {
           </motion.div>
         )}
 
+        {showFiberPairSelector && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Puntas de fibra</p>
+                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">Seleccione la punta</h3>
+                <p className="text-xs text-gray-500 mt-2">Cada punta reúne su fotografía inicial y final en el mismo grupo.</p>
+              </div>
+
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto">
+                {fiberPairs.map(pair => (
+                  <div key={pair.pairId} className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-gray-950">PUNTA {String(pair.pairNumber).padStart(2, '0')}</p>
+                        <p className={`text-[8px] font-black uppercase mt-1 ${pair.complete ? 'text-green-600' : 'text-amber-600'}`}>
+                          {pair.complete ? '2/2 FOTOS · COMPLETA' : `1/2 FOTOS · FALTA ${!pair.hasInitial ? 'INICIAL' : 'FINAL'}`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        {!pair.hasInitial && (
+                          <button type="button" onClick={() => openFiberSide('initial', pair.pairId)} className="px-3 py-2 rounded-xl bg-blue-600 text-white text-[8px] font-black uppercase">Inicial</button>
+                        )}
+                        {!pair.hasFinal && pair.hasInitial && (
+                          <button type="button" onClick={() => openFiberSide('final', pair.pairId)} className="px-3 py-2 rounded-xl bg-blue-600 text-white text-[8px] font-black uppercase">Final</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button type="button" onClick={() => openFiberSide('initial')} className="w-full py-3 rounded-2xl border-2 border-dashed border-blue-200 text-blue-700 text-[10px] font-black uppercase">+ Nueva punta</button>
+              </div>
+
+              <button type="button" onClick={() => setShowFiberPairSelector(false)} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showFiberCaptureModal && fiberCaptureDraft && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
             <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
@@ -3539,7 +3601,7 @@ export default function App() {
               {evidences.filter((ev: any) => {
                 if (!ev.photoUrl) return false;
                 if (!storageEvidenceCategory) return true;
-                if (storageEvidenceCategory === 'PUNTAS_FIBRA_INICIAL' || storageEvidenceCategory === 'PUNTAS_FIBRA_FINAL') {
+                if (storageEvidenceCategory === 'PUNTAS_FIBRA') {
                   return ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL';
                 }
                 return ev.category === storageEvidenceCategory;
@@ -3551,7 +3613,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'PUNTAS_FIBRA_INICIAL' || storageEvidenceCategory === 'PUNTAS_FIBRA_FINAL'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'PUNTAS_FIBRA'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
@@ -3599,7 +3661,7 @@ export default function App() {
                         </div>
                       );
                     });
-                  })() : (storageEvidenceCategory === 'PUNTAS_FIBRA_INICIAL' || storageEvidenceCategory === 'PUNTAS_FIBRA_FINAL') ? (() => {
+                  })() : storageEvidenceCategory === 'PUNTAS_FIBRA' ? (() => {
                     const fiberPhotos = evidences
                       .filter((ev: any) =>
                         !!ev.photoUrl &&
