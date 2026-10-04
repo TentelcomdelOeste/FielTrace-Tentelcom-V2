@@ -133,6 +133,14 @@ export interface Evidence {
   reserveReelNumber?: string;
   /** Cantidad de fibras de la reserva (12, 24, 48, etc.). */
   reserveFiberCount?: number;
+  /** Identificador del grupo de fotografías del NAP (9 fotos). */
+  napId?: string;
+  /** Número visible del NAP dentro del proyecto. */
+  napNumber?: number;
+  /** Nombre/código del NAP, por ejemplo GT069/072. */
+  napName?: string;
+  /** Número de fotografía dentro del set del NAP (1 a 9). */
+  napPhotoNumber?: number;
 
   photo?: {
     fileName: string;
