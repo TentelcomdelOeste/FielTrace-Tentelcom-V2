@@ -248,6 +248,7 @@ export default function App() {
     napNumber: number;
     napName: string;
     photoNumber: number;
+    remainingPhotos: number;
   } | null>(null);
   const [showNapCaptureModal, setShowNapCaptureModal] = useState(false);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
@@ -795,13 +796,13 @@ export default function App() {
 
       if (napGroups.length > 0) {
         const nap = napGroups[0];
-        setNapCaptureDraft({ napId: nap.napId, napNumber: nap.napNumber, napName: nap.napName, photoNumber: nap.count + 1 });
+        setNapCaptureDraft({ napId: nap.napId, napNumber: nap.napNumber, napName: nap.napName, photoNumber: nap.count + 1, remainingPhotos: 9 - nap.count });
       } else {
         const usedNumbers = evidences.filter(ev => ev.category === 'NAPS' && ev.napNumber != null)
           .map(ev => Number(ev.napNumber)).filter(Number.isFinite);
         const napNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
         const napId = crypto.randomUUID ? crypto.randomUUID() : `nap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        setNapCaptureDraft({ napId, napNumber, napName: '', photoNumber: 1 });
+        setNapCaptureDraft({ napId, napNumber, napName: '', photoNumber: 1, remainingPhotos: 9 });
       }
 
       setShowNapCaptureModal(true);
@@ -1633,13 +1634,21 @@ export default function App() {
             setFiberCaptureDraft(null);
             setCurrentStep('history');
           } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
-            const nextPhoto = napCaptureDraft.photoNumber + 1;
-            if (nextPhoto > 9) {
+            // El límite debe calcularse sobre las fotos que FALTABAN al iniciar,
+            // no sobre el número absoluto de la foto. Ej.: si ya había 4/9,
+            // solo deben tomarse 5 y después cerrar automáticamente la cámara.
+            const remainingAfterCapture = napCaptureDraft.remainingPhotos - 1;
+
+            if (remainingAfterCapture <= 0) {
               setNapCaptureDraft(null);
               setShowNapCaptureModal(false);
               setCurrentStep('history');
             } else {
-              setNapCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhoto } : prev);
+              setNapCaptureDraft(prev => prev ? {
+                ...prev,
+                photoNumber: prev.photoNumber + 1,
+                remainingPhotos: remainingAfterCapture
+              } : prev);
             }
           }
         } catch (e: any) {
