@@ -245,6 +245,7 @@ export default function App() {
   const [viewerFullImages, setViewerFullImages] = useState<Record<string, string>>({});
   const [showEvidenceList, setShowEvidenceList] = useState(false);
   const [showStorageEvidenceViewer, setShowStorageEvidenceViewer] = useState(false);
+  const [storageEvidenceCategory, setStorageEvidenceCategory] = useState<EvidenceCategory | null>(null);
   const [showQuickConfig, setShowQuickConfig] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'project' | 'field' | 'evidence', id?: number, index?: number } | null>(null);
   const [confirmClearAllStep, setConfirmClearAllStep] = useState<0 | 1 | 2>(0);
@@ -1615,20 +1616,34 @@ export default function App() {
                           </p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEvidenceCategory(category.id);
-                            setCurrentStep('camera');
-                          }}
-                          className={`shrink-0 px-3 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all ${
-                            category.completed
-                              ? 'bg-white border border-green-200 text-green-700'
-                              : 'bg-blue-600 text-white shadow-sm'
-                          }`}
-                        >
-                          {category.completed ? 'Agregar foto' : 'Tomar foto'}
-                        </button>
+                        <div className="shrink-0 flex flex-col items-stretch gap-1.5">
+                          {category.completed && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStorageEvidenceCategory(category.id);
+                                setShowStorageEvidenceViewer(true);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-blue-600 text-white shadow-sm text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all"
+                            >
+                              Ver fotos
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEvidenceCategory(category.id);
+                              setCurrentStep('camera');
+                            }}
+                            className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all ${
+                              category.completed
+                                ? 'bg-white border border-green-200 text-green-700'
+                                : 'bg-blue-600 text-white shadow-sm'
+                            }`}
+                          >
+                            {category.completed ? 'Agregar' : 'Tomar foto'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1636,7 +1651,10 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => setShowStorageEvidenceViewer(true)}
+                  onClick={() => {
+                    setStorageEvidenceCategory(null);
+                    setShowStorageEvidenceViewer(true);
+                  }}
                   className="w-full py-4 mb-4 bg-blue-50 border border-blue-200 rounded-[1.5rem] flex items-center justify-center gap-3 active:scale-95 transition-all shadow-sm"
                 >
                   <Eye className="w-5 h-5 text-blue-600" />
@@ -3029,13 +3047,17 @@ export default function App() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[185] bg-black/80 backdrop-blur-sm flex flex-col">
             <div className="flex items-center justify-between px-4 py-4 bg-white border-b border-gray-100">
               <div>
-                <h2 className="text-sm font-black uppercase tracking-tight text-gray-950">Evidencias para Excel</h2>
-                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">Solo fotografías confirmadas en Firebase Storage</p>
+                <h2 className="text-sm font-black uppercase tracking-tight text-gray-950">
+                  {storageEvidenceCategory
+                    ? EVIDENCE_CATEGORIES.find(c => c.id === storageEvidenceCategory)?.label || 'Evidencias'
+                    : 'Evidencias para Excel'}
+                </h2>
+                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">Fotografías confirmadas en Firebase Storage</p>
               </div>
-              <button type="button" onClick={() => setShowStorageEvidenceViewer(false)} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
+              <button type="button" onClick={() => { setShowStorageEvidenceViewer(false); setStorageEvidenceCategory(null); }} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {evidences.filter((ev: any) => !!ev.photoUrl).length === 0 ? (
+              {evidences.filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory)).length === 0 ? (
                 <div className="py-20 text-center">
                   <CloudUpload className="w-10 h-10 mx-auto text-gray-300 mb-3" />
                   <p className="text-[11px] font-black uppercase text-gray-500">No hay fotografías en Storage todavía</p>
@@ -3043,7 +3065,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 pb-8">
-                  {evidences.filter((ev: any) => !!ev.photoUrl).map((ev: any, index: number) => (
+                  {evidences.filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory)).map((ev: any, index: number) => (
                     <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                       <div className="aspect-[4/5] bg-black overflow-hidden">
                         <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
