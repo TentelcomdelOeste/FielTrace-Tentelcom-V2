@@ -243,6 +243,13 @@ export default function App() {
     fiberCount: string;
   } | null>(null);
   const [showReserveCaptureModal, setShowReserveCaptureModal] = useState(false);
+  const [napCaptureDraft, setNapCaptureDraft] = useState<{
+    napId: string;
+    napNumber: number;
+    napName: string;
+    photoNumber: number;
+  } | null>(null);
+  const [showNapCaptureModal, setShowNapCaptureModal] = useState(false);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -765,6 +772,41 @@ export default function App() {
 
   const openEvidenceCapture = (category: EvidenceCategory) => {
     setEvidenceCategory(category);
+
+    if (category === 'NAPS') {
+      setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
+
+      const napGroups = Array.from(new Set(
+        evidences.filter(ev => ev.category === 'NAPS' && ev.napId).map(ev => ev.napId as string)
+      ))
+        .map(napId => {
+          const group = evidences.filter(ev => ev.category === 'NAPS' && ev.napId === napId);
+          const first = group[0];
+          return {
+            napId,
+            napNumber: Number(first?.napNumber || 0),
+            napName: first?.napName || '',
+            count: group.length
+          };
+        })
+        .filter(group => group.count < 9)
+        .sort((a, b) => a.napNumber - b.napNumber);
+
+      if (napGroups.length > 0) {
+        const nap = napGroups[0];
+        setNapCaptureDraft({ napId: nap.napId, napNumber: nap.napNumber, napName: nap.napName, photoNumber: nap.count + 1 });
+      } else {
+        const usedNumbers = evidences.filter(ev => ev.category === 'NAPS' && ev.napNumber != null)
+          .map(ev => Number(ev.napNumber)).filter(Number.isFinite);
+        const napNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const napId = crypto.randomUUID ? crypto.randomUUID() : `nap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        setNapCaptureDraft({ napId, napNumber, napName: '', photoNumber: 1 });
+      }
+
+      setShowNapCaptureModal(true);
+      return;
+    }
 
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
@@ -1486,6 +1528,10 @@ export default function App() {
         reserveSide: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.side : undefined,
         reserveReelNumber: selectedEvidenceCategory.id === 'RESERVA' ? (reserveCaptureDraft?.reelNumber || '').trim() : undefined,
         reserveFiberCount: selectedEvidenceCategory.id === 'RESERVA' ? Number(reserveCaptureDraft?.fiberCount || 0) : undefined,
+        napId: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napId || '') : undefined,
+        napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
+        napName: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napName || '').trim() : undefined,
+        napPhotoNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.photoNumber : undefined,
         photo: {
           fileName,
           createdAt: capturedAt
@@ -1586,6 +1632,15 @@ export default function App() {
             setReserveCaptureDraft(null);
             setFiberCaptureDraft(null);
             setCurrentStep('history');
+          } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
+            const nextPhoto = napCaptureDraft.photoNumber + 1;
+            if (nextPhoto > 9) {
+              setNapCaptureDraft(null);
+              setShowNapCaptureModal(false);
+              setCurrentStep('history');
+            } else {
+              setNapCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhoto } : prev);
+            }
           }
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
@@ -3695,6 +3750,37 @@ export default function App() {
                 <button type="button" onClick={() => { setShowFiberCaptureModal(false); setFiberCaptureDraft(null); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
                 <button type="button" onClick={confirmFiberCapture} disabled={!fiberCaptureDraft.metraje.trim() || !fiberCaptureDraft.reelNumber.trim() || !fiberCaptureDraft.fiberCount.trim()} className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase shadow-lg disabled:opacity-40">Guardar y abrir cámara</button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showNapCaptureModal && napCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[221] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Evidencia NAPS</p>
+                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
+                  NAP {String(napCaptureDraft.napNumber).padStart(2, '0')} · FOTO {napCaptureDraft.photoNumber}/9
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  Ingrese el nombre del NAP una sola vez. Las 9 fotografías quedarán agrupadas bajo el mismo NAP.
+                </p>
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Nombre del NAP</label>
+                <input type="text" value={napCaptureDraft.napName}
+                  onChange={e => setNapCaptureDraft(prev => prev ? { ...prev, napName: e.target.value } : prev)}
+                  placeholder="Ej. GT069/072" readOnly={napCaptureDraft.photoNumber > 1}
+                  className="w-full px-4 py-4 rounded-2xl border-2 border-blue-500 text-lg font-black uppercase tracking-tight outline-none read-only:bg-gray-100 read-only:text-gray-500" />
+                {napCaptureDraft.photoNumber > 1 && <p className="text-[9px] font-black uppercase text-green-600 mt-2">✓ Nombre heredado para las 9 fotos</p>}
+              </div>
+              <button type="button" disabled={!napCaptureDraft.napName.trim()}
+                onClick={() => { setEvidenceCategory('NAPS'); setShowNapCaptureModal(false); setCurrentStep('camera'); }}
+                className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase disabled:opacity-40">
+                {napCaptureDraft.photoNumber === 1 ? 'GUARDAR NOMBRE Y ABRIR CÁMARA' : 'ABRIR CÁMARA'}
+              </button>
+              <button type="button" onClick={() => { setShowNapCaptureModal(false); setNapCaptureDraft(null); }}
+                className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
             </motion.div>
           </motion.div>
         )}
