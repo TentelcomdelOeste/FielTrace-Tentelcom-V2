@@ -251,6 +251,13 @@ export default function App() {
     remainingPhotos: number;
   } | null>(null);
   const [showNapCaptureModal, setShowNapCaptureModal] = useState(false);
+  const [altaCaptureDraft, setAltaCaptureDraft] = useState<{
+    altaId: string;
+    altaNumber: number;
+    altaType: 'FIBRA DE DESCARTE' | 'FIBRA DE DESECHO' | 'ALTAS EN ACERO';
+    side: 'panoramic' | 'meterage';
+  } | null>(null);
+  const [showAltaCaptureModal, setShowAltaCaptureModal] = useState(false);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -806,6 +813,20 @@ export default function App() {
       }
 
       setShowNapCaptureModal(true);
+      return;
+    }
+
+    if (category === 'ALTAS') {
+      setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
+      setNapCaptureDraft(null);
+      setAltaCaptureDraft({
+        altaId: '',
+        altaNumber: 0,
+        altaType: 'FIBRA DE DESCARTE',
+        side: 'panoramic'
+      });
+      setShowAltaCaptureModal(true);
       return;
     }
 
@@ -1529,6 +1550,10 @@ export default function App() {
         reserveSide: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.side : undefined,
         reserveReelNumber: selectedEvidenceCategory.id === 'RESERVA' ? (reserveCaptureDraft?.reelNumber || '').trim() : undefined,
         reserveFiberCount: selectedEvidenceCategory.id === 'RESERVA' ? Number(reserveCaptureDraft?.fiberCount || 0) : undefined,
+        altaId: selectedEvidenceCategory.id === 'ALTAS' ? (altaCaptureDraft?.altaId || '') : undefined,
+        altaNumber: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaNumber : undefined,
+        altaType: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaType : undefined,
+        altaSide: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.side : undefined,
         napId: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napId || '') : undefined,
         napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
         napName: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napName || '').trim() : undefined,
@@ -1628,9 +1653,11 @@ export default function App() {
 
           // Las reservas son fotografías individuales. Después de cada captura
           // regresamos al proyecto para evitar que el técnico tome fotos extra.
-          if (selectedEvidenceCategory.id === 'RESERVA' || evidenceCategory === 'PUNTAS_FIBRA') {
+          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || evidenceCategory === 'PUNTAS_FIBRA') {
             setShowReserveCaptureModal(false);
+            setShowAltaCaptureModal(false);
             setReserveCaptureDraft(null);
+            setAltaCaptureDraft(null);
             setFiberCaptureDraft(null);
             setCurrentStep('history');
           } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
@@ -3817,6 +3844,121 @@ export default function App() {
               </button>
               <button type="button" onClick={() => { setShowNapCaptureModal(false); setNapCaptureDraft(null); }}
                 className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showAltaCaptureModal && altaCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[221] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5 max-h-[88vh] overflow-y-auto">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Altas</p>
+                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
+                  {altaCaptureDraft.altaId ? 'ALTA ' + String(altaCaptureDraft.altaNumber).padStart(2, '0') : 'TIPO DE ALTA'}
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  {altaCaptureDraft.altaId
+                    ? 'Cada alta se documenta con 2 fotografías: una panorámica y otra de metraje.'
+                    : 'Seleccione primero el tipo de alta que desea documentar.'}
+                </p>
+              </div>
+
+              {!altaCaptureDraft.altaId ? (
+                <div className="space-y-2.5">
+                  {(['FIBRA DE DESCARTE', 'FIBRA DE DESECHO', 'ALTAS EN ACERO'] as const).map(type => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        const groups = Array.from(new Set(
+                          evidences
+                            .filter(ev => ev.category === 'ALTAS' && ev.altaId && ev.altaType === type)
+                            .map(ev => ev.altaId as string)
+                        ))
+                          .map(altaId => {
+                            const group = evidences.filter(ev => ev.category === 'ALTAS' && ev.altaId === altaId);
+                            const first = group[0];
+                            const altaNumber = Number(first?.altaNumber || 0);
+                            const hasPanoramic = group.some(ev => ev.altaSide === 'panoramic');
+                            const hasMeterage = group.some(ev => ev.altaSide === 'meterage');
+                            return { altaId, altaNumber, hasPanoramic, hasMeterage };
+                          })
+                          .filter(group => !(group.hasPanoramic && group.hasMeterage))
+                          .sort((a, b) => a.altaNumber - b.altaNumber);
+
+                        if (groups.length > 0) {
+                          const group = groups[0];
+                          setAltaCaptureDraft({
+                            altaId: group.altaId,
+                            altaNumber: group.altaNumber,
+                            altaType: type,
+                            side: group.hasPanoramic ? 'meterage' : 'panoramic'
+                          });
+                        } else {
+                          const usedNumbers = evidences
+                            .filter(ev => ev.category === 'ALTAS' && ev.altaNumber != null)
+                            .map(ev => Number(ev.altaNumber))
+                            .filter(Number.isFinite);
+                          const altaNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+                          const altaId = crypto.randomUUID
+                            ? crypto.randomUUID()
+                            : 'alta_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+                          setAltaCaptureDraft({
+                            altaId,
+                            altaNumber,
+                            altaType: type,
+                            side: 'panoramic'
+                          });
+                        }
+                      }}
+                      className="w-full py-4 rounded-2xl border-2 border-blue-100 bg-blue-50 text-blue-800 text-[10px] font-black uppercase"
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
+                    <p className="text-[9px] font-black uppercase text-gray-500">Tipo</p>
+                    <p className="text-sm font-black uppercase text-gray-950 mt-1">{altaCaptureDraft.altaType}</p>
+                    <p className="text-[9px] font-black uppercase text-blue-700 mt-2">
+                      ALTA {String(altaCaptureDraft.altaNumber).padStart(2, '0')} · {altaCaptureDraft.side === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEvidenceCategory('ALTAS');
+                      setShowAltaCaptureModal(false);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase"
+                  >
+                    ABRIR CÁMARA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAltaCaptureDraft({
+                      altaId: '',
+                      altaNumber: 0,
+                      altaType: altaCaptureDraft.altaType,
+                      side: 'panoramic'
+                    })}
+                    className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+                  >
+                    CAMBIAR TIPO
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => { setShowAltaCaptureModal(false); setAltaCaptureDraft(null); }}
+                className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+              >
+                CANCELAR
+              </button>
             </motion.div>
           </motion.div>
         )}
