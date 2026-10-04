@@ -79,7 +79,6 @@ export type EvidenceCategory =
   | 'NAPS'
   | 'MUFA'
   | 'RESERVA'
-  | 'GABINETE'
   | 'CABLEADO'
   | 'MEDICION'
   | 'OTROS';
@@ -91,8 +90,7 @@ export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }>
   { id: 'DESECHOS', label: 'Desechos' },
   { id: 'NAPS', label: 'NAPS' },
   { id: 'MUFA', label: 'MUFA' },
-  { id: 'RESERVA', label: 'Reserva' },
-  { id: 'GABINETE', label: 'Gabinete' },
+  { id: 'RESERVA', label: 'Reservas' },
   { id: 'CABLEADO', label: 'Cableado' },
   { id: 'MEDICION', label: 'Medición' },
   { id: 'OTROS', label: 'Otros' },
@@ -121,6 +119,12 @@ export interface Evidence {
   fiberMeterage?: number;
   /** Lado de la pareja documentado por esta evidencia. */
   fiberSide?: 'initial' | 'final';
+  /** Identificador de la reserva fotográfica (Inicio + Final + Rollo). */
+  reserveId?: string;
+  /** Número visible de la reserva dentro del proyecto. */
+  reserveNumber?: number;
+  /** Parte de la reserva documentada por esta evidencia. */
+  reserveSide?: 'initial' | 'final' | 'roll';
 
   photo?: {
     fileName: string;
