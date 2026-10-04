@@ -768,7 +768,71 @@ export default function App() {
 
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
-      setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '' });
+
+      // Si ya existe una reserva incompleta, retomamos automáticamente
+      // la primera evidencia que falta. Nunca volvemos a pedir carrete/fibras
+      // si la PUNTA INICIAL ya los registró.
+      const reserveGroups = Array.from(new Set(
+        evidences
+          .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
+          .map(ev => ev.reserveId as string)
+      ))
+        .map(reserveId => {
+          const group = evidences.filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId);
+          const first = group[0];
+          const reserveNumber = Number(first?.reserveNumber || 0);
+          const hasInitial = group.some(ev => ev.reserveSide === 'initial');
+          const hasFinal = group.some(ev => ev.reserveSide === 'final');
+          const hasRoll = group.some(ev => ev.reserveSide === 'roll');
+          return { reserveId, reserveNumber, hasInitial, hasFinal, hasRoll };
+        })
+        .filter(group => !(group.hasInitial && group.hasFinal && group.hasRoll))
+        .sort((a, b) => a.reserveNumber - b.reserveNumber);
+
+      const pending = reserveGroups[0];
+      if (pending) {
+        if (!pending.hasInitial) {
+          setReserveCaptureDraft({
+            side: 'initial',
+            reserveId: pending.reserveId,
+            reserveNumber: pending.reserveNumber,
+            reelNumber: '',
+            fiberCount: ''
+          });
+        } else {
+          const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
+          const inheritedReel = getReserveReelNumber(pending.reserveId);
+          const inheritedFiberCount = getReserveFiberCount(pending.reserveId);
+
+          if (!inheritedReel || !inheritedFiberCount) {
+            alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
+            return;
+          }
+
+          setReserveCaptureDraft({
+            side: missingSide,
+            reserveId: pending.reserveId,
+            reserveNumber: pending.reserveNumber,
+            reelNumber: inheritedReel,
+            fiberCount: inheritedFiberCount
+          });
+        }
+      } else {
+        const usedNumbers = evidences
+          .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
+          .map(ev => Number(ev.reserveNumber))
+          .filter(Number.isFinite);
+        const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        setReserveCaptureDraft({
+          side: 'initial',
+          reserveId,
+          reserveNumber,
+          reelNumber: '',
+          fiberCount: ''
+        });
+      }
+
       setShowReserveCaptureModal(true);
       return;
     }
@@ -3598,13 +3662,36 @@ export default function App() {
                           <button
                             key={reserveId}
                             type="button"
-                            onClick={() => setReserveCaptureDraft({
-                              side: 'initial',
-                              reserveId,
-                              reserveNumber,
-                              reelNumber: getReserveReelNumber(reserveId),
-                              fiberCount: getReserveFiberCount(reserveId)
-                            })}
+                            onClick={() => {
+                              const missingSide: 'initial' | 'final' | 'roll' =
+                                !hasInitial ? 'initial' : !hasFinal ? 'final' : 'roll';
+
+                              if (missingSide === 'initial') {
+                                setReserveCaptureDraft({
+                                  side: 'initial',
+                                  reserveId,
+                                  reserveNumber,
+                                  reelNumber: '',
+                                  fiberCount: ''
+                                });
+                                return;
+                              }
+
+                              const inheritedReel = getReserveReelNumber(reserveId);
+                              const inheritedFiberCount = getReserveFiberCount(reserveId);
+                              if (!inheritedReel || !inheritedFiberCount) {
+                                alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
+                                return;
+                              }
+
+                              setReserveCaptureDraft({
+                                side: missingSide,
+                                reserveId,
+                                reserveNumber,
+                                reelNumber: inheritedReel,
+                                fiberCount: inheritedFiberCount
+                              });
+                            }}
                             className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
                           >
                             <div className="flex items-center justify-between gap-3">
@@ -3680,7 +3767,11 @@ export default function App() {
                       RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
                     </h3>
                     <p className="text-xs text-gray-500 mt-2">
-                      Seleccione la evidencia que falta para completar esta reserva.
+                      {reserveCaptureDraft.side === 'initial'
+                        ? 'Ingrese los datos una sola vez. Se reutilizarán en las 3 fotos de esta reserva.'
+                        : (reserveCaptureDraft.side === 'final'
+                          ? 'Datos heredados de la PUNTA INICIAL para PUNTA FINAL.'
+                          : 'Datos heredados de la PUNTA INICIAL para ROLLO DETALLADO.')}
                     </p>
                   </div>
 
