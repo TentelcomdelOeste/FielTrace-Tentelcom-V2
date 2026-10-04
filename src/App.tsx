@@ -215,7 +215,7 @@ import { exportService } from './services/exportService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
 import { shareService } from './services/shareService';
-import { EVIDENCE_CATEGORIES, type EvidenceCategory } from './types';
+import { EVIDENCE_CATEGORIES, type EvidenceCategory, type Project, type Evidence, type CustomField, type Template } from './types';
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
