@@ -81,6 +81,7 @@ export type EvidenceCategory =
   | 'RESERVA'
   | 'CABLEADO'
   | 'MEDICION'
+  | 'ALTAS'
   | 'OTROS';
 
 export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }> = [
@@ -91,8 +92,7 @@ export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }>
   { id: 'NAPS', label: 'NAPS' },
   { id: 'MUFA', label: 'MUFA' },
   { id: 'RESERVA', label: 'Reservas' },
-  { id: 'CABLEADO', label: 'Cableado' },
-  { id: 'MEDICION', label: 'Medición' },
+  { id: 'ALTAS', label: 'Altas' },
   { id: 'OTROS', label: 'Otros' },
 ];
 
