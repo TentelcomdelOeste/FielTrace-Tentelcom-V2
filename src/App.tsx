@@ -231,6 +231,7 @@ export default function App() {
     pairNumber: number;
     metraje: string;
   } | null>(null);
+  const [showFiberCaptureModal, setShowFiberCaptureModal] = useState(false);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -768,6 +769,7 @@ export default function App() {
       const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
       const pairId = crypto.randomUUID ? crypto.randomUUID() : `fiber_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       setFiberCaptureDraft({ side: 'initial', pairId, pairNumber: nextNumber, metraje: '' });
+      setShowFiberCaptureModal(true);
       return;
     }
 
@@ -787,6 +789,7 @@ export default function App() {
       pairNumber: Number(first.fiberPairNumber || 1),
       metraje: ''
     });
+    setShowFiberCaptureModal(true);
   };
 
   const confirmFiberCapture = () => {
@@ -801,6 +804,7 @@ export default function App() {
       ...fiberCaptureDraft,
       metraje: String(parsedMeterage)
     });
+    setShowFiberCaptureModal(false);
     setCurrentStep('camera');
   };
 
@@ -3110,7 +3114,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {fiberCaptureDraft && (
+        {showFiberCaptureModal && fiberCaptureDraft && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
             <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
               <div>
@@ -3170,7 +3174,7 @@ export default function App() {
               </div>
 
               <div className="flex gap-3">
-                <button type="button" onClick={() => setFiberCaptureDraft(null)} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+                <button type="button" onClick={() => { setShowFiberCaptureModal(false); setFiberCaptureDraft(null); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
                 <button type="button" onClick={confirmFiberCapture} disabled={!fiberCaptureDraft.metraje.trim()} className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase shadow-lg disabled:opacity-40">Guardar y abrir cámara</button>
               </div>
             </motion.div>
