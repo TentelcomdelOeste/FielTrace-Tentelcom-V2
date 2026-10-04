@@ -244,6 +244,7 @@ export default function App() {
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerFullImages, setViewerFullImages] = useState<Record<string, string>>({});
   const [showEvidenceList, setShowEvidenceList] = useState(false);
+  const [showStorageEvidenceViewer, setShowStorageEvidenceViewer] = useState(false);
   const [showQuickConfig, setShowQuickConfig] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'project' | 'field' | 'evidence', id?: number, index?: number } | null>(null);
   const [confirmClearAllStep, setConfirmClearAllStep] = useState<0 | 1 | 2>(0);
@@ -1633,6 +1634,20 @@ export default function App() {
                   </div>
                 </section>
 
+                <button
+                  type="button"
+                  onClick={() => setShowStorageEvidenceViewer(true)}
+                  className="w-full py-4 mb-4 bg-blue-50 border border-blue-200 rounded-[1.5rem] flex items-center justify-center gap-3 active:scale-95 transition-all shadow-sm"
+                >
+                  <Eye className="w-5 h-5 text-blue-600" />
+                  <div className="text-left">
+                    <span className="block text-[10px] font-black text-blue-800 uppercase tracking-wide">Ver evidencias para Excel</span>
+                    <span className="block text-[8px] font-bold text-blue-500 uppercase mt-0.5">
+                      {evidences.filter((ev: any) => !!ev.photoUrl).length} fotografías en Storage
+                    </span>
+                  </div>
+                </button>
+
                 <div className="grid grid-cols-2 gap-4">
                    <button 
                     onClick={() => exportService.generateExcel(selectedProject!.id!)}
@@ -3010,6 +3025,41 @@ export default function App() {
           </motion.div>
         )}
 
+        {showStorageEvidenceViewer && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[185] bg-black/80 backdrop-blur-sm flex flex-col">
+            <div className="flex items-center justify-between px-4 py-4 bg-white border-b border-gray-100">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-tight text-gray-950">Evidencias para Excel</h2>
+                <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">Solo fotografías confirmadas en Firebase Storage</p>
+              </div>
+              <button type="button" onClick={() => setShowStorageEvidenceViewer(false)} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+              {evidences.filter((ev: any) => !!ev.photoUrl).length === 0 ? (
+                <div className="py-20 text-center">
+                  <CloudUpload className="w-10 h-10 mx-auto text-gray-300 mb-3" />
+                  <p className="text-[11px] font-black uppercase text-gray-500">No hay fotografías en Storage todavía</p>
+                  <p className="text-[9px] font-bold text-gray-400 mt-2">Toma una fotografía y espera a que termine la subida.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 pb-8">
+                  {evidences.filter((ev: any) => !!ev.photoUrl).map((ev: any, index: number) => (
+                    <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                      <div className="aspect-[4/5] bg-black overflow-hidden">
+                        <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                      <div className="p-2.5">
+                        <p className="text-[9px] font-black uppercase text-gray-900 truncate">{ev.categoryLabel || 'Otros'}</p>
+                        <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {viewingEvidence && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[190] bg-black/70 backdrop-blur-sm flex flex-col">
             <div className="flex items-center justify-between px-4 py-4 bg-white border-b">
@@ -3032,8 +3082,26 @@ export default function App() {
                 ))}
                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Referencia foto</p>
                 <p className="text-[11px] font-mono text-gray-400 break-all">{viewingEvidence.photoPath || viewingEvidence.uuid || '-'}</p>
+                {viewingEvidence.categoryLabel && (
+                  <>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Tipo de evidencia</p>
+                    <p className="text-sm font-black text-blue-700 uppercase">{viewingEvidence.categoryLabel}</p>
+                  </>
+                )}
               </div>
-              <p className="text-center text-[10px] text-gray-400 pt-2">La foto real esta en Galeria</p>
+              <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
+                {viewingEvidence.photoUrl ? (
+                  <img src={viewingEvidence.photoUrl} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" />
+                ) : (
+                  <div className="p-8 text-center text-white/60">
+                    <CameraIcon className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Fotografía todavía no disponible en Storage</p>
+                  </div>
+                )}
+              </div>
+              <p className="text-center text-[10px] text-gray-400 pt-2">
+                {viewingEvidence.photoUrl ? 'Esta es la fotografía que utilizará la memoria de Excel.' : 'La fotografía aún está pendiente de subir a Firebase Storage.'}
+              </p>
             </div>
           </motion.div>
         )}
