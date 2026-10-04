@@ -117,6 +117,8 @@ export interface Evidence {
   fiberPairNumber?: number;
   /** Metraje digitado por el técnico para esta punta. */
   fiberMeterage?: number;
+  /** Número de carrete compartido por la punta inicial y final. */
+  fiberReelNumber?: string;
   /** Lado de la pareja documentado por esta evidencia. */
   fiberSide?: 'initial' | 'final';
   /** Identificador de la reserva fotográfica (Inicio + Final + Rollo). */
@@ -125,6 +127,8 @@ export interface Evidence {
   reserveNumber?: number;
   /** Parte de la reserva documentada por esta evidencia. */
   reserveSide?: 'initial' | 'final' | 'roll';
+  /** Número de carrete compartido por las 3 fotos de la reserva. */
+  reserveReelNumber?: string;
 
   photo?: {
     fileName: string;
