@@ -1853,6 +1853,27 @@ export default function App() {
       };
     }
 
+    if (category.id === 'NAPS') {
+      const napIds = Array.from(new Set(categoryEvidences.map(ev => ev.napId).filter(Boolean))) as string[];
+      const napGroups = napIds.map(napId => {
+        const group = categoryEvidences.filter(ev => ev.napId === napId);
+        const first = group[0];
+        return { napNumber: Number(first?.napNumber || 0), napName: first?.napName || '', count: group.length };
+      }).sort((a, b) => a.napNumber - b.napNumber);
+      const completedNaps = napGroups.filter(nap => nap.count >= 9).length;
+      const pendingNapLabels = napGroups.filter(nap => nap.count < 9)
+        .map(nap => 'NAP ' + String(nap.napNumber).padStart(2, '0') + ' · ' + (nap.napName || 'SIN NOMBRE') + ': ' + nap.count + '/9 FOTOS');
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: napGroups.length > 0 && napGroups.every(nap => nap.count >= 9),
+        napCount: napGroups.length,
+        napCompletedCount: completedNaps,
+        pendingNapLabels,
+        reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
+        fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
+      };
+    }
     if (category.id === 'PUNTAS_FIBRA') {
       return {
         ...category,
