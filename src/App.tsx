@@ -813,8 +813,8 @@ export default function App() {
           });
         } else {
           const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
-          const inheritedReel = getReserveReelNumber(pending.reserveId);
-          const inheritedFiberCount = getReserveFiberCount(pending.reserveId);
+          const inheritedReel = getReserveReelNumber(pending.reserveId, pending.reserveNumber);
+          const inheritedFiberCount = getReserveFiberCount(pending.reserveId, pending.reserveNumber);
 
           if (!inheritedReel || !inheritedFiberCount) {
             // Si la inicial existe pero sus datos no están disponibles,
@@ -936,7 +936,7 @@ export default function App() {
     setShowFiberCaptureModal(true);
   };
 
-  const getReserveReelNumber = (reserveId: string) => {
+  const getReserveReelNumber = (reserveId: string, reserveNumber?: number) => {
     // Fuente principal: la PUNTA INICIAL de la misma reserva.
     // Compatibilidad: también acepta registros creados por versiones anteriores
     // que pudieron guardar el carrete con el campo de fibra o en localStorage.
@@ -955,13 +955,17 @@ export default function App() {
     if (storedValue) return storedValue;
 
     try {
-      return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim() || '';
+      return (
+        localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim() ||
+        (reserveNumber ? localStorage.getItem(`fieldtrace_reserve_reel_number_${reserveNumber}`)?.trim() : '') ||
+        ''
+      );
     } catch {
       return '';
     }
   };
 
-  const getReserveFiberCount = (reserveId: string) => {
+  const getReserveFiberCount = (reserveId: string, reserveNumber?: number) => {
     const reserveEvidence = evidences.filter(ev =>
       ev.category === 'RESERVA' && ev.reserveId === reserveId
     );
@@ -974,8 +978,13 @@ export default function App() {
     }
 
     try {
-      const stored = Number(localStorage.getItem(`fieldtrace_reserve_fiber_count_${reserveId}`) || 0);
-      return Number.isFinite(stored) && stored > 0 ? String(stored) : '';
+      const storedById = Number(localStorage.getItem(`fieldtrace_reserve_fiber_count_${reserveId}`) || 0);
+      if (Number.isFinite(storedById) && storedById > 0) return String(storedById);
+
+      const storedByNumber = reserveNumber
+        ? Number(localStorage.getItem(`fieldtrace_reserve_fiber_count_number_${reserveNumber}`) || 0)
+        : 0;
+      return Number.isFinite(storedByNumber) && storedByNumber > 0 ? String(storedByNumber) : '';
     } catch {
       return '';
     }
@@ -995,13 +1004,13 @@ export default function App() {
           alert('Esta reserva ya tiene una PUNTA INICIAL.');
           return;
         }
-        const inheritedReel = getReserveReelNumber(existing.reserveId);
+        const inheritedReel = getReserveReelNumber(existing.reserveId, Number(existing.reserveNumber || 0));
         setReserveCaptureDraft({
           side,
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
           reelNumber: inheritedReel,
-          fiberCount: getReserveFiberCount(existing.reserveId)
+          fiberCount: getReserveFiberCount(existing.reserveId, Number(existing.reserveNumber || 0))
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
@@ -1055,9 +1064,9 @@ export default function App() {
 
     // FINAL y ROLLO no vuelven a pedir carrete: lo heredan de la reserva.
     // Se busca primero la PUNTA INICIAL y luego cualquier evidencia del mismo grupo.
-    const inheritedReel = getReserveReelNumber(selected.reserveId);
+    const inheritedReel = getReserveReelNumber(selected.reserveId, Number(selected.reserveNumber || 0));
 
-    const inheritedFiberCount = getReserveFiberCount(selected.reserveId);
+    const inheritedFiberCount = getReserveFiberCount(selected.reserveId, Number(selected.reserveNumber || 0));
     if (!inheritedReel || !inheritedFiberCount) {
       alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras. Registre nuevamente la PUNTA INICIAL.');
       return;
@@ -3744,8 +3753,8 @@ export default function App() {
                                 return;
                               }
 
-                              const inheritedReel = getReserveReelNumber(reserveId);
-                              const inheritedFiberCount = getReserveFiberCount(reserveId);
+                              const inheritedReel = getReserveReelNumber(reserveId, reserveNumber);
+                              const inheritedFiberCount = getReserveFiberCount(reserveId, reserveNumber);
                               if (!inheritedReel || !inheritedFiberCount) {
                                 alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
                                 return;
@@ -3890,6 +3899,9 @@ export default function App() {
                           try {
                             if (prev.reserveId && value.trim()) {
                               localStorage.setItem(`fieldtrace_reserve_fiber_count_${prev.reserveId}`, value.trim());
+                              if (prev.reserveNumber) {
+                                localStorage.setItem(`fieldtrace_reserve_fiber_count_number_${prev.reserveNumber}`, value.trim());
+                              }
                             }
                           } catch {}
                           return { ...prev, fiberCount: value };
