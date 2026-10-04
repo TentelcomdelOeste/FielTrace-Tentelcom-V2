@@ -4105,11 +4105,76 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'PUNTAS_FIBRA'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'PUNTAS_FIBRA'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
-                  {storageEvidenceCategory === 'RESERVA' ? (() => {
+                  {storageEvidenceCategory === 'NAPS' ? (() => {
+                    const napPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'NAPS' && ev.napId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.napNumber || 0) - Number(b.napNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        return Number(a.napPhotoNumber || 0) - Number(b.napPhotoNumber || 0);
+                      });
+
+                    const groups = Array.from(
+                      napPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.napId || `legacy-nap-${ev.napNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const napNumber = Number(group[0]?.napNumber || groupIndex + 1);
+                      const napName = group[0]?.napName || 'SIN NOMBRE';
+
+                      return (
+                        <div key={group[0]?.napId || `nap-group-${napNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                NAP {String(napNumber).padStart(2, '0')} · {napName}
+                              </p>
+                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
+                                {group.length}/9 FOTOS · GRUPO INDEPENDIENTE
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button
+                                key={ev.id || ev.uuid || index}
+                                type="button"
+                                onClick={() => setViewingEvidence(ev)}
+                                className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
+                              >
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img
+                                    src={ev.photoUrl}
+                                    alt={ev.napName || 'NAP'}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                  />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    FOTO {ev.napPhotoNumber || index + 1}/9
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                    {ev.fecha} {ev.hora || ''}
+                                  </p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'RESERVA' ? (() => {
                     const reservationPhotos = evidences
                       .filter((ev: any) => !!ev.photoUrl && ev.category === 'RESERVA' && ev.reserveId)
                       .sort((a: any, b: any) => {
