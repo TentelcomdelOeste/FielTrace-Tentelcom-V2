@@ -789,10 +789,10 @@ export default function App() {
         .filter(group => !(group.hasInitial && group.hasFinal && group.hasRoll))
         .sort((a, b) => a.reserveNumber - b.reserveNumber);
 
-      // Si hay más de una reserva incompleta, no asumimos cuál quiere continuar
-      // el técnico. Mostramos el selector para evitar abrir por error la reserva 01
-      // cuando se estaba trabajando, por ejemplo, la reserva 02.
+      // Determinar exactamente qué reserva continuar.
+      // Nunca crear una reserva nueva si ya existe una reserva pendiente.
       if (reserveGroups.length > 1) {
+        // Hay varias pendientes: el usuario elige cuál continuar.
         setReserveCaptureDraft({
           side: 'initial',
           reserveId: '',
@@ -800,29 +800,33 @@ export default function App() {
           reelNumber: '',
           fiberCount: ''
         });
-      } else {
+      } else if (reserveGroups.length === 1) {
         const pending = reserveGroups[0];
-        if (pending) {
-          if (!pending.hasInitial) {
+
+        if (!pending.hasInitial) {
+          setReserveCaptureDraft({
+            side: 'initial',
+            reserveId: pending.reserveId,
+            reserveNumber: pending.reserveNumber,
+            reelNumber: '',
+            fiberCount: ''
+          });
+        } else {
+          const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
+          const inheritedReel = getReserveReelNumber(pending.reserveId);
+          const inheritedFiberCount = getReserveFiberCount(pending.reserveId);
+
+          if (!inheritedReel || !inheritedFiberCount) {
+            // Si la inicial existe pero sus datos no están disponibles,
+            // permitimos seleccionar la reserva para revisar/recuperar sus datos.
             setReserveCaptureDraft({
               side: 'initial',
-              reserveId: pending.reserveId,
-              reserveNumber: pending.reserveNumber,
+              reserveId: '',
+              reserveNumber: 0,
               reelNumber: '',
               fiberCount: ''
             });
           } else {
-            const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
-            const inheritedReel = getReserveReelNumber(pending.reserveId);
-            const inheritedFiberCount = getReserveFiberCount(pending.reserveId);
-
-            if (!inheritedReel || !inheritedFiberCount) {
-              // No debería ocurrir si la inicial fue capturada con datos válidos,
-              // pero dejamos un mensaje claro para registros antiguos/incompletos.
-              alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
-              return;
-            }
-
             setReserveCaptureDraft({
               side: missingSide,
               reserveId: pending.reserveId,
@@ -831,20 +835,26 @@ export default function App() {
               fiberCount: inheritedFiberCount
             });
           }
-            const usedNumbers = evidences
-            .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
-            .map(ev => Number(ev.reserveNumber))
-            .filter(Number.isFinite);
-          const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-          const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          setReserveCaptureDraft({
-            side: 'initial',
-            reserveId,
-            reserveNumber,
-            reelNumber: '',
-            fiberCount: ''
-          });
         }
+      } else {
+        // No hay reservas pendientes: crear una nueva.
+        const usedNumbers = evidences
+          .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
+          .map(ev => Number(ev.reserveNumber))
+          .filter(Number.isFinite);
+
+        const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const reserveId = crypto.randomUUID
+          ? crypto.randomUUID()
+          : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        setReserveCaptureDraft({
+          side: 'initial',
+          reserveId,
+          reserveNumber,
+          reelNumber: '',
+          fiberCount: ''
+        });
       }
 
       setShowReserveCaptureModal(true);
