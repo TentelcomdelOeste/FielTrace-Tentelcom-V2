@@ -876,6 +876,28 @@ export default function App() {
     }
   };
 
+  const getReserveFiberCount = (reserveId: string) => {
+    const sameReserve = evidences
+      .filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)
+      .sort((a, b) => {
+        const aInitial = a.reserveSide === 'initial' ? 0 : 1;
+        const bInitial = b.reserveSide === 'initial' ? 0 : 1;
+        return aInitial - bInitial;
+      });
+
+    const fromEvidence = sameReserve
+      .map(ev => Number(ev.reserveFiberCount || 0))
+      .find(value => Number.isFinite(value) && value > 0);
+
+    if (fromEvidence) return String(fromEvidence);
+
+    try {
+      return localStorage.getItem(`fieldtrace_reserve_fiber_count_${reserveId}`)?.trim() || '';
+    } catch {
+      return '';
+    }
+  };
+
   const openReserveSide = (side: 'initial' | 'final' | 'roll', reserveId?: string) => {
     const reserves = evidences
       .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
@@ -896,7 +918,7 @@ export default function App() {
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
           reelNumber: inheritedReel,
-          fiberCount: String(existing.reserveFiberCount || '')
+          fiberCount: getReserveFiberCount(existing.reserveId)
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
@@ -938,7 +960,7 @@ export default function App() {
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
       reelNumber: inheritedReel,
-      fiberCount: String(selected.reserveFiberCount || evidences.find(ev => ev.category === 'RESERVA' && ev.reserveId === selected.reserveId)?.reserveFiberCount || '')
+      fiberCount: getReserveFiberCount(selected.reserveId)
     });
     setShowReserveCaptureModal(false);
     setCurrentStep('camera');
@@ -3605,7 +3627,7 @@ export default function App() {
                               reserveId,
                               reserveNumber,
                               reelNumber: getReserveReelNumber(reserveId),
-                              fiberCount: String(evidences.find(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)?.reserveFiberCount || '')
+                              fiberCount: getReserveFiberCount(reserveId)
                             })}
                             className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
                           >
@@ -3698,7 +3720,18 @@ export default function App() {
                       min="1"
                       step="1"
                       value={reserveCaptureDraft.fiberCount}
-                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, fiberCount: e.target.value } : prev)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setReserveCaptureDraft(prev => {
+                          if (!prev) return prev;
+                          try {
+                            if (prev.reserveId && value.trim()) {
+                              localStorage.setItem(`fieldtrace_reserve_fiber_count_${prev.reserveId}`, value.trim());
+                            }
+                          } catch {}
+                          return { ...prev, fiberCount: value };
+                        });
+                      }}
                       readOnly={reserveCaptureDraft.side !== 'initial'}
                       placeholder="Ej. 12, 24, 48"
                       className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
