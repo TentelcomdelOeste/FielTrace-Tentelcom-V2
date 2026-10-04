@@ -225,6 +225,12 @@ export default function App() {
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
   const [evidenceCategory, setEvidenceCategory] = useState<EvidenceCategory | null>(null);
+  const [fiberCaptureDraft, setFiberCaptureDraft] = useState<{
+    side: 'initial' | 'final';
+    pairId: string;
+    pairNumber: number;
+    metraje: string;
+  } | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -742,6 +748,62 @@ export default function App() {
     setCurrentStep('history');
   };
 
+  const isFiberCategory = (category: EvidenceCategory) =>
+    category === 'PUNTAS_FIBRA_INICIAL' || category === 'PUNTAS_FIBRA_FINAL';
+
+  const openEvidenceCapture = (category: EvidenceCategory) => {
+    setEvidenceCategory(category);
+
+    if (!isFiberCategory(category)) {
+      setFiberCaptureDraft(null);
+      setCurrentStep('camera');
+      return;
+    }
+
+    if (category === 'PUNTAS_FIBRA_INICIAL') {
+      const usedNumbers = evidences
+        .filter(ev => ev.category === 'PUNTAS_FIBRA_INICIAL' && ev.fiberPairNumber != null)
+        .map(ev => Number(ev.fiberPairNumber))
+        .filter(Number.isFinite);
+      const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+      const pairId = crypto.randomUUID ? crypto.randomUUID() : `fiber_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setFiberCaptureDraft({ side: 'initial', pairId, pairNumber: nextNumber, metraje: '' });
+      return;
+    }
+
+    const pendingPairs = evidences
+      .filter(ev => ev.category === 'PUNTAS_FIBRA_INICIAL' && ev.fiberPairId)
+      .filter(initial => !evidences.some(ev => ev.category === 'PUNTAS_FIBRA_FINAL' && ev.fiberPairId === initial.fiberPairId));
+
+    if (!pendingPairs.length) {
+      alert('Primero registre una PUNTA INICIAL para poder tomar su fotografía FINAL.');
+      return;
+    }
+
+    const first = pendingPairs.sort((a, b) => Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0))[0];
+    setFiberCaptureDraft({
+      side: 'final',
+      pairId: first.fiberPairId || '',
+      pairNumber: Number(first.fiberPairNumber || 1),
+      metraje: ''
+    });
+  };
+
+  const confirmFiberCapture = () => {
+    if (!fiberCaptureDraft) return;
+    const parsedMeterage = Number(fiberCaptureDraft.metraje.replace(',', '.'));
+    if (!Number.isFinite(parsedMeterage) || parsedMeterage < 0) {
+      alert('Ingrese un metraje válido en números.');
+      return;
+    }
+
+    setFiberCaptureDraft({
+      ...fiberCaptureDraft,
+      metraje: String(parsedMeterage)
+    });
+    setCurrentStep('camera');
+  };
+
   const toggleProjectSelect = (id: number) => {
     setSelectedProjectIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -1087,6 +1149,10 @@ export default function App() {
         photoPath: fileName,
         category: selectedEvidenceCategory.id,
         categoryLabel: selectedEvidenceCategory.label,
+        fiberPairId: isFiberCategory(selectedEvidenceCategory.id) ? (fiberCaptureDraft?.pairId || '') : undefined,
+        fiberPairNumber: isFiberCategory(selectedEvidenceCategory.id) ? fiberCaptureDraft?.pairNumber : undefined,
+        fiberMeterage: isFiberCategory(selectedEvidenceCategory.id) ? Number(fiberCaptureDraft?.metraje || 0) : undefined,
+        fiberSide: isFiberCategory(selectedEvidenceCategory.id) ? fiberCaptureDraft?.side : undefined,
         photo: {
           fileName,
           createdAt: capturedAt
@@ -1631,10 +1697,7 @@ export default function App() {
                           )}
                           <button
                             type="button"
-                            onClick={() => {
-                              setEvidenceCategory(category.id);
-                              setCurrentStep('camera');
-                            }}
+                            onClick={() => openEvidenceCapture(category.id)}
                             className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all ${
                               category.completed
                                 ? 'bg-white border border-green-200 text-green-700'
@@ -3047,6 +3110,73 @@ export default function App() {
           </motion.div>
         )}
 
+        {fiberCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Punta de fibra {fiberCaptureDraft.pairNumber}</p>
+                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
+                  {fiberCaptureDraft.side === 'initial' ? 'Fotografía inicial' : 'Fotografía final'}
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  {fiberCaptureDraft.side === 'initial'
+                    ? 'Ingrese el metraje de esta punta. Después se abrirá automáticamente la cámara.'
+                    : 'Seleccione la punta pendiente e ingrese el metraje final. Después se abrirá automáticamente la cámara.'}
+                </p>
+              </div>
+
+              {fiberCaptureDraft.side === 'final' && (
+                <div>
+                  <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Punta pendiente</label>
+                  <select
+                    value={fiberCaptureDraft.pairId}
+                    onChange={(e) => {
+                      const selected = evidences.find(ev => ev.fiberPairId === e.target.value && ev.category === 'PUNTAS_FIBRA_INICIAL');
+                      setFiberCaptureDraft(prev => prev ? {
+                        ...prev,
+                        pairId: e.target.value,
+                        pairNumber: Number(selected?.fiberPairNumber || prev.pairNumber)
+                      } : prev);
+                    }}
+                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-black text-gray-900 outline-none"
+                  >
+                    {evidences
+                      .filter(ev => ev.category === 'PUNTAS_FIBRA_INICIAL' && ev.fiberPairId)
+                      .filter(initial => !evidences.some(ev => ev.category === 'PUNTAS_FIBRA_FINAL' && ev.fiberPairId === initial.fiberPairId))
+                      .sort((a, b) => Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0))
+                      .map(initial => (
+                        <option key={initial.fiberPairId} value={initial.fiberPairId}>
+                          PUNTA {String(initial.fiberPairNumber).padStart(2, '0')} · INICIAL {initial.fiberMeterage} m
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Metraje de la punta (m)</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  autoFocus
+                  value={fiberCaptureDraft.metraje}
+                  onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, metraje: e.target.value } : prev)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmFiberCapture(); }}
+                  placeholder="Ej. 1250"
+                  className="w-full rounded-2xl border-2 border-gray-200 bg-white px-4 py-4 text-xl font-black text-gray-950 outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setFiberCaptureDraft(null)} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+                <button type="button" onClick={confirmFiberCapture} disabled={!fiberCaptureDraft.metraje.trim()} className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase shadow-lg disabled:opacity-40">Guardar y abrir cámara</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showStorageEvidenceViewer && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[185] bg-black/80 backdrop-blur-sm flex flex-col">
             <div className="flex items-center justify-between px-4 py-4 bg-white border-b border-gray-100">
@@ -3120,6 +3250,14 @@ export default function App() {
                 ))}
                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Referencia foto</p>
                 <p className="text-[11px] font-mono text-gray-400 break-all">{viewingEvidence.photoPath || viewingEvidence.uuid || '-'}</p>
+                {viewingEvidence.fiberPairId && (
+                  <>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Punta de fibra</p>
+                    <p className="text-sm font-black text-blue-700 uppercase">
+                      PUNTA {String(viewingEvidence.fiberPairNumber || '').padStart(2, '0')} · {viewingEvidence.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {viewingEvidence.fiberMeterage ?? '-'} m
+                    </p>
+                  </>
+                )}
                 {viewingEvidence.categoryLabel && (
                   <>
                     <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Tipo de evidencia</p>
