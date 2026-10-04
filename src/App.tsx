@@ -844,6 +844,21 @@ export default function App() {
     setShowFiberCaptureModal(true);
   };
 
+  const getReserveReelNumber = (reserveId: string) => {
+    const fromEvidence = evidences.find(ev =>
+      ev.category === 'RESERVA' &&
+      ev.reserveId === reserveId &&
+      !!ev.reserveReelNumber
+    )?.reserveReelNumber?.trim();
+    if (fromEvidence) return fromEvidence;
+
+    try {
+      return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim() || '';
+    } catch {
+      return '';
+    }
+  };
+
   const openReserveSide = (side: 'initial' | 'final' | 'roll', reserveId?: string) => {
     const reserves = evidences
       .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
@@ -862,7 +877,7 @@ export default function App() {
           side,
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
-          reelNumber: existing.reserveReelNumber || ''
+          reelNumber: getReserveReelNumber(existing.reserveId)
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
@@ -905,7 +920,7 @@ export default function App() {
       side,
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
-      reelNumber: initialEvidence?.reserveReelNumber || selected.reserveReelNumber || ''
+      reelNumber: getReserveReelNumber(selected.reserveId) || initialEvidence?.reserveReelNumber || selected.reserveReelNumber || ''
     });
     setShowReserveCaptureModal(false);
     setCurrentStep('camera');
@@ -1260,6 +1275,17 @@ export default function App() {
       const hora = capturedAt.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
+      if (selectedEvidenceCategory?.id === 'RESERVA' && reserveCaptureDraft?.reserveId && reserveCaptureDraft.reelNumber?.trim()) {
+        try {
+          localStorage.setItem(
+            `fieldtrace_reserve_reel_${reserveCaptureDraft.reserveId}`,
+            reserveCaptureDraft.reelNumber.trim()
+          );
+        } catch {
+          // localStorage may be unavailable in restricted browser contexts; IndexedDB remains the source of truth.
+        }
+      }
+
       const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
       if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
       const captureCategoryId: EvidenceCategory =
@@ -3534,7 +3560,7 @@ export default function App() {
                               side: 'initial',
                               reserveId,
                               reserveNumber,
-                              reelNumber: evidences.find(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)?.reserveReelNumber || ''
+                              reelNumber: getReserveReelNumber(reserveId)
                             })}
                             className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
                           >
