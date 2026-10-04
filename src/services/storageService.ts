@@ -207,7 +207,7 @@ export const storageService = {
     // La fotografía se sube a Firebase Storage cuando hay conexión.
     // Si falla o estamos offline, queda temporalmente en IndexedDB para reintentar;
     // después de una subida exitosa se elimina esa copia temporal.
-    if (navigator.onLine && evidenceToSave.projectUuid) {
+    if (imageBase64 && navigator.onLine && evidenceToSave.projectUuid) {
       try {
         const remote = await firebaseService.uploadEvidencePhoto(
           imageBase64,
@@ -223,7 +223,7 @@ export const storageService = {
         const blob = await response.blob();
         await manager.put(STORE_PHOTOS, { id: evidenceToSave.photoPath, blob, createdAt: new Date() });
       }
-    } else {
+    } else if (imageBase64) {
       const response = await fetch(imageBase64);
       const blob = await response.blob();
       await manager.put(STORE_PHOTOS, { id: evidenceToSave.photoPath, blob, createdAt: new Date() });
