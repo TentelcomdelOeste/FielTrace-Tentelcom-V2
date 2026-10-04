@@ -789,48 +789,62 @@ export default function App() {
         .filter(group => !(group.hasInitial && group.hasFinal && group.hasRoll))
         .sort((a, b) => a.reserveNumber - b.reserveNumber);
 
-      const pending = reserveGroups[0];
-      if (pending) {
-        if (!pending.hasInitial) {
-          setReserveCaptureDraft({
-            side: 'initial',
-            reserveId: pending.reserveId,
-            reserveNumber: pending.reserveNumber,
-            reelNumber: '',
-            fiberCount: ''
-          });
-        } else {
-          const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
-          const inheritedReel = getReserveReelNumber(pending.reserveId);
-          const inheritedFiberCount = getReserveFiberCount(pending.reserveId);
-
-          if (!inheritedReel || !inheritedFiberCount) {
-            alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
-            return;
-          }
-
-          setReserveCaptureDraft({
-            side: missingSide,
-            reserveId: pending.reserveId,
-            reserveNumber: pending.reserveNumber,
-            reelNumber: inheritedReel,
-            fiberCount: inheritedFiberCount
-          });
-        }
-      } else {
-        const usedNumbers = evidences
-          .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
-          .map(ev => Number(ev.reserveNumber))
-          .filter(Number.isFinite);
-        const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-        const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      // Si hay más de una reserva incompleta, no asumimos cuál quiere continuar
+      // el técnico. Mostramos el selector para evitar abrir por error la reserva 01
+      // cuando se estaba trabajando, por ejemplo, la reserva 02.
+      if (reserveGroups.length > 1) {
         setReserveCaptureDraft({
           side: 'initial',
-          reserveId,
-          reserveNumber,
+          reserveId: '',
+          reserveNumber: 0,
           reelNumber: '',
           fiberCount: ''
         });
+      } else {
+        const pending = reserveGroups[0];
+        if (pending) {
+          if (!pending.hasInitial) {
+            setReserveCaptureDraft({
+              side: 'initial',
+              reserveId: pending.reserveId,
+              reserveNumber: pending.reserveNumber,
+              reelNumber: '',
+              fiberCount: ''
+            });
+          } else {
+            const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
+            const inheritedReel = getReserveReelNumber(pending.reserveId);
+            const inheritedFiberCount = getReserveFiberCount(pending.reserveId);
+
+            if (!inheritedReel || !inheritedFiberCount) {
+              // No debería ocurrir si la inicial fue capturada con datos válidos,
+              // pero dejamos un mensaje claro para registros antiguos/incompletos.
+              alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
+              return;
+            }
+
+            setReserveCaptureDraft({
+              side: missingSide,
+              reserveId: pending.reserveId,
+              reserveNumber: pending.reserveNumber,
+              reelNumber: inheritedReel,
+              fiberCount: inheritedFiberCount
+            });
+          }
+            const usedNumbers = evidences
+            .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
+            .map(ev => Number(ev.reserveNumber))
+            .filter(Number.isFinite);
+          const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+          const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          setReserveCaptureDraft({
+            side: 'initial',
+            reserveId,
+            reserveNumber,
+            reelNumber: '',
+            fiberCount: ''
+          });
+        }
       }
 
       setShowReserveCaptureModal(true);
@@ -3668,7 +3682,7 @@ export default function App() {
                         .map(ev => ev.reserveId as string)
                     ))
                       .map(reserveId => {
-                        const reserveEvidences = evidences.filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId && !!ev.photoUrl);
+                        const reserveEvidences = evidences.filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId);
                         const first = reserveEvidences[0];
                         const reserveNumber = Number(first?.reserveNumber || 0);
                         const hasInitial = reserveEvidences.some(ev => ev.reserveSide === 'initial');
