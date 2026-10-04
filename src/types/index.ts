@@ -106,6 +106,9 @@ export interface Evidence {
   projectUuid?: string;
   projectName?: string;
   photoPath: string; // Referencia robusta: FT_<uuid>.jpg
+  /** Referencias remotas de la fotografía en Firebase Storage. */
+  photoStoragePath?: string;
+  photoUrl?: string;
   /** Categoría seleccionada por el técnico para preparar la memoria fotográfica. */
   category?: EvidenceCategory;
   /** Texto visible de la categoría al momento de la captura. */
