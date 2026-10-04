@@ -1910,11 +1910,14 @@ export default function App() {
                       autoFocus={!reserveCaptureDraft.reelNumber}
                       value={reserveCaptureDraft.reelNumber}
                       onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
+                      readOnly={reserveCaptureDraft.side !== 'initial'}
                       placeholder="Ej. 00125"
-                      className="w-full rounded-2xl border-2 border-gray-200 bg-white px-4 py-3 text-lg font-black text-gray-950 outline-none focus:border-blue-600"
+                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`
                     />
                     <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
-                      {reserveCaptureDraft.reelNumber ? '✓ Este carrete se reutilizará en las 3 fotos de la reserva.' : 'Ingrese el carrete una sola vez; se reutilizará en inicial, final y rollo.'}
+                      {reserveCaptureDraft.side !== 'initial'
+                        ? `✓ Carrete heredado de la PUNTA INICIAL: ${reserveCaptureDraft.reelNumber || 'PENDIENTE'}`
+                        : (reserveCaptureDraft.reelNumber ? '✓ Este carrete se reutilizará en las 3 fotos de la reserva.' : 'Ingrese el carrete una sola vez; se reutilizará en inicial, final y rollo.')}
                     </p>
                   </div>
 
@@ -3474,8 +3477,9 @@ export default function App() {
                   autoFocus={fiberCaptureDraft.side === 'initial'}
                   value={fiberCaptureDraft.reelNumber}
                   onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
+                  readOnly={fiberCaptureDraft.side === 'final'}
                   placeholder="Ej. 00125"
-                  className="w-full rounded-2xl border-2 border-gray-200 bg-white px-4 py-3 text-lg font-black text-gray-950 outline-none focus:border-blue-600"
+                  className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${fiberCaptureDraft.side === 'final' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`
                 />
                 {fiberCaptureDraft.side === 'final' && (
                   <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Carrete heredado de la punta inicial</p>
@@ -3841,6 +3845,15 @@ export default function App() {
                     <p className="text-sm font-black text-blue-700 uppercase">
                       PUNTA {String(viewingEvidence.fiberPairNumber || '').padStart(2, '0')} · {viewingEvidence.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {viewingEvidence.fiberMeterage ?? '-'} m
                     </p>
+                    {viewingEvidence.fiberReelNumber && (
+                      <p className="text-[11px] font-black text-gray-700 uppercase mt-1">CARRETE: {viewingEvidence.fiberReelNumber}</p>
+                    )}
+                  </>
+                )}
+                {viewingEvidence.reserveReelNumber && (
+                  <>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Carrete</p>
+                    <p className="text-sm font-black text-gray-700 uppercase">{viewingEvidence.reserveReelNumber}</p>
                   </>
                 )}
                 {viewingEvidence.categoryLabel && (
