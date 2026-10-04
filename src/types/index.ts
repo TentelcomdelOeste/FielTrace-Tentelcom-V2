@@ -141,6 +141,14 @@ export interface Evidence {
   napName?: string;
   /** Número de fotografía dentro del set del NAP (1 a 9). */
   napPhotoNumber?: number;
+  /** Identificador del set de ALTA (Panorámica + Metraje). */
+  altaId?: string;
+  /** Número visible del set de ALTA dentro del proyecto. */
+  altaNumber?: number;
+  /** Tipo de ALTA documentada. */
+  altaType?: 'FIBRA DE DESCARTE' | 'FIBRA DE DESECHO' | 'ALTAS EN ACERO';
+  /** Parte del set de ALTA documentada. */
+  altaSide?: 'panoramic' | 'meterage';
 
   photo?: {
     fileName: string;
