@@ -71,6 +71,33 @@ export enum SyncOperation {
   DELETE = 'DELETE'
 }
 
+export type EvidenceCategory =
+  | 'PUNTAS_FIBRA_INICIAL'
+  | 'PUNTAS_FIBRA_FINAL'
+  | 'ACEROS'
+  | 'DESECHOS'
+  | 'NAPS'
+  | 'MUFA'
+  | 'RESERVA'
+  | 'GABINETE'
+  | 'CABLEADO'
+  | 'MEDICION'
+  | 'OTROS';
+
+export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }> = [
+  { id: 'PUNTAS_FIBRA_INICIAL', label: 'Puntas de fibra – Inicial' },
+  { id: 'PUNTAS_FIBRA_FINAL', label: 'Puntas de fibra – Final' },
+  { id: 'ACEROS', label: 'Aceros' },
+  { id: 'DESECHOS', label: 'Desechos' },
+  { id: 'NAPS', label: 'NAPS' },
+  { id: 'MUFA', label: 'MUFA' },
+  { id: 'RESERVA', label: 'Reserva' },
+  { id: 'GABINETE', label: 'Gabinete' },
+  { id: 'CABLEADO', label: 'Cableado' },
+  { id: 'MEDICION', label: 'Medición' },
+  { id: 'OTROS', label: 'Otros' },
+];
+
 export interface Evidence {
   id?: number;
   uuid: string;
@@ -79,6 +106,10 @@ export interface Evidence {
   projectUuid?: string;
   projectName?: string;
   photoPath: string; // Referencia robusta: FT_<uuid>.jpg
+  /** Categoría seleccionada por el técnico para preparar la memoria fotográfica. */
+  category?: EvidenceCategory;
+  /** Texto visible de la categoría al momento de la captura. */
+  categoryLabel?: string;
   photo?: {
     fileName: string;
     uri?: string;
