@@ -2201,6 +2201,12 @@ export default function App() {
                                         ? `✓ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.count} fotos`
                                         : `⚠ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.fiberPendingLabels.join(' · ')}`)
                                     : 'Pendiente · 0 fotos')
+                                : category.id === 'NAPS'
+                                  ? (category.napCount
+                                      ? (category.completed
+                                          ? '✓ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.count + ' FOTOS'
+                                          : '⚠ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.pendingNapLabels.join(' · '))
+                                      : 'PENDIENTE · 0 FOTOS')
                                 : (category.completed
                                     ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
                                     : 'Pendiente · 0 fotos')}
