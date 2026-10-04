@@ -1560,7 +1560,23 @@ export default function App() {
           categoryEvidences.some(ev => ev.reserveId === id && ev.reserveSide === side)
         )
       ).length;
-      const pendingReserves = reserveIds.length - completedReserves;
+      const pendingReserveLabels = reserveIds
+        .map(id => {
+          const reserveEvidences = categoryEvidences.filter(ev => ev.reserveId === id);
+          const first = reserveEvidences[0];
+          const reserveNumber = Number(first?.reserveNumber || 0);
+          const missingSides = (['initial', 'final', 'roll'] as const)
+            .filter(side => !reserveEvidences.some(ev => ev.reserveSide === side))
+            .map(side => side === 'initial' ? 'INICIAL' : side === 'final' ? 'FINAL' : 'ROLLO');
+          return {
+            reserveNumber,
+            label: `RESERVA ${String(reserveNumber).padStart(2, '0')}: FALTA ${missingSides.join(' Y ')}`
+          };
+        })
+        .filter(item => item.label.includes('FALTA'))
+        .sort((a, b) => a.reserveNumber - b.reserveNumber)
+        .map(item => item.label);
+      const pendingReserves = pendingReserveLabels.length;
       return {
         ...category,
         count: categoryEvidences.length,
@@ -1568,6 +1584,7 @@ export default function App() {
         reserveCompletedCount: completedReserves,
         reserveCount: reserveIds.length,
         reservePendingCount: pendingReserves,
+        pendingReserveLabels,
       };
     }
 
@@ -1596,6 +1613,7 @@ export default function App() {
       reserveCompletedCount: 0,
       reserveCount: 0,
       reservePendingCount: 0,
+      pendingReserveLabels: [],
       fiberPairCount: 0,
       fiberCompleteCount: 0,
       fiberPendingCount: 0,
@@ -1887,7 +1905,9 @@ export default function App() {
                           }`}>
                             {category.id === 'RESERVA'
                               ? (category.reserveCount
-                                  ? `${category.reserveCompletedCount || 0}/${category.reserveCount} reserva${category.reserveCount === 1 ? '' : 's'} completa${category.reserveCount === 1 ? '' : 's'} · ${category.count} fotos`
+                                  ? (category.completed
+                                      ? `✓ ${category.reserveCompletedCount || 0}/${category.reserveCount} reservas completas · ${category.count} fotos`
+                                      : `⚠ ${category.reserveCompletedCount || 0}/${category.reserveCount} reservas completas · ${(category.pendingReserveLabels || []).join(' · ')}`)
                                   : 'Pendiente · 0 fotos')
                               : (category.id === 'PUNTAS_FIBRA_INICIAL' || category.id === 'PUNTAS_FIBRA_FINAL')
                                 ? (category.fiberPairCount
