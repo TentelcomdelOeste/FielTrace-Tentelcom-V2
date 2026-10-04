@@ -940,16 +940,17 @@ export default function App() {
     // Fuente principal: la PUNTA INICIAL de la misma reserva.
     // Compatibilidad: también acepta registros creados por versiones anteriores
     // que pudieron guardar el carrete con el campo de fibra o en localStorage.
-    const initial = evidences.find(ev =>
-      ev.category === 'RESERVA' &&
-      ev.reserveId === reserveId &&
-      ev.reserveSide === 'initial'
+    // Buscar en TODAS las evidencias de la misma reserva, no solamente
+    // en la inicial. Esto permite recuperar reservas creadas con versiones
+    // anteriores donde los metadatos pudieron quedar en otra evidencia.
+    const reserveEvidence = evidences.filter(ev =>
+      ev.category === 'RESERVA' && ev.reserveId === reserveId
     );
 
     const storedValue =
-      initial?.reserveReelNumber?.trim() ||
-      initial?.fiberReelNumber?.trim() ||
-      '';
+      reserveEvidence
+        .map(ev => ev.reserveReelNumber?.trim() || ev.fiberReelNumber?.trim() || '')
+        .find(Boolean) || '';
 
     if (storedValue) return storedValue;
 
@@ -961,18 +962,16 @@ export default function App() {
   };
 
   const getReserveFiberCount = (reserveId: string) => {
-    const initial = evidences.find(ev =>
-      ev.category === 'RESERVA' &&
-      ev.reserveId === reserveId &&
-      ev.reserveSide === 'initial'
+    const reserveEvidence = evidences.filter(ev =>
+      ev.category === 'RESERVA' && ev.reserveId === reserveId
     );
 
-    const count =
-      Number(initial?.reserveFiberCount || 0) > 0
-        ? Number(initial?.reserveFiberCount)
-        : Number(initial?.fiberCount || 0);
-
-    if (Number.isFinite(count) && count > 0) return String(count);
+    for (const ev of reserveEvidence) {
+      const count = Number(ev.reserveFiberCount || 0) > 0
+        ? Number(ev.reserveFiberCount)
+        : Number(ev.fiberCount || 0);
+      if (Number.isFinite(count) && count > 0) return String(count);
+    }
 
     try {
       const stored = Number(localStorage.getItem(`fieldtrace_reserve_fiber_count_${reserveId}`) || 0);
@@ -1009,6 +1008,25 @@ export default function App() {
         const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
         const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '', fiberCount: '' });
+      }
+
+      if (side === 'initial' && reserveCaptureDraft?.reserveId) {
+        try {
+          if (reserveCaptureDraft.reelNumber.trim()) {
+            localStorage.setItem(
+              `fieldtrace_reserve_reel_${reserveCaptureDraft.reserveId}`,
+              reserveCaptureDraft.reelNumber.trim()
+            );
+          }
+          if (reserveCaptureDraft.fiberCount.trim()) {
+            localStorage.setItem(
+              `fieldtrace_reserve_fiber_count_${reserveCaptureDraft.reserveId}`,
+              reserveCaptureDraft.fiberCount.trim()
+            );
+          }
+        } catch {
+          // IndexedDB sigue siendo la fuente principal.
+        }
       }
 
       setShowReserveCaptureModal(false);
