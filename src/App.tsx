@@ -763,13 +763,46 @@ export default function App() {
 
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
-      const usedNumbers = evidences
-        .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
-        .map(ev => Number(ev.reserveNumber))
-        .filter(Number.isFinite);
-      const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-      const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber: nextNumber });
+
+      // Si existe una reserva incompleta, continuar esa reserva antes de crear otra.
+      const reserveGroups = Array.from(
+        new Set(
+          evidences
+            .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
+            .map(ev => ev.reserveId as string)
+        )
+      )
+        .map(reserveId => {
+          const reserveEvidences = evidences.filter(
+            ev => ev.category === 'RESERVA' && ev.reserveId === reserveId
+          );
+          const first = reserveEvidences[0];
+          const reserveNumber = Number(first?.reserveNumber || 0);
+          const complete = ['initial', 'final', 'roll'].every(side =>
+            reserveEvidences.some(ev => ev.reserveSide === side && !!ev.photoUrl)
+          );
+          return { reserveId, reserveNumber, complete };
+        })
+        .filter(item => !item.complete)
+        .sort((a, b) => a.reserveNumber - b.reserveNumber);
+
+      if (reserveGroups.length) {
+        const pending = reserveGroups[0];
+        setReserveCaptureDraft({
+          side: 'initial',
+          reserveId: pending.reserveId,
+          reserveNumber: pending.reserveNumber || 1
+        });
+      } else {
+        const usedNumbers = evidences
+          .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
+          .map(ev => Number(ev.reserveNumber))
+          .filter(Number.isFinite);
+        const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber: nextNumber });
+      }
+
       setShowReserveCaptureModal(true);
       return;
     }
@@ -820,10 +853,29 @@ export default function App() {
       .sort((a, b) => Number(a.reserveNumber || 0) - Number(b.reserveNumber || 0));
 
     if (side === 'initial') {
-      const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
-      const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-      const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      setReserveCaptureDraft({ side, reserveId: id, reserveNumber });
+      // Si la reserva ya existe, continuarla; si no, crear una nueva.
+      const existing = reserveId
+        ? reserves.find(ev => ev.reserveId === reserveId)
+        : null;
+
+      if (existing?.reserveId) {
+        const hasInitial = reserves.some(ev => ev.reserveId === existing.reserveId && ev.reserveSide === 'initial');
+        if (hasInitial) {
+          alert('Esta reserva ya tiene una PUNTA INICIAL.');
+          return;
+        }
+        setReserveCaptureDraft({
+          side,
+          reserveId: existing.reserveId,
+          reserveNumber: Number(existing.reserveNumber || 1)
+        });
+      } else {
+        const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
+        const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        setReserveCaptureDraft({ side, reserveId: id, reserveNumber });
+      }
+
       setShowReserveCaptureModal(false);
       setCurrentStep('camera');
       return;
@@ -1317,6 +1369,14 @@ export default function App() {
           // 4. Actualizar estado de UI
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
           setEvidences(evs);
+
+          // Las reservas son fotografías individuales. Después de cada captura
+          // regresamos al proyecto para evitar que el técnico tome fotos extra.
+          if (selectedEvidenceCategory.id === 'RESERVA') {
+            setShowReserveCaptureModal(false);
+            setReserveCaptureDraft(null);
+            setCurrentStep('history');
+          }
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
         }
@@ -1491,6 +1551,14 @@ export default function App() {
   const evidenceProgressPercent = evidenceCategoryProgress.length
     ? Math.round((completedEvidenceCategories / evidenceCategoryProgress.length) * 100)
     : 0;
+
+  const reserveHasSide = (reserveId: string, side: 'initial' | 'final' | 'roll') =>
+    evidences.some(ev =>
+      ev.category === 'RESERVA' &&
+      ev.reserveId === reserveId &&
+      ev.reserveSide === side &&
+      !!ev.photoUrl
+    );
 
   return (
     <div className={`min-h-screen ${currentStep === 'camera' ? 'bg-transparent' : 'bg-white'} flex flex-col font-sans`}>
@@ -1771,7 +1839,7 @@ export default function App() {
                         </div>
 
                         <div className="shrink-0 flex flex-col items-stretch gap-1.5">
-                          {category.completed && (
+                          {(category.completed || (category.id === 'RESERVA' && category.count > 0)) && (
                             <button
                               type="button"
                               onClick={() => {
@@ -3279,22 +3347,29 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 gap-2.5">
-                <button type="button" onClick={() => openReserveSide('initial')} className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide">
-                  Punta inicial
+                <button
+                  type="button"
+                  disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'initial')}
+                  onClick={() => openReserveSide('initial', reserveCaptureDraft.reserveId)}
+                  className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide disabled:bg-gray-200 disabled:text-gray-400"
+                >
+                  {reserveHasSide(reserveCaptureDraft.reserveId, 'initial') ? 'Punta inicial ✓' : 'Punta inicial'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => openReserveSide('final')}
-                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide"
+                  disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'final')}
+                  onClick={() => openReserveSide('final', reserveCaptureDraft.reserveId)}
+                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
                 >
-                  Punta final
+                  {reserveHasSide(reserveCaptureDraft.reserveId, 'final') ? 'Punta final ✓' : 'Punta final'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => openReserveSide('roll')}
-                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide"
+                  disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'roll')}
+                  onClick={() => openReserveSide('roll', reserveCaptureDraft.reserveId)}
+                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
                 >
-                  Rollo detallado
+                  {reserveHasSide(reserveCaptureDraft.reserveId, 'roll') ? 'Rollo detallado ✓' : 'Rollo detallado'}
                 </button>
               </div>
 
@@ -3327,13 +3402,29 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 pb-8">
-                  {evidences.filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory)).map((ev: any, index: number) => (
+                  {evidences
+                    .filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
+                    .sort((a: any, b: any) => {
+                      if (storageEvidenceCategory !== 'RESERVA') return 0;
+                      const reserveA = Number(a.reserveNumber || 0);
+                      const reserveB = Number(b.reserveNumber || 0);
+                      return reserveA - reserveB;
+                    })
+                    .map((ev: any, index: number) => (
                     <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                       <div className="aspect-[4/5] bg-black overflow-hidden">
                         <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                       </div>
                       <div className="p-2.5">
                         <p className="text-[9px] font-black uppercase text-gray-900 truncate">{ev.categoryLabel || 'Otros'}</p>
+                        {ev.reserveId && (
+                          <p className="text-[8px] font-black uppercase text-blue-600 mt-1">
+                            RESERVA {String(ev.reserveNumber || '').padStart(2, '0')} · {
+                              ev.reserveSide === 'initial' ? 'PUNTA INICIAL' :
+                              ev.reserveSide === 'final' ? 'PUNTA FINAL' : 'ROLLO DETALLADO'
+                            }
+                          </p>
+                        )}
                         {ev.fiberPairId && (
                           <p className="text-[8px] font-black uppercase text-blue-600 mt-1">
                             PUNTA {String(ev.fiberPairNumber || '').padStart(2, '0')} · {ev.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {ev.fiberMeterage ?? '-'} M
