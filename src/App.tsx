@@ -231,6 +231,7 @@ export default function App() {
     pairNumber: number;
     metraje: string;
     reelNumber: string;
+    fiberCount: string;
   } | null>(null);
   const [showFiberCaptureModal, setShowFiberCaptureModal] = useState(false);
   const [showFiberPairSelector, setShowFiberPairSelector] = useState(false);
@@ -239,6 +240,7 @@ export default function App() {
     reserveId: string;
     reserveNumber: number;
     reelNumber: string;
+    fiberCount: string;
   } | null>(null);
   const [showReserveCaptureModal, setShowReserveCaptureModal] = useState(false);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
@@ -766,7 +768,7 @@ export default function App() {
 
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
-      setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '' });
+      setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '' });
       setShowReserveCaptureModal(true);
       return;
     }
@@ -816,7 +818,8 @@ export default function App() {
           ? Number(existingPair?.fiberPairNumber || nextNumber)
           : nextNumber,
         metraje: '',
-        reelNumber: existingPair?.fiberReelNumber || ''
+        reelNumber: existingPair?.fiberReelNumber || '',
+        fiberCount: existingPair?.fiberCount ? String(existingPair.fiberCount) : ''
       });
     } else {
       const pendingPairs = fiberPairs.filter(pair => !pair.hasFinal);
@@ -836,7 +839,8 @@ export default function App() {
         pairId: selected.pairId,
         pairNumber: selected.pairNumber,
         metraje: '',
-        reelNumber: initialEvidence?.fiberReelNumber || ''
+        reelNumber: initialEvidence?.fiberReelNumber || '',
+        fiberCount: initialEvidence?.fiberCount ? String(initialEvidence.fiberCount) : ''
       });
     }
 
@@ -891,13 +895,14 @@ export default function App() {
           side,
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
-          reelNumber: inheritedReel
+          reelNumber: inheritedReel,
+          fiberCount: String(existing.reserveFiberCount || '')
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
         const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
         const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '' });
+        setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '', fiberCount: '' });
       }
 
       setShowReserveCaptureModal(false);
@@ -932,7 +937,8 @@ export default function App() {
       side,
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
-      reelNumber: inheritedReel
+      reelNumber: inheritedReel,
+      fiberCount: String(selected.reserveFiberCount || evidences.find(ev => ev.category === 'RESERVA' && ev.reserveId === selected.reserveId)?.reserveFiberCount || '')
     });
     setShowReserveCaptureModal(false);
     setCurrentStep('camera');
@@ -949,11 +955,17 @@ export default function App() {
       alert('Ingrese el número de carrete.');
       return;
     }
+    const parsedFiberCount = Number(fiberCaptureDraft.fiberCount);
+    if (!Number.isInteger(parsedFiberCount) || parsedFiberCount <= 0) {
+      alert('Ingrese una cantidad de fibras válida, por ejemplo 12, 24 o 48.');
+      return;
+    }
 
     setFiberCaptureDraft({
       ...fiberCaptureDraft,
       metraje: String(parsedMeterage),
-      reelNumber: fiberCaptureDraft.reelNumber.trim()
+      reelNumber: fiberCaptureDraft.reelNumber.trim(),
+      fiberCount: String(parsedFiberCount)
     });
     setShowFiberCaptureModal(false);
     setCurrentStep('camera');
@@ -1329,11 +1341,13 @@ export default function App() {
         fiberPairNumber: isFiberCategory(selectedEvidenceCategory.id) ? fiberCaptureDraft?.pairNumber : undefined,
         fiberMeterage: isFiberCategory(captureCategoryId) ? Number(fiberCaptureDraft?.metraje || 0) : undefined,
         fiberReelNumber: isFiberCategory(captureCategoryId) ? (fiberCaptureDraft?.reelNumber || '').trim() : undefined,
+        fiberCount: isFiberCategory(captureCategoryId) ? Number(fiberCaptureDraft?.fiberCount || 0) : undefined,
         fiberSide: isFiberCategory(captureCategoryId) ? fiberCaptureDraft?.side : undefined,
         reserveId: selectedEvidenceCategory.id === 'RESERVA' ? (reserveCaptureDraft?.reserveId || '') : undefined,
         reserveNumber: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.reserveNumber : undefined,
         reserveSide: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.side : undefined,
         reserveReelNumber: selectedEvidenceCategory.id === 'RESERVA' ? (reserveCaptureDraft?.reelNumber || '').trim() : undefined,
+        reserveFiberCount: selectedEvidenceCategory.id === 'RESERVA' ? Number(reserveCaptureDraft?.fiberCount || 0) : undefined,
         photo: {
           fileName,
           createdAt: capturedAt
@@ -1938,6 +1952,26 @@ export default function App() {
                   <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wide">
                     <span className="text-green-600">{completedEvidenceCategories} completadas</span>
                     <span className="text-amber-600">{pendingEvidenceCategories} pendientes</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      value={reserveCaptureDraft.fiberCount}
+                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, fiberCount: e.target.value } : prev)}
+                      readOnly={reserveCaptureDraft.side !== 'initial'}
+                      placeholder="Ej. 12, 24, 48"
+                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
+                    />
+                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
+                      {reserveCaptureDraft.side !== 'initial'
+                        ? `✓ Cantidad de fibras heredada de la PUNTA INICIAL: ${reserveCaptureDraft.fiberCount || 'PENDIENTE'}`
+                        : (reserveCaptureDraft.fiberCount ? '✓ Se reutilizará en las 3 fotos de la reserva.' : 'Ingrese una sola vez la cantidad de fibras; se reutilizará en inicial, final y rollo.')}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 gap-2.5">
@@ -3506,6 +3540,24 @@ export default function App() {
               </div>
 
               <div>
+                <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  step="1"
+                  value={fiberCaptureDraft.fiberCount}
+                  onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, fiberCount: e.target.value } : prev)}
+                  readOnly={fiberCaptureDraft.side === 'final'}
+                  placeholder="Ej. 12, 24, 48"
+                  className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${fiberCaptureDraft.side === 'final' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
+                />
+                {fiberCaptureDraft.side === 'final' && (
+                  <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Cantidad de fibras heredada de la punta inicial</p>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Metraje de la punta (m)</label>
                 <input
                   type="number"
@@ -3523,7 +3575,7 @@ export default function App() {
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => { setShowFiberCaptureModal(false); setFiberCaptureDraft(null); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
-                <button type="button" onClick={confirmFiberCapture} disabled={!fiberCaptureDraft.metraje.trim() || !fiberCaptureDraft.reelNumber.trim()} className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase shadow-lg disabled:opacity-40">Guardar y abrir cámara</button>
+                <button type="button" onClick={confirmFiberCapture} disabled={!fiberCaptureDraft.metraje.trim() || !fiberCaptureDraft.reelNumber.trim() || !fiberCaptureDraft.fiberCount.trim()} className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase shadow-lg disabled:opacity-40">Guardar y abrir cámara</button>
               </div>
             </motion.div>
           </motion.div>
@@ -3660,7 +3712,7 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-2.5">
                     <button
                       type="button"
-                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'initial') || !reserveCaptureDraft.reelNumber.trim()}
+                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'initial') || !reserveCaptureDraft.reelNumber.trim() || !reserveCaptureDraft.fiberCount.trim()}
                       onClick={() => openReserveSide('initial', reserveCaptureDraft.reserveId)}
                       className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide disabled:bg-gray-200 disabled:text-gray-400"
                     >
@@ -3668,7 +3720,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'final') || !reserveCaptureDraft.reelNumber.trim()}
+                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'final') || !reserveCaptureDraft.reelNumber.trim() || !reserveCaptureDraft.fiberCount.trim()}
                       onClick={() => openReserveSide('final', reserveCaptureDraft.reserveId)}
                       className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
                     >
@@ -3676,7 +3728,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'roll') || !reserveCaptureDraft.reelNumber.trim()}
+                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'roll') || !reserveCaptureDraft.reelNumber.trim() || !reserveCaptureDraft.fiberCount.trim()}
                       onClick={() => openReserveSide('roll', reserveCaptureDraft.reserveId)}
                       className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
                     >
