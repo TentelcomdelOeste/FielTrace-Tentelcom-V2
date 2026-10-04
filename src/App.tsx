@@ -3624,7 +3624,8 @@ export default function App() {
                               side: 'initial',
                               reserveId,
                               reserveNumber,
-                              reelNumber: getReserveReelNumber(reserveId)
+                              reelNumber: getReserveReelNumber(reserveId),
+                              fiberCount: String(evidences.find(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)?.reserveFiberCount || '')
                             })}
                             className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
                           >
@@ -3653,7 +3654,7 @@ export default function App() {
                         .filter(Number.isFinite);
                       const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
                       const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber, reelNumber: '' });
+                      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber, reelNumber: '', fiberCount: '' });
                     }}
                     className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide"
                   >
@@ -3738,7 +3739,7 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '' })}
+                    onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '' })}
                     className="w-full py-3 rounded-2xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase"
                   >
                     Cambiar reserva
