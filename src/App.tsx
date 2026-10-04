@@ -3538,7 +3538,7 @@ export default function App() {
                         </div>
                       );
                     })
-                  ) : () : (
+                  ) : (
                     evidences
                       .filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
                       .map((ev: any, index: number) => (
