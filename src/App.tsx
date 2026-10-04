@@ -1238,6 +1238,20 @@ export default function App() {
     );
   };
 
+  const evidenceCategoryProgress = EVIDENCE_CATEGORIES.map(category => {
+    const count = evidences.filter(ev => ev.category === category.id).length;
+    return {
+      ...category,
+      count,
+      completed: count > 0,
+    };
+  });
+  const completedEvidenceCategories = evidenceCategoryProgress.filter(category => category.completed).length;
+  const pendingEvidenceCategories = evidenceCategoryProgress.length - completedEvidenceCategories;
+  const evidenceProgressPercent = evidenceCategoryProgress.length
+    ? Math.round((completedEvidenceCategories / evidenceCategoryProgress.length) * 100)
+    : 0;
+
   return (
     <div className={`min-h-screen ${currentStep === 'camera' ? 'bg-transparent' : 'bg-white'} flex flex-col font-sans`}>
       {/* Main Content Viewport */}
@@ -1455,6 +1469,81 @@ export default function App() {
                     <CameraIcon className="w-6 h-6" />
                   </button>
                 </div>
+
+                {/* EVIDENCE CHECKLIST - PROJECT LEVEL */}
+                <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <CameraIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-950">Evidencias del proyecto</h3>
+                      </div>
+                      <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wide mt-1">
+                        Selecciona el tipo y toma las fotografías desde aquí.
+                      </p>
+                    </div>
+                    <span className="shrink-0 px-2.5 py-1.5 rounded-full bg-gray-50 text-[9px] font-black uppercase text-gray-500">
+                      {completedEvidenceCategories}/{evidenceCategoryProgress.length}
+                    </span>
+                  </div>
+
+                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                      style={{ width: `${evidenceProgressPercent}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wide">
+                    <span className="text-green-600">{completedEvidenceCategories} completadas</span>
+                    <span className="text-amber-600">{pendingEvidenceCategories} pendientes</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {evidenceCategoryProgress.map(category => (
+                      <div
+                        key={category.id}
+                        className={`rounded-2xl border p-3 flex items-center gap-3 ${
+                          category.completed
+                            ? 'border-green-100 bg-green-50/60'
+                            : 'border-gray-100 bg-gray-50/60'
+                        }`}
+                      >
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          category.completed ? 'bg-green-100 text-green-600' : 'bg-white text-gray-400 border border-gray-100'
+                        }`}>
+                          {category.completed ? <CheckCircle2 className="w-4 h-4" /> : <CameraIcon className="w-4 h-4" />}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-black uppercase text-gray-950 truncate">{category.label}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-wide mt-0.5 ${
+                            category.completed ? 'text-green-600' : 'text-amber-600'
+                          }`}>
+                            {category.completed
+                              ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
+                              : 'Pendiente · 0 fotos'}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEvidenceCategory(category.id);
+                            setCurrentStep('camera');
+                          }}
+                          className={`shrink-0 px-3 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all ${
+                            category.completed
+                              ? 'bg-white border border-green-200 text-green-700'
+                              : 'bg-blue-600 text-white shadow-sm'
+                          }`}
+                        >
+                          {category.completed ? 'Agregar foto' : 'Tomar foto'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
                 <div className="grid grid-cols-2 gap-4">
                    <button 
@@ -2179,25 +2268,13 @@ export default function App() {
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-transparent z-50 flex flex-col pointer-events-auto"
         >
-          {/* Selector de categoría de evidencia */}
-          <div id="evidence-category-selector" className="absolute top-3 left-3 right-3 z-20 pointer-events-auto">
-            <div className="bg-black/55 backdrop-blur-md border border-white/15 rounded-2xl p-2.5">
-              <div className="flex items-center justify-between gap-2 mb-2 px-1">
-                <span className="text-[9px] font-black uppercase tracking-widest text-white/80">Tipo de evidencia</span>
-                <span className="text-[9px] font-bold text-white/60">{evidenceCategory ? EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label : 'Seleccione una categoría'}</span>
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
-                {EVIDENCE_CATEGORIES.map(category => {
-                  const selected = evidenceCategory === category.id;
-                  return (
-                    <button key={category.id} type="button" onClick={() => setEvidenceCategory(category.id)}
-                      className={`shrink-0 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-tight border transition-all ${selected ? 'bg-white text-gray-950 border-white shadow-lg' : 'bg-white/10 text-white border-white/20'}`}
-                      aria-pressed={selected}>
-                      {category.label}
-                    </button>
-                  );
-                })}
-              </div>
+          {/* Category selected from the project checklist */}
+          <div className="absolute top-4 left-4 z-50 pointer-events-none">
+            <div className="bg-black/45 backdrop-blur-md border border-white/15 rounded-xl px-3 py-2">
+              <p className="text-[8px] font-black uppercase tracking-widest text-white/60">Evidencia</p>
+              <p className="text-[10px] font-black uppercase text-white mt-0.5">
+                {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
+              </p>
             </div>
           </div>
 
