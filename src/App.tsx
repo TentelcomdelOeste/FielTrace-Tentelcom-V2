@@ -1329,7 +1329,7 @@ export default function App() {
   };
 
   const evidenceCategoryProgress = EVIDENCE_CATEGORIES.map(category => {
-    const count = evidences.filter(ev => ev.category === category.id).length;
+    const count = evidences.filter(ev => ev.category === category.id && !!ev.photoUrl).length;
     return {
       ...category,
       count,
@@ -1750,7 +1750,7 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm relative overflow-hidden">
                     <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Total Evidencias</p>
-                    <h4 className="text-4xl font-black tracking-tighter text-blue-600">{evidences.length}</h4>
+                    <h4 className="text-4xl font-black tracking-tighter text-blue-600">{evidences.filter((ev: any) => !!ev.photoUrl).length}</h4>
                     <BarChart3 className="absolute -right-4 -bottom-4 w-20 h-20 opacity-[0.03] text-blue-600" />
                   </div>
                   <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm relative overflow-hidden">
@@ -2997,7 +2997,7 @@ export default function App() {
                 {confirmDelete.type === 'field' 
                   ? '¿Estás seguro de que deseas eliminar este campo personalizado? Esta acción no se puede deshacer.'
                   : confirmDelete.type === 'evidence'
-                  ? '¿Eliminar este registro? Esta acción no se puede deshacer. La foto en el álbum Field Trace no se eliminará automáticamente.'
+                  ? '¿Eliminar esta evidencia definitivamente? Se borrará la fotografía de Firebase Storage, su registro y la referencia local. Esta acción no se puede deshacer.'
                   : '¿Estás seguro de que deseas eliminar este proyecto y toda su historia?'}
               </p>
               <div className="flex gap-4">
@@ -3026,8 +3026,12 @@ export default function App() {
                           const evs = await storageService.getEvidencesByProject(selectedProject.id);
                           setEvidences(evs);
                         }
+                        setViewingEvidence(null);
+                        setShowStorageEvidenceViewer(false);
+                        setStorageEvidenceCategory(null);
                       } catch (e) {
                         console.error('Error eliminando evidencia', e);
+                        alert(`No se pudo eliminar definitivamente la evidencia: ${e instanceof Error ? e.message : 'error desconocido'}`);
                       }
                     } else if (confirmDelete.type === 'project' && confirmDelete.id != null) {
                       requestDeleteProjects([confirmDelete.id]);
@@ -3111,6 +3115,17 @@ export default function App() {
                   </>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewingEvidence?.id != null) setConfirmDelete({ type: 'evidence', id: viewingEvidence.id });
+                }}
+                className="w-full py-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-center gap-2 text-red-700 text-[10px] font-black uppercase active:scale-[0.98] transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar evidencia definitivamente
+              </button>
+
               <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
                 {viewingEvidence.photoUrl ? (
                   <img src={viewingEvidence.photoUrl} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" />
