@@ -215,13 +215,15 @@ import { exportService } from './services/exportService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
 import { shareService } from './services/shareService';
-import type { Project, Evidence, CustomField, Template } from './types';
+import { EVIDENCE_CATEGORIES, type EvidenceCategory } from './types';
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
+  // Categoría seleccionada por el técnico antes de capturar la evidencia.
+  const [evidenceCategory, setEvidenceCategory] = useState<EvidenceCategory | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -1001,6 +1003,8 @@ export default function App() {
       const hora = capturedAt.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
+      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
+      if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
 
       const viewfinderEl = document.getElementById('camera-viewfinder');
       const vfRect = viewfinderEl ? viewfinderEl.getBoundingClientRect() : null;
@@ -1014,6 +1018,8 @@ export default function App() {
         projectId: selectedProject.id!,
         projectName: selectedProject.name,
         photoPath: fileName,
+        category: selectedEvidenceCategory.id,
+        categoryLabel: selectedEvidenceCategory.label,
         photo: {
           fileName,
           createdAt: capturedAt
@@ -2173,6 +2179,28 @@ export default function App() {
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-transparent z-50 flex flex-col pointer-events-auto"
         >
+          {/* Selector de categoría de evidencia */}
+          <div id="evidence-category-selector" className="absolute top-3 left-3 right-3 z-20 pointer-events-auto">
+            <div className="bg-black/55 backdrop-blur-md border border-white/15 rounded-2xl p-2.5">
+              <div className="flex items-center justify-between gap-2 mb-2 px-1">
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/80">Tipo de evidencia</span>
+                <span className="text-[9px] font-bold text-white/60">{evidenceCategory ? EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label : 'Seleccione una categoría'}</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+                {EVIDENCE_CATEGORIES.map(category => {
+                  const selected = evidenceCategory === category.id;
+                  return (
+                    <button key={category.id} type="button" onClick={() => setEvidenceCategory(category.id)}
+                      className={`shrink-0 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-tight border transition-all ${selected ? 'bg-white text-gray-950 border-white shadow-lg' : 'bg-white/10 text-white border-white/20'}`}
+                      aria-pressed={selected}>
+                      {category.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* Real-time Camera Bridge */}
           <div id="camera-viewfinder" className="relative flex-1 bg-transparent overflow-hidden" onTouchStart={onCameraTouchStart} onTouchMove={onCameraTouchMove} onTouchEnd={onCameraTouchEnd}>
             <div className="absolute inset-0 bg-transparent pointer-events-none" aria-hidden="true" />
@@ -2321,10 +2349,10 @@ export default function App() {
               <button
                 type="button"
                 onClick={captureBatchPhoto}
-                disabled={isRecordingVideo || videoProcessing}
-                className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
-                title="Capturar fotografía"
-                aria-label="Capturar fotografía"
+                disabled={!evidenceCategory || isRecordingVideo || videoProcessing}
+                className="w-16 h-16" bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
+                title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
+                aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
               >
                 <div className="w-full h-full bg-white rounded-full shadow-inner flex items-center justify-center">
                   <div className="w-10 h-10 border-4 border-gray-100 rounded-full"></div>
