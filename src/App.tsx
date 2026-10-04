@@ -1902,25 +1902,6 @@ export default function App() {
                     <span className="text-amber-600">{pendingEvidenceCategories} pendientes</span>
                   </div>
 
-                  <div>
-                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Número de carrete</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoFocus={!reserveCaptureDraft.reelNumber}
-                      value={reserveCaptureDraft.reelNumber}
-                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
-                      readOnly={reserveCaptureDraft.side !== 'initial'}
-                      placeholder="Ej. 00125"
-                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`
-                    />
-                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
-                      {reserveCaptureDraft.side !== 'initial'
-                        ? `✓ Carrete heredado de la PUNTA INICIAL: ${reserveCaptureDraft.reelNumber || 'PENDIENTE'}`
-                        : (reserveCaptureDraft.reelNumber ? '✓ Este carrete se reutilizará en las 3 fotos de la reserva.' : 'Ingrese el carrete una sola vez; se reutilizará en inicial, final y rollo.')}
-                    </p>
-                  </div>
-
                   <div className="grid grid-cols-1 gap-2.5">
                     {evidenceCategoryProgress.map(category => (
                       <div
@@ -3479,7 +3460,7 @@ export default function App() {
                   onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
                   readOnly={fiberCaptureDraft.side === 'final'}
                   placeholder="Ej. 00125"
-                  className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${fiberCaptureDraft.side === 'final' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`
+                  className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${fiberCaptureDraft.side === 'final' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
                 />
                 {fiberCaptureDraft.side === 'final' && (
                   <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Carrete heredado de la punta inicial</p>
@@ -3602,6 +3583,25 @@ export default function App() {
                     </h3>
                     <p className="text-xs text-gray-500 mt-2">
                       Seleccione la evidencia que falta para completar esta reserva.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Número de carrete</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoFocus={!reserveCaptureDraft.reelNumber}
+                      value={reserveCaptureDraft.reelNumber}
+                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
+                      readOnly={reserveCaptureDraft.side !== 'initial'}
+                      placeholder="Ej. 00125"
+                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
+                    />
+                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
+                      {reserveCaptureDraft.side !== 'initial'
+                        ? `✓ Carrete heredado de la PUNTA INICIAL: ${reserveCaptureDraft.reelNumber || 'PENDIENTE'}`
+                        : (reserveCaptureDraft.reelNumber ? '✓ Este carrete se reutilizará en las 3 fotos de la reserva.' : 'Ingrese el carrete una sola vez; se reutilizará en inicial, final y rollo.')}
                     </p>
                   </div>
 
