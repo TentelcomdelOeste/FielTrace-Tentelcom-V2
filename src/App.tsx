@@ -3210,6 +3210,11 @@ export default function App() {
                       </div>
                       <div className="p-2.5">
                         <p className="text-[9px] font-black uppercase text-gray-900 truncate">{ev.categoryLabel || 'Otros'}</p>
+                        {ev.fiberPairId && (
+                          <p className="text-[8px] font-black uppercase text-blue-600 mt-1">
+                            PUNTA {String(ev.fiberPairNumber || '').padStart(2, '0')} · {ev.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {ev.fiberMeterage ?? '-'} M
+                          </p>
+                        )}
                         <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                       </div>
                     </button>
