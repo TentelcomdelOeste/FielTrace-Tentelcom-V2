@@ -1526,6 +1526,31 @@ export default function App() {
     );
   };
 
+  const fiberPairs = Array.from(
+    new Set(
+      evidences
+        .filter(ev => (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') && ev.fiberPairId)
+        .map(ev => ev.fiberPairId as string)
+    )
+  ).map(pairId => {
+    const pairEvidences = evidences.filter(ev => ev.fiberPairId === pairId && !!ev.photoUrl);
+    const initial = pairEvidences.find(ev => ev.category === 'PUNTAS_FIBRA_INICIAL');
+    const final = pairEvidences.find(ev => ev.category === 'PUNTAS_FIBRA_FINAL');
+    return {
+      pairId,
+      pairNumber: Number(initial?.fiberPairNumber || final?.fiberPairNumber || 0),
+      hasInitial: !!initial,
+      hasFinal: !!final,
+      complete: !!initial && !!final,
+    };
+  }).sort((a, b) => a.pairNumber - b.pairNumber);
+
+  const completedFiberPairs = fiberPairs.filter(pair => pair.complete);
+  const pendingFiberPairs = fiberPairs.filter(pair => !pair.complete);
+  const fiberPendingLabels = pendingFiberPairs.map(pair =>
+    `PUNTA ${String(pair.pairNumber).padStart(2, '0')}: ${!pair.hasInitial ? 'FALTA INICIAL' : 'FALTA FINAL'}`
+  );
+
   const evidenceCategoryProgress = EVIDENCE_CATEGORIES.map(category => {
     const categoryEvidences = evidences.filter(ev => ev.category === category.id && !!ev.photoUrl);
     if (category.id === 'RESERVA') {
@@ -1535,16 +1560,48 @@ export default function App() {
           categoryEvidences.some(ev => ev.reserveId === id && ev.reserveSide === side)
         )
       ).length;
+      const pendingReserves = reserveIds.length - completedReserves;
       return {
         ...category,
         count: categoryEvidences.length,
-        completed: completedReserves > 0,
+        completed: reserveIds.length > 0 && pendingReserves === 0,
         reserveCompletedCount: completedReserves,
         reserveCount: reserveIds.length,
+        reservePendingCount: pendingReserves,
       };
     }
+
+    if (category.id === 'PUNTAS_FIBRA_INICIAL' || category.id === 'PUNTAS_FIBRA_FINAL') {
+      const isInitial = category.id === 'PUNTAS_FIBRA_INICIAL';
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: fiberPairs.length > 0 && pendingFiberPairs.length === 0,
+        fiberPairCount: fiberPairs.length,
+        fiberCompleteCount: completedFiberPairs.length,
+        fiberPendingCount: pendingFiberPairs.length,
+        fiberPendingLabels,
+        fiberRole: isInitial ? 'initial' : 'final',
+        reserveCompletedCount: 0,
+        reserveCount: 0,
+        reservePendingCount: 0,
+      };
+    }
+
     const count = categoryEvidences.length;
-    return { ...category, count, completed: count > 0, reserveCompletedCount: 0, reserveCount: 0 };
+    return {
+      ...category,
+      count,
+      completed: count > 0,
+      reserveCompletedCount: 0,
+      reserveCount: 0,
+      reservePendingCount: 0,
+      fiberPairCount: 0,
+      fiberCompleteCount: 0,
+      fiberPendingCount: 0,
+      fiberPendingLabels: [],
+      fiberRole: null,
+    };
   });
   const completedEvidenceCategories = evidenceCategoryProgress.filter(category => category.completed).length;
   const pendingEvidenceCategories = evidenceCategoryProgress.length - completedEvidenceCategories;
@@ -1832,14 +1889,20 @@ export default function App() {
                               ? (category.reserveCount
                                   ? `${category.reserveCompletedCount || 0}/${category.reserveCount} reserva${category.reserveCount === 1 ? '' : 's'} completa${category.reserveCount === 1 ? '' : 's'} · ${category.count} fotos`
                                   : 'Pendiente · 0 fotos')
-                              : (category.completed
-                                  ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
-                                  : 'Pendiente · 0 fotos')}
+                              : (category.id === 'PUNTAS_FIBRA_INICIAL' || category.id === 'PUNTAS_FIBRA_FINAL')
+                                ? (category.fiberPairCount
+                                    ? (category.completed
+                                        ? `✓ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.count} fotos`
+                                        : `⚠ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.fiberPendingLabels.join(' · ')}`)
+                                    : 'Pendiente · 0 fotos')
+                                : (category.completed
+                                    ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
+                                    : 'Pendiente · 0 fotos')}
                           </p>
                         </div>
 
                         <div className="shrink-0 flex flex-col items-stretch gap-1.5">
-                          {(category.completed || (category.id === 'RESERVA' && category.count > 0)) && (
+                          {(category.completed || category.count > 0) && (
                             <button
                               type="button"
                               onClick={() => {
