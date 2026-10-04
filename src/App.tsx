@@ -1954,26 +1954,6 @@ export default function App() {
                     <span className="text-amber-600">{pendingEvidenceCategories} pendientes</span>
                   </div>
 
-                  <div>
-                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      step="1"
-                      value={reserveCaptureDraft.fiberCount}
-                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, fiberCount: e.target.value } : prev)}
-                      readOnly={reserveCaptureDraft.side !== 'initial'}
-                      placeholder="Ej. 12, 24, 48"
-                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
-                    />
-                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
-                      {reserveCaptureDraft.side !== 'initial'
-                        ? `✓ Cantidad de fibras heredada de la PUNTA INICIAL: ${reserveCaptureDraft.fiberCount || 'PENDIENTE'}`
-                        : (reserveCaptureDraft.fiberCount ? '✓ Se reutilizará en las 3 fotos de la reserva.' : 'Ingrese una sola vez la cantidad de fibras; se reutilizará en inicial, final y rollo.')}
-                    </p>
-                  </div>
-
                   <div className="grid grid-cols-1 gap-2.5">
                     {evidenceCategoryProgress.map(category => (
                       <div
@@ -3707,6 +3687,26 @@ export default function App() {
                       {reserveCaptureDraft.side !== 'initial'
                         ? `✓ Carrete heredado de la PUNTA INICIAL: ${reserveCaptureDraft.reelNumber || 'PENDIENTE'}`
                         : (reserveCaptureDraft.reelNumber ? '✓ Este carrete se reutilizará en las 3 fotos de la reserva.' : 'Ingrese el carrete una sola vez; se reutilizará en inicial, final y rollo.')}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      value={reserveCaptureDraft.fiberCount}
+                      onChange={(e) => setReserveCaptureDraft(prev => prev ? { ...prev, fiberCount: e.target.value } : prev)}
+                      readOnly={reserveCaptureDraft.side !== 'initial'}
+                      placeholder="Ej. 12, 24, 48"
+                      className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${reserveCaptureDraft.side !== 'initial' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
+                    />
+                    <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
+                      {reserveCaptureDraft.side !== 'initial'
+                        ? `✓ Cantidad de fibras heredada de la PUNTA INICIAL: ${reserveCaptureDraft.fiberCount || 'PENDIENTE'}`
+                        : (reserveCaptureDraft.fiberCount ? '✓ Se reutilizará en las 3 fotos de la reserva.' : 'Ingrese una sola vez la cantidad de fibras; se reutilizará en inicial, final y rollo.')}
                     </p>
                   </div>
 
