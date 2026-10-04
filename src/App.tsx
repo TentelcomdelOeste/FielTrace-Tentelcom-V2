@@ -3090,7 +3090,19 @@ export default function App() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[190] bg-black/70 backdrop-blur-sm flex flex-col">
             <div className="flex items-center justify-between px-4 py-4 bg-white border-b">
               <h2 className="text-sm font-black uppercase tracking-tight">Detalle del registro</h2>
-              <button type="button" onClick={() => setViewingEvidence(null)} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (viewingEvidence?.id != null) setConfirmDelete({ type: 'evidence', id: viewingEvidence.id });
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[10px] font-black uppercase"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Eliminar
+                </button>
+                <button type="button" onClick={() => setViewingEvidence(null)} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-5 bg-gray-50 space-y-3">
               <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2.5 shadow-sm">
@@ -3115,17 +3127,6 @@ export default function App() {
                   </>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (viewingEvidence?.id != null) setConfirmDelete({ type: 'evidence', id: viewingEvidence.id });
-                }}
-                className="w-full py-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-center gap-2 text-red-700 text-[10px] font-black uppercase active:scale-[0.98] transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-                Eliminar evidencia definitivamente
-              </button>
-
               <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
                 {viewingEvidence.photoUrl ? (
                   <img src={viewingEvidence.photoUrl} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" />
