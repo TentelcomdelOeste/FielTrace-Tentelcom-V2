@@ -764,45 +764,12 @@ export default function App() {
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
 
-      // Si existe una reserva incompleta, continuar esa reserva antes de crear otra.
-      const reserveGroups = Array.from(
-        new Set(
-          evidences
-            .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
-            .map(ev => ev.reserveId as string)
-        )
-      )
-        .map(reserveId => {
-          const reserveEvidences = evidences.filter(
-            ev => ev.category === 'RESERVA' && ev.reserveId === reserveId
-          );
-          const first = reserveEvidences[0];
-          const reserveNumber = Number(first?.reserveNumber || 0);
-          const complete = ['initial', 'final', 'roll'].every(side =>
-            reserveEvidences.some(ev => ev.reserveSide === side && !!ev.photoUrl)
-          );
-          return { reserveId, reserveNumber, complete };
-        })
-        .filter(item => !item.complete)
-        .sort((a, b) => a.reserveNumber - b.reserveNumber);
-
-      if (reserveGroups.length) {
-        const pending = reserveGroups[0];
-        setReserveCaptureDraft({
-          side: 'initial',
-          reserveId: pending.reserveId,
-          reserveNumber: pending.reserveNumber || 1
-        });
-      } else {
-        const usedNumbers = evidences
-          .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
-          .map(ev => Number(ev.reserveNumber))
-          .filter(Number.isFinite);
-        const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-        const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber: nextNumber });
-      }
-
+      // Abrir selector para que el técnico elija qué reserva incompleta desea continuar.
+      setReserveCaptureDraft({
+        side: 'initial',
+        reserveId: '',
+        reserveNumber: 0
+      });
       setShowReserveCaptureModal(true);
       return;
     }
@@ -3418,47 +3385,138 @@ export default function App() {
 
         {showReserveCaptureModal && reserveCaptureDraft && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[221] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
-            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
-                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
-                  RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
-                </h3>
-                <p className="text-xs text-gray-500 mt-2">
-                  Cada reserva debe tener exactamente estas 3 evidencias: Punta inicial, Punta final y Rollo detallado.
-                </p>
-              </div>
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5 max-h-[88vh] overflow-y-auto">
+              {reserveCaptureDraft.reserveId === '' ? (
+                <>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">Seleccionar reserva</h3>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Seleccione cuál reserva desea completar. Las reservas terminadas no aparecen aquí.
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 gap-2.5">
-                <button
-                  type="button"
-                  disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'initial')}
-                  onClick={() => openReserveSide('initial', reserveCaptureDraft.reserveId)}
-                  className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide disabled:bg-gray-200 disabled:text-gray-400"
-                >
-                  {reserveHasSide(reserveCaptureDraft.reserveId, 'initial') ? 'Punta inicial ✓' : 'Punta inicial'}
-                </button>
-                <button
-                  type="button"
-                  disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'final')}
-                  onClick={() => openReserveSide('final', reserveCaptureDraft.reserveId)}
-                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
-                >
-                  {reserveHasSide(reserveCaptureDraft.reserveId, 'final') ? 'Punta final ✓' : 'Punta final'}
-                </button>
-                <button
-                  type="button"
-                  disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'roll')}
-                  onClick={() => openReserveSide('roll', reserveCaptureDraft.reserveId)}
-                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
-                >
-                  {reserveHasSide(reserveCaptureDraft.reserveId, 'roll') ? 'Rollo detallado ✓' : 'Rollo detallado'}
-                </button>
-              </div>
+                  <div className="space-y-2.5">
+                    {Array.from(new Set(
+                      evidences
+                        .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
+                        .map(ev => ev.reserveId as string)
+                    ))
+                      .map(reserveId => {
+                        const reserveEvidences = evidences.filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId && !!ev.photoUrl);
+                        const first = reserveEvidences[0];
+                        const reserveNumber = Number(first?.reserveNumber || 0);
+                        const hasInitial = reserveEvidences.some(ev => ev.reserveSide === 'initial');
+                        const hasFinal = reserveEvidences.some(ev => ev.reserveSide === 'final');
+                        const hasRoll = reserveEvidences.some(ev => ev.reserveSide === 'roll');
+                        const complete = hasInitial && hasFinal && hasRoll;
+                        if (complete) return null;
 
-              <button type="button" onClick={() => { setShowReserveCaptureModal(false); setReserveCaptureDraft(null); }} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">
-                Cancelar
-              </button>
+                        const missing = [
+                          !hasInitial ? 'INICIAL' : '',
+                          !hasFinal ? 'FINAL' : '',
+                          !hasRoll ? 'ROLLO' : ''
+                        ].filter(Boolean).join(' · ');
+
+                        return (
+                          <button
+                            key={reserveId}
+                            type="button"
+                            onClick={() => setReserveCaptureDraft({
+                              side: 'initial',
+                              reserveId,
+                              reserveNumber
+                            })}
+                            className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-sm font-black uppercase text-gray-950">
+                                RESERVA {String(reserveNumber).padStart(2, '0')}
+                              </span>
+                              <span className="text-[9px] font-black uppercase text-blue-700">
+                                {reserveEvidences.length}/3 FOTOS
+                              </span>
+                            </div>
+                            <p className="text-[9px] font-black uppercase text-amber-600 mt-1">
+                              FALTA {missing}
+                            </p>
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const usedNumbers = evidences
+                        .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
+                        .map(ev => Number(ev.reserveNumber))
+                        .filter(Number.isFinite);
+                      const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+                      const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber });
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide"
+                  >
+                    + NUEVA RESERVA
+                  </button>
+
+                  <button type="button" onClick={() => { setShowReserveCaptureModal(false); setReserveCaptureDraft(null); }} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
+                      RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Seleccione la evidencia que falta para completar esta reserva.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <button
+                      type="button"
+                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'initial')}
+                      onClick={() => openReserveSide('initial', reserveCaptureDraft.reserveId)}
+                      className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide disabled:bg-gray-200 disabled:text-gray-400"
+                    >
+                      {reserveHasSide(reserveCaptureDraft.reserveId, 'initial') ? 'Punta inicial ✓' : 'Punta inicial'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'final')}
+                      onClick={() => openReserveSide('final', reserveCaptureDraft.reserveId)}
+                      className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
+                    >
+                      {reserveHasSide(reserveCaptureDraft.reserveId, 'final') ? 'Punta final ✓' : 'Punta final'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reserveHasSide(reserveCaptureDraft.reserveId, 'roll')}
+                      onClick={() => openReserveSide('roll', reserveCaptureDraft.reserveId)}
+                      className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400"
+                    >
+                      {reserveHasSide(reserveCaptureDraft.reserveId, 'roll') ? 'Rollo detallado ✓' : 'Rollo detallado'}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0 })}
+                    className="w-full py-3 rounded-2xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase"
+                  >
+                    Cambiar reserva
+                  </button>
+
+                  <button type="button" onClick={() => { setShowReserveCaptureModal(false); setReserveCaptureDraft(null); }} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">
+                    Cancelar
+                  </button>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
