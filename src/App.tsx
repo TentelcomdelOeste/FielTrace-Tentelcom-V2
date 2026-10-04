@@ -845,16 +845,27 @@ export default function App() {
   };
 
   const getReserveReelNumber = (reserveId: string) => {
-    const fromEvidence = evidences.find(ev =>
-      ev.category === 'RESERVA' &&
-      ev.reserveId === reserveId &&
-      !!ev.reserveReelNumber
-    )?.reserveReelNumber?.trim();
+    // Fuente principal: la PUNTA INICIAL de la misma reserva.
+    // Así FINAL y ROLLO siempre heredan exactamente el mismo carrete.
+    const sameReserve = evidences
+      .filter(ev => ev.category === 'RESERVA' && ev.reserveId === reserveId)
+      .sort((a, b) => {
+        const aInitial = a.reserveSide === 'initial' ? 0 : 1;
+        const bInitial = b.reserveSide === 'initial' ? 0 : 1;
+        return aInitial - bInitial;
+      });
+
+    const fromEvidence = sameReserve
+      .map(ev => ev.reserveReelNumber?.trim())
+      .find(Boolean);
     if (fromEvidence) return fromEvidence;
 
     try {
+      const reserveNumber = Number(sameReserve[0]?.reserveNumber || 0);
       return localStorage.getItem(`fieldtrace_reserve_reel_${reserveId}`)?.trim()
-        || localStorage.getItem(`fieldtrace_reserve_reel_number_${Number(evidences.find(ev => ev.reserveId === reserveId)?.reserveNumber || 0)}`)?.trim()
+        || (reserveNumber
+          ? localStorage.getItem(`fieldtrace_reserve_reel_number_${reserveNumber}`)?.trim()
+          : '')
         || '';
     } catch {
       return '';
@@ -875,13 +886,12 @@ export default function App() {
           alert('Esta reserva ya tiene una PUNTA INICIAL.');
           return;
         }
+        const inheritedReel = getReserveReelNumber(existing.reserveId);
         setReserveCaptureDraft({
           side,
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
-          reelNumber: (reserveCaptureDraft?.reserveId === existing.reserveId && reserveCaptureDraft.reelNumber.trim())
-            ? reserveCaptureDraft.reelNumber.trim()
-            : getReserveReelNumber(existing.reserveId)
+          reelNumber: inheritedReel
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
@@ -914,19 +924,15 @@ export default function App() {
       return;
     }
 
-    const initialEvidence = evidences.find(ev =>
-      ev.category === 'RESERVA' &&
-      ev.reserveId === selected.reserveId &&
-      ev.reserveSide === 'initial'
-    );
+    // FINAL y ROLLO no vuelven a pedir carrete: lo heredan de la reserva.
+    // Se busca primero la PUNTA INICIAL y luego cualquier evidencia del mismo grupo.
+    const inheritedReel = getReserveReelNumber(selected.reserveId);
 
     setReserveCaptureDraft({
       side,
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
-      reelNumber: (reserveCaptureDraft?.reserveId === selected.reserveId && reserveCaptureDraft.reelNumber.trim())
-        ? reserveCaptureDraft.reelNumber.trim()
-        : (getReserveReelNumber(selected.reserveId) || initialEvidence?.reserveReelNumber || selected.reserveReelNumber || '')
+      reelNumber: inheritedReel
     });
     setShowReserveCaptureModal(false);
     setCurrentStep('camera');
