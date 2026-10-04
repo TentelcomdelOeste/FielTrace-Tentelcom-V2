@@ -3787,7 +3787,12 @@ export default function App() {
                     Cancelar
                   </button>
                 </>
-              )}        {showStorageEvidenceViewer && (
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showStorageEvidenceViewer && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[185] bg-black/80 backdrop-blur-sm flex flex-col">
             <div className="flex items-center justify-between px-4 py-4 bg-white border-b border-gray-100">
               <div>
