@@ -73,6 +73,8 @@ export enum SyncOperation {
 
 export type EvidenceCategory =
   | 'PUNTAS_FIBRA'
+  | 'PUNTAS_FIBRA_INICIAL'
+  | 'PUNTAS_FIBRA_FINAL'
   | 'ACEROS'
   | 'DESECHOS'
   | 'NAPS'
