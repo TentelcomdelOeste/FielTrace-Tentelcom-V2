@@ -3631,8 +3631,8 @@ export default function App() {
                           <div className="flex items-center justify-between gap-3 px-1 pb-3">
                             <div>
                               <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">PUNTA {String(pairNumber).padStart(2, '0')}</p>
-                              <p className="text-[8px] font-bold uppercase mt-1 ${hasInitial && hasFinal ? 'text-gray-400' : 'text-amber-600'}">
-                                {hasInitial && hasFinal ? '2/2 FOTOS · PAREJA COMPLETA' : `{group.length}/2 FOTOS · FALTA ${!hasInitial ? 'INICIAL' : 'FINAL'}`}
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (hasInitial && hasFinal ? 'text-gray-400' : 'text-amber-600')}>
+                                {hasInitial && hasFinal ? '2/2 FOTOS · PAREJA COMPLETA' : group.length + '/2 FOTOS · FALTA ' + (!hasInitial ? 'INICIAL' : 'FINAL')}
                               </p>
                             </div>
                           </div>
