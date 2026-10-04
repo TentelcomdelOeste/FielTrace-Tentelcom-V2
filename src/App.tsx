@@ -208,6 +208,7 @@ const EvidenceImage = memo(({ photoId, className }: { photoId: string, className
   return <img ref={imgRef as any} src={url} className={className} alt="Evidencia" />;
 });
 import { CameraPreview } from '@capgo/camera-preview';
+import { Capacitor } from '@capacitor/core';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
@@ -261,6 +262,9 @@ export default function App() {
   const [videoProcessing, setVideoProcessing] = useState(false);
   const videoStartedAtRef = useRef<number | null>(null);
   const videoRecordingPathRef = useRef<string | null>(null);
+  const webCameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const webCameraStreamRef = useRef<MediaStream | null>(null);
+  const isNativeCamera = Capacitor.isNativePlatform();
 
   useEffect(() => {
     let listenerHandle: { remove: () => Promise<void> } | null = null;
@@ -312,6 +316,7 @@ export default function App() {
   const applyNativeZoom = async (level: number) => {
     const next = Math.max(1, Math.min(8, Math.round(level * 10) / 10));
     setCameraZoom(next);
+    if (!isNativeCamera) return;
     try { await CameraPreview.setZoom({ level: next }); } catch (error) { console.warn('[Camera] zoom:', error); }
   };
   const cycleZoom = () => { const next = cameraZoom >= 3 ? 1 : cameraZoom >= 2 ? 3 : 2; void applyNativeZoom(next); };
@@ -323,8 +328,8 @@ export default function App() {
     if (capturingRef.current) return;
     const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
     try {
-      // Reiniciar únicamente el preview nativo; el overlay React permanece intacto.
-      await CameraPreview.stop({ force: true }).catch(() => {});
+      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
+      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
       setCameraFacing(nextFacing);
     } catch (error) {
       console.warn('[Camera] switch facing:', error);
@@ -354,9 +359,46 @@ export default function App() {
   useEffect(() => {
     if (currentStep !== 'camera') return;
     let active = true;
-    // Iniciar rastreo continuo y forzar lectura de posición fresca al abrir la cámara
     void locationService.startWatching();
     void locationService.getCurrentPosition();
+
+    if (!isNativeCamera) {
+      (async () => {
+        try {
+          if (!navigator.mediaDevices?.getUserMedia) throw new Error('El navegador no permite acceso a la cámara.');
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: cameraFacing === 'rear' ? { ideal: 'environment' } : { ideal: 'user' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            },
+            audio: false
+          });
+          if (!active) {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          webCameraStreamRef.current = stream;
+          const video = webCameraVideoRef.current;
+          if (video) {
+            video.srcObject = stream;
+            video.muted = true;
+            video.playsInline = true;
+            await video.play().catch(() => {});
+          }
+        } catch (error) {
+          console.error('[WebCamera] start:', error);
+        }
+      })();
+
+      return () => {
+        active = false;
+        const stream = webCameraStreamRef.current;
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        webCameraStreamRef.current = null;
+        if (webCameraVideoRef.current) webCameraVideoRef.current.srcObject = null;
+      };
+    }
 
     (async () => {
       try {
@@ -375,7 +417,7 @@ export default function App() {
       void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, cameraFacing]);
+  }, [currentStep, cameraFacing, isNativeCamera]);
 
   useEffect(() => {
     if (currentStep !== 'camera') return;
@@ -959,17 +1001,40 @@ export default function App() {
     capturingRef.current = true;
 
     try {
-      // Captura física: único await. El botón NO se bloquea visualmente.
-      const photoSize = await getBestPhotoCaptureSize(cameraFacing);
-      const captureResult = await CameraPreview.capture({
-        width: photoSize.width,
-        height: photoSize.height,
-        quality: 95,
-        format: 'jpeg',
-      });
-      const capturedValue = captureResult?.value;
-      const rawImage = capturedValue ? (capturedValue.startsWith('data:') ? capturedValue : `data:image/jpeg;base64,${capturedValue}`) : null;
-      if (!rawImage) throw new Error('No se pudo capturar la imagen con la cámara nativa');
+      // Captura física. Android usa CameraPreview; Chrome usa getUserMedia para probar el flujo sin APK.
+      let rawImage: string | null = null;
+      if (!isNativeCamera) {
+        const video = webCameraVideoRef.current;
+        if (!video || video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+          throw new Error('La cámara web todavía no está lista.');
+        }
+        const canvas = document.createElement('canvas');
+        const maxDim = 4096;
+        const scale = Math.min(1, maxDim / Math.max(video.videoWidth, video.videoHeight));
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No se pudo preparar la captura de cámara.');
+        if (cameraFacing === 'front') {
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        rawImage = canvas.toDataURL('image/jpeg', 0.95);
+      } else {
+        const photoSize = await getBestPhotoCaptureSize(cameraFacing);
+        const captureResult = await CameraPreview.capture({
+          width: photoSize.width,
+          height: photoSize.height,
+          quality: 95,
+          format: 'jpeg',
+        });
+        const capturedValue = captureResult?.value;
+        rawImage = capturedValue
+          ? (capturedValue.startsWith('data:') ? capturedValue : `data:image/jpeg;base64,${capturedValue}`)
+          : null;
+      }
+      if (!rawImage) throw new Error('No se pudo capturar la imagen con la cámara');
 
       // Liberar anti doble-tap al instante (botón ya disponible para siguiente foto)
       capturingRef.current = false;
@@ -1076,14 +1141,17 @@ export default function App() {
           }
           setLastImage(finalImage);
           
-          // 2. Guardar fotografía en galería PRIMERO (Guardado atómico)
-          const savedToGallerySuccess = await cameraService.saveToGallery(finalImage, fileName);
+          // 2. En Android se guarda también en la galería Field Trace.
+          // En navegador de desarrollo la evidencia se conserva en IndexedDB para probar el flujo sin APK.
+          const savedToGallerySuccess = isNativeCamera
+            ? await cameraService.saveToGallery(finalImage, fileName)
+            : true;
           if (!savedToGallerySuccess) {
             console.error("[AtomicCapture] Error: No se pudo guardar la fotografía en la galería. Abortando registro de evidencia.");
             return;
           }
 
-          // 3. Guardar Evidence en IndexedDB solo tras confirmar éxito de fotografía
+          // 3. Guardar Evidence en IndexedDB para que aparezca inmediatamente en el proyecto
           await storageService.addEvidence(evidenceObject, finalImage);
 
           // 4. Actualizar estado de UI
@@ -2280,6 +2348,15 @@ export default function App() {
 
           {/* Real-time Camera Bridge */}
           <div id="camera-viewfinder" className="relative flex-1 bg-transparent overflow-hidden" onTouchStart={onCameraTouchStart} onTouchMove={onCameraTouchMove} onTouchEnd={onCameraTouchEnd}>
+            {!isNativeCamera && (
+              <video
+                ref={webCameraVideoRef}
+                className="absolute inset-0 w-full h-full object-cover"
+                autoPlay
+                muted
+                playsInline
+              />
+            )}
             <div className="absolute inset-0 bg-transparent pointer-events-none" aria-hidden="true" />
             
             {/* Flash Feedback Layer */}
