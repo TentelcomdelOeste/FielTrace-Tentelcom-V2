@@ -2,14 +2,14 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * Firebase Initialization and Firestore service for Field Trace (Phase 3)
- * Cloud persistence: deleting locally never issues a remote delete.
+ * Cloud persistence: evidence deletion can remove the remote photo and metadata.
  * Evidence photos are stored in Firebase Storage; Firestore stores metadata and references.
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -70,6 +70,22 @@ export const firebaseService = {
    * Sincroniza una evidencia a Firestore.
    * NO sube ni almacena fotografías. Solo metadatos.
    */
+  /** Elimina definitivamente la fotografía de Storage y su metadata de Firestore. */
+  async deleteEvidenceFromCloud(evidence: any): Promise<void> {
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión para eliminar la evidencia.');
+
+    if (evidence?.photoStoragePath) {
+      await deleteObject(ref(storage, evidence.photoStoragePath));
+    }
+
+    const projectUuid = evidence?.projectUuid || `legacy_project_${evidence?.projectId || 'default'}`;
+    const evidenceUuid = evidence?.uuid;
+    if (evidenceUuid) {
+      await deleteDoc(doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid));
+    }
+  },
+
   async syncEvidenceToCloud(evidence: any): Promise<boolean> {
     try {
       if (!navigator.onLine) {
