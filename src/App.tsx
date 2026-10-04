@@ -2427,7 +2427,7 @@ export default function App() {
                 type="button"
                 onClick={captureBatchPhoto}
                 disabled={!evidenceCategory || isRecordingVideo || videoProcessing}
-                className="w-16 h-16" bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
+                className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
                 title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
                 aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
               >
