@@ -232,6 +232,12 @@ export default function App() {
     metraje: string;
   } | null>(null);
   const [showFiberCaptureModal, setShowFiberCaptureModal] = useState(false);
+  const [reserveCaptureDraft, setReserveCaptureDraft] = useState<{
+    side: 'initial' | 'final' | 'roll';
+    reserveId: string;
+    reserveNumber: number;
+  } | null>(null);
+  const [showReserveCaptureModal, setShowReserveCaptureModal] = useState(false);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -755,8 +761,22 @@ export default function App() {
   const openEvidenceCapture = (category: EvidenceCategory) => {
     setEvidenceCategory(category);
 
+    if (category === 'RESERVA') {
+      setFiberCaptureDraft(null);
+      const usedNumbers = evidences
+        .filter(ev => ev.category === 'RESERVA' && ev.reserveNumber != null)
+        .map(ev => Number(ev.reserveNumber))
+        .filter(Number.isFinite);
+      const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+      const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber: nextNumber });
+      setShowReserveCaptureModal(true);
+      return;
+    }
+
     if (!isFiberCategory(category)) {
       setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
       setCurrentStep('camera');
       return;
     }
@@ -768,6 +788,7 @@ export default function App() {
         .filter(Number.isFinite);
       const nextNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
       const pairId = crypto.randomUUID ? crypto.randomUUID() : `fiber_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setReserveCaptureDraft(null);
       setFiberCaptureDraft({ side: 'initial', pairId, pairNumber: nextNumber, metraje: '' });
       setShowFiberCaptureModal(true);
       return;
@@ -783,6 +804,7 @@ export default function App() {
     }
 
     const first = pendingPairs.sort((a, b) => Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0))[0];
+    setReserveCaptureDraft(null);
     setFiberCaptureDraft({
       side: 'final',
       pairId: first.fiberPairId || '',
@@ -790,6 +812,49 @@ export default function App() {
       metraje: ''
     });
     setShowFiberCaptureModal(true);
+  };
+
+  const openReserveSide = (side: 'initial' | 'final' | 'roll', reserveId?: string) => {
+    const reserves = evidences
+      .filter(ev => ev.category === 'RESERVA' && ev.reserveId)
+      .sort((a, b) => Number(a.reserveNumber || 0) - Number(b.reserveNumber || 0));
+
+    if (side === 'initial') {
+      const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
+      const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+      const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setReserveCaptureDraft({ side, reserveId: id, reserveNumber });
+      setShowReserveCaptureModal(false);
+      setCurrentStep('camera');
+      return;
+    }
+
+    const pending = reserves.filter(ev => {
+      const id = ev.reserveId;
+      if (!id) return false;
+      const hasInitial = evidences.some(x => x.category === 'RESERVA' && x.reserveId === id && x.reserveSide === 'initial');
+      const hasSide = evidences.some(x => x.category === 'RESERVA' && x.reserveId === id && x.reserveSide === side);
+      return hasInitial && !hasSide;
+    });
+
+    const selected = reserveId
+      ? pending.find(x => x.reserveId === reserveId)
+      : pending[0];
+
+    if (!selected?.reserveId) {
+      alert(side === 'final'
+        ? 'Primero registre la PUNTA INICIAL de una reserva.'
+        : 'Primero registre la PUNTA INICIAL de una reserva para poder agregar el ROLLO DETALLADO.');
+      return;
+    }
+
+    setReserveCaptureDraft({
+      side,
+      reserveId: selected.reserveId,
+      reserveNumber: Number(selected.reserveNumber || 1)
+    });
+    setShowReserveCaptureModal(false);
+    setCurrentStep('camera');
   };
 
   const confirmFiberCapture = () => {
@@ -1157,6 +1222,9 @@ export default function App() {
         fiberPairNumber: isFiberCategory(selectedEvidenceCategory.id) ? fiberCaptureDraft?.pairNumber : undefined,
         fiberMeterage: isFiberCategory(selectedEvidenceCategory.id) ? Number(fiberCaptureDraft?.metraje || 0) : undefined,
         fiberSide: isFiberCategory(selectedEvidenceCategory.id) ? fiberCaptureDraft?.side : undefined,
+        reserveId: selectedEvidenceCategory.id === 'RESERVA' ? (reserveCaptureDraft?.reserveId || '') : undefined,
+        reserveNumber: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.reserveNumber : undefined,
+        reserveSide: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.side : undefined,
         photo: {
           fileName,
           createdAt: capturedAt
@@ -1399,12 +1467,24 @@ export default function App() {
   };
 
   const evidenceCategoryProgress = EVIDENCE_CATEGORIES.map(category => {
-    const count = evidences.filter(ev => ev.category === category.id && !!ev.photoUrl).length;
-    return {
-      ...category,
-      count,
-      completed: count > 0,
-    };
+    const categoryEvidences = evidences.filter(ev => ev.category === category.id && !!ev.photoUrl);
+    if (category.id === 'RESERVA') {
+      const reserveIds = Array.from(new Set(categoryEvidences.map(ev => ev.reserveId).filter(Boolean)));
+      const completedReserves = reserveIds.filter(id =>
+        ['initial', 'final', 'roll'].every(side =>
+          categoryEvidences.some(ev => ev.reserveId === id && ev.reserveSide === side)
+        )
+      ).length;
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: completedReserves > 0,
+        reserveCompletedCount: completedReserves,
+        reserveCount: reserveIds.length,
+      };
+    }
+    const count = categoryEvidences.length;
+    return { ...category, count, completed: count > 0 };
   });
   const completedEvidenceCategories = evidenceCategoryProgress.filter(category => category.completed).length;
   const pendingEvidenceCategories = evidenceCategoryProgress.length - completedEvidenceCategories;
@@ -1680,9 +1760,13 @@ export default function App() {
                           <p className={`text-[8px] font-black uppercase tracking-wide mt-0.5 ${
                             category.completed ? 'text-green-600' : 'text-amber-600'
                           }`}>
-                            {category.completed
-                              ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
-                              : 'Pendiente · 0 fotos'}
+                            {category.id === 'RESERVA'
+                              ? (category.reserveCount
+                                  ? `${category.reserveCompletedCount || 0}/${category.reserveCount} reserva${category.reserveCount === 1 ? '' : 's'} completa${category.reserveCount === 1 ? '' : 's'} · ${category.count} fotos`
+                                  : 'Pendiente · 0 fotos')
+                              : (category.completed
+                                  ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
+                                  : 'Pendiente · 0 fotos')}
                           </p>
                         </div>
 
@@ -3177,6 +3261,46 @@ export default function App() {
                 <button type="button" onClick={() => { setShowFiberCaptureModal(false); setFiberCaptureDraft(null); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
                 <button type="button" onClick={confirmFiberCapture} disabled={!fiberCaptureDraft.metraje.trim()} className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase shadow-lg disabled:opacity-40">Guardar y abrir cámara</button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showReserveCaptureModal && reserveCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[221] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
+                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
+                  RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  Cada reserva debe tener exactamente estas 3 evidencias: Punta inicial, Punta final y Rollo detallado.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5">
+                <button type="button" onClick={() => openReserveSide('initial')} className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide">
+                  Punta inicial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openReserveSide('final')}
+                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide"
+                >
+                  Punta final
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openReserveSide('roll')}
+                  className="w-full py-4 rounded-2xl bg-white border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wide"
+                >
+                  Rollo detallado
+                </button>
+              </div>
+
+              <button type="button" onClick={() => { setShowReserveCaptureModal(false); setReserveCaptureDraft(null); }} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">
+                Cancelar
+              </button>
             </motion.div>
           </motion.div>
         )}
