@@ -1143,11 +1143,31 @@ export default function App() {
           
           // 2. En Android se guarda también en la galería Field Trace.
           // En navegador de desarrollo la evidencia se conserva en IndexedDB para probar el flujo sin APK.
-          const savedToGallerySuccess = isNativeCamera
-            ? await cameraService.saveToGallery(finalImage, fileName)
-            : true;
+          let savedToGallerySuccess = true;
+          if (isNativeCamera) {
+            savedToGallerySuccess = await cameraService.saveToGallery(finalImage, fileName);
+          } else {
+            // Chrome no puede escribir directamente en la galería del teléfono.
+            // Para las pruebas web descargamos una copia local y mantenemos la evidencia en IndexedDB.
+            try {
+              const response = await fetch(finalImage);
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = fileName;
+              link.rel = 'noopener';
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (downloadError) {
+              console.warn('[WebCamera] No se pudo descargar la fotografía de prueba:', downloadError);
+              savedToGallerySuccess = false;
+            }
+          }
           if (!savedToGallerySuccess) {
-            console.error("[AtomicCapture] Error: No se pudo guardar la fotografía en la galería. Abortando registro de evidencia.");
+            console.error("[AtomicCapture] Error: No se pudo guardar la fotografía. Abortando registro de evidencia.");
             return;
           }
 
