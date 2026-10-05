@@ -530,9 +530,6 @@ export default function App() {
 
           await new Promise<void>((resolve, reject) => {
             let settled = false;
-            const onReady = () => {
-              if (video.videoWidth > 0 && video.videoHeight > 0) finish();
-            };
             const finish = (error?: Error) => {
               if (settled) return;
               settled = true;
@@ -541,6 +538,9 @@ export default function App() {
               video.removeEventListener('canplay', onReady);
               if (error) reject(error);
               else resolve();
+            };
+            const onReady = () => {
+              if (video.videoWidth > 0 && video.videoHeight > 0) finish();
             };
             const timeout = window.setTimeout(() => finish(new Error('VIDEO_METADATA_TIMEOUT')), 5000);
             video.addEventListener('loadedmetadata', onReady);
@@ -604,43 +604,6 @@ export default function App() {
     }
 
     (async () => {
-        try {
-          if (!navigator.mediaDevices?.getUserMedia) throw new Error('El navegador no permite acceso a la cámara.');
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: cameraFacing === 'rear' ? { ideal: 'environment' } : { ideal: 'user' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 }
-            },
-            audio: false
-          });
-          if (!active) {
-            stream.getTracks().forEach(track => track.stop());
-            return;
-          }
-          webCameraStreamRef.current = stream;
-          const video = webCameraVideoRef.current;
-          if (video) {
-            video.srcObject = stream;
-            video.muted = true;
-            video.playsInline = true;
-            await video.play().catch(() => {});
-          }
-        } catch (error) {
-          console.error('[WebCamera] start:', error);
-        }
-      })();
-
-      return () => {
-        active = false;
-        const stream = webCameraStreamRef.current;
-        if (stream) stream.getTracks().forEach(track => track.stop());
-        webCameraStreamRef.current = null;
-        if (webCameraVideoRef.current) webCameraVideoRef.current.srcObject = null;
-      };
-    }
-
-    (async () => {
       try {
         // Preview fotográfico estable. No activamos el modo de video aquí:
         // la captura de fotos usa CameraPreview.capture() y el modo video podía
@@ -669,16 +632,8 @@ export default function App() {
       void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick]);
-
-
-    return () => {
-      active = false;
-      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
-      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
+
   useEffect(() => {
     if (currentStep !== 'camera') return;
     void ensureFlashArmed(flashMode);
