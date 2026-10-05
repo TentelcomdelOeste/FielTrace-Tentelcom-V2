@@ -4141,6 +4141,130 @@ export default function App() {
           </motion.div>
         )}
 
+        {showAceroCaptureModal && aceroCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[231] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="text-center mb-5">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+                  <CameraIcon className="w-7 h-7 text-blue-600" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Set de Aceros</p>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-950 mt-1">
+                  ACERO {String(aceroCaptureDraft.aceroNumber).padStart(2, '0')}
+                </h3>
+                {aceroPromptMode === 'type' ? (
+                  <p className="text-xs text-gray-500 mt-2">¿Qué tipo de fotografía desea tomar?</p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-2">Ingrese el metraje que corresponde a esta fotografía.</p>
+                )}
+              </div>
+
+              {aceroPromptMode === 'type' ? (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAceroCaptureDraft(prev => prev ? { ...prev, side: 'photo1' } : prev);
+                      setAceroPromptMode(null);
+                      setShowAceroCaptureModal(false);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    PANORÁMICA
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAceroCaptureDraft(prev => prev ? { ...prev, side: 'photo2' } : prev);
+                      setAceroMeterageDraft('');
+                      setAceroPromptMode('meterage');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
+                  >
+                    METRAJE
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAceroCaptureModal(false);
+                      setAceroPromptMode(null);
+                      setAceroMeterageDraft('');
+                      setAceroCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
+                    <p className="text-[9px] font-black uppercase text-gray-500">Metraje</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputMode="decimal"
+                        autoFocus
+                        value={aceroMeterageDraft}
+                        onChange={(e) => setAceroMeterageDraft(e.target.value)}
+                        placeholder="Ej. 1250"
+                        className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm font-black outline-none focus:border-blue-500"
+                      />
+                      <span className="text-sm font-black text-gray-500">M</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const value = Number(aceroMeterageDraft);
+                      if (!Number.isFinite(value) || value <= 0) {
+                        alert('Ingrese un metraje válido mayor que 0.');
+                        return;
+                      }
+                      setShowAceroCaptureModal(false);
+                      setAceroPromptMode(null);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    CONTINUAR A CÁMARA
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAceroMeterageDraft('');
+                      setAceroPromptMode('type');
+                    }}
+                    className="w-full py-3 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+                  >
+                    CAMBIAR TIPO
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAceroCaptureModal(false);
+                      setAceroPromptMode(null);
+                      setAceroMeterageDraft('');
+                      setAceroCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
         {aceroSetChoice && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[230] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
             <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
