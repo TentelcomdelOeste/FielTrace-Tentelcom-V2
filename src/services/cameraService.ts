@@ -175,6 +175,18 @@ export const cameraService = {
             });
           }
 
+
+          if (metadata.category === 'ACEROS') {
+            const aceroNumber = metadata.aceroNumber ?? '';
+            const photoType = metadata.aceroPhotoType || (metadata.aceroSide === 'photo2' ? 'meterage' : 'panoramic');
+            if (photoType === 'meterage') {
+              const meterage = Number(metadata.aceroMeterage || 0);
+              rawLines.push(`METRAJE ${aceroNumber}: ${meterage > 0 ? `${meterage} M` : '—'}`);
+            } else {
+              rawLines.push(`PANORÁMICA ACERO ${aceroNumber}`);
+            }
+          }
+
           if (rawLines.length === 0) return resolve(imageSrc);
 
           const p_overlayPos = metadata.settings?.overlayPosition || 'top-left';
