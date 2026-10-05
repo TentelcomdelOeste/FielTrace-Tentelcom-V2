@@ -4463,6 +4463,7 @@ export default function App() {
                         const sideOrder: Record<string, number> = { initial: 1, final: 2, roll: 3 };
                         return (sideOrder[a.reserveSide || ''] || 99) - (sideOrder[b.reserveSide || ''] || 99);
                       });
+
                     const groups = Array.from(
                       reservationPhotos.reduce((map: Map<string, any[]>, ev: any) => {
                         const key = ev.reserveId || `legacy-${ev.reserveNumber || ev.id || ev.uuid}`;
@@ -4474,14 +4475,26 @@ export default function App() {
 
                     return groups.map((group: any[], groupIndex: number) => {
                       const reserveNumber = Number(group[0]?.reserveNumber || groupIndex + 1);
+                      const reserveId = group[0]?.reserveId || '';
+                      const hasInitial = group.some(ev => ev.reserveSide === 'initial');
+                      const hasFinal = group.some(ev => ev.reserveSide === 'final');
+                      const hasRoll = group.some(ev => ev.reserveSide === 'roll');
+                      const missingSide: 'initial' | 'final' | 'roll' | null =
+                        !hasInitial ? 'initial' : !hasFinal ? 'final' : !hasRoll ? 'roll' : null;
+
                       return (
-                        <div key={group[0]?.reserveId || `reserve-group-${reserveNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                        <div key={reserveId || `reserve-group-${reserveNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
                           <div className="flex items-center justify-between gap-3 px-1 pb-3">
                             <div>
                               <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">RESERVA {String(reserveNumber).padStart(2, '0')}</p>
-                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">{group.length}/3 FOTOS · GRUPO INDEPENDIENTE</p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/3 FOTOS · FALTA ' + (missingSide === 'initial' ? 'INICIAL' : missingSide === 'final' ? 'FINAL' : 'ROLLO')
+                                  : '3/3 FOTOS · GRUPO COMPLETO'}
+                              </p>
                             </div>
                           </div>
+
                           <div className="grid grid-cols-2 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
@@ -4489,11 +4502,59 @@ export default function App() {
                                   <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">{ev.reserveSide === 'initial' ? 'PUNTA INICIAL' : ev.reserveSide === 'final' ? 'PUNTA FINAL' : 'ROLLO DETALLADO'}</p>
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.reserveSide === 'initial' ? 'PUNTA INICIAL' : ev.reserveSide === 'final' ? 'PUNTA FINAL' : 'ROLLO DETALLADO'}
+                                  </p>
                                   <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('RESERVA');
+
+                                  if (missingSide === 'initial') {
+                                    setReserveCaptureDraft({
+                                      side: 'initial',
+                                      reserveId,
+                                      reserveNumber,
+                                      reelNumber: '',
+                                      fiberCount: ''
+                                    });
+                                  } else {
+                                    const inheritedReel = getReserveReelNumber(reserveId, reserveNumber);
+                                    const inheritedFiberCount = getReserveFiberCount(reserveId, reserveNumber);
+                                    if (!inheritedReel || !inheritedFiberCount) {
+                                      alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
+                                      setShowStorageEvidenceViewer(true);
+                                      setStorageEvidenceCategory('RESERVA');
+                                      return;
+                                    }
+                                    setReserveCaptureDraft({
+                                      side: missingSide,
+                                      reserveId,
+                                      reserveNumber,
+                                      reelNumber: inheritedReel,
+                                      fiberCount: inheritedFiberCount
+                                    });
+                                  }
+
+                                  setShowReserveCaptureModal(true);
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'initial' ? 'INICIAL' : missingSide === 'final' ? 'FINAL' : 'ROLLO'}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -4523,18 +4584,24 @@ export default function App() {
 
                     return groups.map((group: any[], groupIndex: number) => {
                       const pairNumber = Number(group[0]?.fiberPairNumber || groupIndex + 1);
+                      const pairId = group[0]?.fiberPairId || '';
                       const hasInitial = group.some(ev => ev.fiberSide === 'initial' || ev.category === 'PUNTAS_FIBRA_INICIAL');
                       const hasFinal = group.some(ev => ev.fiberSide === 'final' || ev.category === 'PUNTAS_FIBRA_FINAL');
+                      const missingSide: 'initial' | 'final' | null = !hasInitial ? 'initial' : !hasFinal ? 'final' : null;
+
                       return (
-                        <div key={group[0]?.fiberPairId || `fiber-group-${pairNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                        <div key={pairId || `fiber-group-${pairNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
                           <div className="flex items-center justify-between gap-3 px-1 pb-3">
                             <div>
                               <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">PUNTA {String(pairNumber).padStart(2, '0')}</p>
-                              <p className={"text-[8px] font-bold uppercase mt-1 " + (hasInitial && hasFinal ? 'text-gray-400' : 'text-amber-600')}>
-                                {hasInitial && hasFinal ? '2/2 FOTOS · PAREJA COMPLETA' : group.length + '/2 FOTOS · FALTA ' + (!hasInitial ? 'INICIAL' : 'FINAL')}
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'initial' ? 'INICIAL' : 'FINAL')
+                                  : '2/2 FOTOS · PAREJA COMPLETA'}
                               </p>
                             </div>
                           </div>
+
                           <div className="grid grid-cols-2 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
@@ -4548,6 +4615,53 @@ export default function App() {
                                 </div>
                               </button>
                             ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('PUNTAS_FIBRA');
+
+                                  if (missingSide === 'initial') {
+                                    setFiberCaptureDraft({
+                                      side: 'initial',
+                                      pairId,
+                                      pairNumber,
+                                      metraje: '',
+                                      reelNumber: '',
+                                      fiberCount: ''
+                                    });
+                                  } else {
+                                    const initial = group.find(ev => ev.fiberSide === 'initial' || ev.category === 'PUNTAS_FIBRA_INICIAL');
+                                    if (!initial) {
+                                      alert('No se encontró la PUNTA INICIAL para completar esta pareja.');
+                                      setShowStorageEvidenceViewer(true);
+                                      setStorageEvidenceCategory('PUNTAS_FIBRA');
+                                      return;
+                                    }
+                                    setFiberCaptureDraft({
+                                      side: 'final',
+                                      pairId,
+                                      pairNumber,
+                                      metraje: '',
+                                      reelNumber: initial.fiberReelNumber || '',
+                                      fiberCount: String(initial.fiberCount || '')
+                                    });
+                                  }
+
+                                  setShowFiberCaptureModal(true);
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'initial' ? 'INICIAL' : 'FINAL'}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
