@@ -21,6 +21,7 @@ import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.PermissionRequest;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -143,7 +144,7 @@ public class MainActivity extends BridgeActivity {
   private void refreshNativeWebAssetsIfVersionChanged() {
     try {
       android.content.SharedPreferences prefs = getSharedPreferences("fieldtrace_native_cache", MODE_PRIVATE);
-      int currentVersion = 4;
+      int currentVersion = 5;
       int storedVersion = prefs.getInt("web_asset_version", -1);
       if (storedVersion == currentVersion) return;
 
@@ -196,6 +197,22 @@ public class MainActivity extends BridgeActivity {
           Canvas canvas = new Canvas(bitmap);
           canvas.drawARGB(0, 0, 0, 0);
           return bitmap;
+        }
+
+        @Override
+        public void onPermissionRequest(final PermissionRequest request) {
+          // Permitir getUserMedia dentro del WebView de Field Trace.
+          // El acceso sigue limitado al WebView de la propia app; no se expone
+          // ningún permiso a una página externa.
+          runOnUiThread(() -> {
+            try {
+              if (request != null) {
+                request.grant(request.getResources());
+              }
+            } catch (Exception error) {
+              try { request.deny(); } catch (Exception ignored) {}
+            }
+          });
         }
       });
       webView.post(() -> {
