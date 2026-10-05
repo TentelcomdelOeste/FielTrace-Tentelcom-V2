@@ -163,6 +163,10 @@ export interface Evidence {
   altaSide?: 'panoramic' | 'meterage';
   /** Metraje ingresado cuando la foto de ALTA es de tipo METRAJE. */
   altaMeterage?: number;
+  /** Número de carrete opcional para ALTAS de fibra de descarte/desecho. */
+  altaReelNumber?: string;
+  /** Cantidad de fibras opcional para ALTAS de fibra de descarte/desecho. */
+  altaFiberCount?: number;
 
   photo?: {
     fileName: string;
