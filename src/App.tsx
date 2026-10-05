@@ -2283,6 +2283,34 @@ export default function App() {
       };
     }
 
+    if (category.id === 'MEJORAS') {
+      const mejoraIds = Array.from(new Set(categoryEvidences.map(ev => ev.mejoraId).filter(Boolean))) as string[];
+      const mejoraGroups = mejoraIds.map(mejoraId => {
+        const group = categoryEvidences.filter(ev => ev.mejoraId === mejoraId);
+        const first = group[0];
+        const mejoraNumber = Number(first?.mejoraNumber || 0);
+        const mejoraType = first?.mejoraType || 'MEJORA';
+        const hasBefore = group.some(ev => ev.mejoraSide === 'before');
+        const hasAfter = group.some(ev => ev.mejoraSide === 'after');
+        return { mejoraId, mejoraNumber, mejoraType, hasBefore, hasAfter, count: group.length, complete: hasBefore && hasAfter };
+      }).sort((a, b) => a.mejoraNumber - b.mejoraNumber);
+      const completedMejoras = mejoraGroups.filter(item => item.complete).length;
+      const pendingMejoraLabels = mejoraGroups.filter(item => !item.complete).map(item => {
+        const missing = !item.hasBefore ? 'ANTES' : 'DESPUÉS';
+        return `MEJORA ${String(item.mejoraNumber).padStart(2, '0')} · ${item.mejoraType}: FALTA ${missing}`;
+      });
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: mejoraGroups.length > 0 && mejoraGroups.every(item => item.complete),
+        mejoraCount: mejoraGroups.length,
+        mejoraCompletedCount: completedMejoras,
+        mejoraPendingLabels: pendingMejoraLabels,
+        reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
+        fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
+      };
+    }
+
     if (category.id === 'NAPS') {
       const napIds = Array.from(new Set(categoryEvidences.map(ev => ev.napId).filter(Boolean))) as string[];
       const napGroups = napIds.map(napId => {
@@ -5361,7 +5389,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS' || storageEvidenceCategory === 'DESECHOS'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS' || storageEvidenceCategory === 'DESECHOS' || storageEvidenceCategory === 'MEJORAS'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
