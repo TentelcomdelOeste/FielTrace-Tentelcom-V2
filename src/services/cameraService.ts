@@ -198,6 +198,12 @@ export const cameraService = {
               rawLines.push(`PANORÁMICA ALTA ${altaNumber}`);
             }
             if (altaType) rawLines.push(`TIPO DE ALTA: ${altaType.toUpperCase()}`);
+            if (altaType === 'FIBRA DE DESCARTE' || altaType === 'FIBRA DE DESECHO') {
+              const reel = String(metadata.altaReelNumber || '').trim();
+              const fibers = Number(metadata.altaFiberCount || 0);
+              if (reel) rawLines.push(`CARRETE: ${reel.toUpperCase()}`);
+              if (fibers > 0) rawLines.push(`CANTIDAD DE FIBRAS: ${fibers}`);
+            }
           }
 
           if (metadata.category === 'RESERVA') {
