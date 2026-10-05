@@ -153,6 +153,16 @@ export interface Evidence {
   aceroPhotoType?: 'panoramic' | 'meterage';
   /** Metraje ingresado cuando la foto de ACEROS es de tipo METRAJE. */
   aceroMeterage?: number;
+  /** Identificador del set de DESECHOS (Panorámica + Metraje). */
+  desechoId?: string;
+  /** Número visible del set de DESECHOS dentro del proyecto. */
+  desechoNumber?: number;
+  /** Foto dentro del set de DESECHOS. */
+  desechoSide?: 'photo1' | 'photo2';
+  /** Tipo visual seleccionado para la foto de DESECHOS. */
+  desechoPhotoType?: 'panoramic' | 'meterage';
+  /** Metraje ingresado cuando la foto de DESECHOS es de tipo METRAJE. */
+  desechoMeterage?: number;
   /** Identificador del set de ALTA (Panorámica + Metraje). */
   altaId?: string;
   /** Número visible del set de ALTA dentro del proyecto. */
