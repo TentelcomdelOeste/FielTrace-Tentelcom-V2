@@ -312,6 +312,8 @@ export default function App() {
   const [mejoraPromptMode, setMejoraPromptMode] = useState<'type' | 'side' | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [cameraPermissionTick, setCameraPermissionTick] = useState(0);
+  const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
+  const [webCameraError, setWebCameraError] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -461,7 +463,147 @@ export default function App() {
     void locationService.getCurrentPosition();
 
     if (!isNativeCamera) {
-      (async () => {
+      setWebCameraError(null);
+
+      const startWebCamera = async () => {
+        const stopExistingStream = () => {
+          const existing = webCameraStreamRef.current;
+          if (existing) existing.getTracks().forEach(track => track.stop());
+          webCameraStreamRef.current = null;
+          if (webCameraVideoRef.current) {
+            webCameraVideoRef.current.pause();
+            webCameraVideoRef.current.srcObject = null;
+          }
+        };
+
+        try {
+          if (!window.isSecureContext) throw new Error('SECURE_CONTEXT');
+          if (!navigator.mediaDevices?.getUserMedia) throw new Error('NO_GET_USER_MEDIA');
+
+          stopExistingStream();
+
+          const preferredConstraints: MediaStreamConstraints = {
+            video: {
+              facingMode: { ideal: cameraFacing === 'rear' ? 'environment' : 'user' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            },
+            audio: false
+          };
+
+          let stream: MediaStream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(preferredConstraints);
+          } catch (firstError: any) {
+            const name = String(firstError?.name || '');
+            if (!['OverconstrainedError', 'NotFoundError'].includes(name)) throw firstError;
+            console.warn('[WebCamera] preferred constraints failed, retrying with basic video:', firstError);
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          }
+
+          if (!active) {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+
+          const tracks = stream.getVideoTracks();
+          if (!tracks.length) {
+            stream.getTracks().forEach(track => track.stop());
+            throw new Error('NO_VIDEO_TRACK');
+          }
+
+          webCameraStreamRef.current = stream;
+          const video = webCameraVideoRef.current;
+          if (!video) {
+            stream.getTracks().forEach(track => track.stop());
+            webCameraStreamRef.current = null;
+            throw new Error('VIDEO_ELEMENT_NOT_READY');
+          }
+
+          video.srcObject = stream;
+          video.muted = true;
+          video.defaultMuted = true;
+          video.playsInline = true;
+          video.autoplay = true;
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('autoplay', 'true');
+
+          await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            const onReady = () => {
+              if (video.videoWidth > 0 && video.videoHeight > 0) finish();
+            };
+            const finish = (error?: Error) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeout);
+              video.removeEventListener('loadedmetadata', onReady);
+              video.removeEventListener('canplay', onReady);
+              if (error) reject(error);
+              else resolve();
+            };
+            const timeout = window.setTimeout(() => finish(new Error('VIDEO_METADATA_TIMEOUT')), 5000);
+            video.addEventListener('loadedmetadata', onReady);
+            video.addEventListener('canplay', onReady);
+            if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) onReady();
+          });
+
+          await video.play();
+
+          if (!active) return;
+          if (video.videoWidth <= 0 || video.videoHeight <= 0) throw new Error('VIDEO_NO_FRAMES');
+
+          setWebCameraError(null);
+          console.log('[WebCamera] ready:', {
+            facing: cameraFacing,
+            width: video.videoWidth,
+            height: video.videoHeight,
+            track: tracks[0].getSettings?.() || {}
+          });
+        } catch (error: any) {
+          if (!active) return;
+          const name = String(error?.name || '');
+          const detail = String(error?.message || '');
+          console.error('[WebCamera] start:', { name, message: detail, error });
+
+          const friendly =
+            error?.message === 'SECURE_CONTEXT'
+              ? 'El navegador no considera esta página segura para usar la cámara.'
+              : error?.message === 'NO_GET_USER_MEDIA'
+                ? 'Este navegador no permite acceso a la cámara desde esta página.'
+                : error?.message === 'VIDEO_ELEMENT_NOT_READY'
+                  ? 'La vista de cámara todavía no está lista. Intente nuevamente.'
+                  : error?.message === 'VIDEO_METADATA_TIMEOUT' || error?.message === 'VIDEO_NO_FRAMES'
+                    ? 'El navegador abrió la cámara, pero no está entregando imagen.'
+                    : name === 'NotAllowedError' || name === 'SecurityError'
+                      ? 'El permiso de cámara está bloqueado. Permita la cámara para localhost y pulse REINTENTAR.'
+                      : name === 'NotFoundError'
+                        ? 'No se encontró una cámara disponible en el navegador.'
+                        : name === 'NotReadableError'
+                          ? 'La cámara está siendo utilizada por otra aplicación o el navegador no puede acceder al hardware.'
+                          : name === 'AbortError'
+                            ? 'El navegador interrumpió el acceso a la cámara. Pulse REINTENTAR.'
+                            : 'No se pudo abrir la cámara' + (detail ? ': ' + detail : '.');
+
+          setWebCameraError(friendly);
+        }
+      };
+
+      void startWebCamera();
+
+      return () => {
+        active = false;
+        const stream = webCameraStreamRef.current;
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        webCameraStreamRef.current = null;
+        if (webCameraVideoRef.current) {
+          webCameraVideoRef.current.pause();
+          webCameraVideoRef.current.srcObject = null;
+        }
+      };
+    }
+
+    (async () => {
         try {
           if (!navigator.mediaDevices?.getUserMedia) throw new Error('El navegador no permite acceso a la cámara.');
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -529,6 +671,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick]);
 
+
+    return () => {
+      active = false;
+      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
+      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
   useEffect(() => {
     if (currentStep !== 'camera') return;
     void ensureFlashArmed(flashMode);
@@ -3594,13 +3744,40 @@ export default function App() {
           {/* Real-time Camera Bridge */}
           <div id="camera-viewfinder" className="relative flex-1 bg-transparent overflow-hidden" onTouchStart={onCameraTouchStart} onTouchMove={onCameraTouchMove} onTouchEnd={onCameraTouchEnd}>
             {!isNativeCamera && (
-              <video
-                ref={webCameraVideoRef}
-                className="absolute inset-0 w-full h-full object-cover"
-                autoPlay
-                muted
-                playsInline
-              />
+              <>
+                <video
+                  ref={webCameraVideoRef}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  autoPlay
+                  muted
+                  playsInline
+                />
+                {webCameraError && (
+                  <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/90 p-6">
+                    <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl">
+                      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
+                        <CameraIcon className="h-7 w-7 text-red-600" />
+                      </div>
+                      <p className="text-[11px] font-black uppercase tracking-widest text-red-600">CÁMARA WEB</p>
+                      <p className="mt-2 text-sm font-bold leading-relaxed text-gray-800">{webCameraError}</p>
+                      <button
+                        type="button"
+                        onClick={() => setWebCameraRetryTick(v => v + 1)}
+                        className="mt-5 w-full rounded-2xl bg-blue-600 py-4 text-[11px] font-black uppercase tracking-wider text-white"
+                      >
+                        REINTENTAR CÁMARA
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep('history')}
+                        className="mt-2 w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                      >
+                        VOLVER
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <div className="absolute inset-0 bg-transparent pointer-events-none" aria-hidden="true" />
             
