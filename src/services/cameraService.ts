@@ -187,6 +187,19 @@ export const cameraService = {
             }
           }
 
+          if (metadata.category === 'ALTAS') {
+            const altaNumber = metadata.altaNumber ?? '';
+            const altaType = String(metadata.altaType || '').trim();
+            const side = metadata.altaSide;
+            if (side === 'meterage') {
+              const meterage = Number(metadata.altaMeterage || 0);
+              rawLines.push(`METRAJE ALTA ${altaNumber}: ${meterage > 0 ? `${meterage} M` : '—'}`);
+            } else {
+              rawLines.push(`PANORÁMICA ALTA ${altaNumber}`);
+            }
+            if (altaType) rawLines.push(`TIPO DE ALTA: ${altaType.toUpperCase()}`);
+          }
+
           if (metadata.category === 'RESERVA') {
             const reserveNumber = metadata.reserveNumber ?? '';
             const side = metadata.reserveSide;
