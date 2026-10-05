@@ -4030,10 +4030,14 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Nombre del NAP</label>
-                <input type="text" value={napCaptureDraft.napName}
+                <textarea
+                  value={napCaptureDraft.napName}
                   onChange={e => setNapCaptureDraft(prev => prev ? { ...prev, napName: e.target.value } : prev)}
-                  placeholder="Ej. GT069/072" readOnly={napCaptureDraft.photoNumber > 1}
-                  className="w-full px-4 py-4 rounded-2xl border-2 border-blue-500 text-lg font-black uppercase tracking-tight outline-none read-only:bg-gray-100 read-only:text-gray-500" />
+                  placeholder="Ej. GT069/072"
+                  readOnly={napCaptureDraft.photoNumber > 1}
+                  rows={2}
+                  className="w-full min-h-[92px] px-4 py-4 rounded-2xl border-2 border-blue-500 text-lg font-black uppercase tracking-tight outline-none resize-none overflow-y-auto whitespace-pre-wrap break-words read-only:bg-gray-100 read-only:text-gray-500"
+                />
                 {napCaptureDraft.photoNumber > 1 && <p className="text-[9px] font-black uppercase text-green-600 mt-2">✓ Nombre heredado para las 9 fotos</p>}
               </div>
               <button type="button" disabled={!napCaptureDraft.napName.trim()}
