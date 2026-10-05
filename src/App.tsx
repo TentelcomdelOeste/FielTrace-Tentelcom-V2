@@ -311,6 +311,7 @@ export default function App() {
   const [showMejoraCaptureModal, setShowMejoraCaptureModal] = useState(false);
   const [mejoraPromptMode, setMejoraPromptMode] = useState<'type' | 'side' | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
+  const [cameraPermissionTick, setCameraPermissionTick] = useState(0);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -448,6 +449,13 @@ export default function App() {
 
   useEffect(() => {
     if (currentStep !== 'camera') return;
+    const onCameraPermission = () => setCameraPermissionTick(v => v + 1);
+    window.addEventListener('fieldtrace-camera-permission', onCameraPermission);
+    return () => window.removeEventListener('fieldtrace-camera-permission', onCameraPermission);
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (currentStep !== 'camera') return;
     let active = true;
     void locationService.startWatching();
     void locationService.getCurrentPosition();
@@ -519,7 +527,7 @@ export default function App() {
       void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, cameraFacing, isNativeCamera]);
+  }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick]);
 
   useEffect(() => {
     if (currentStep !== 'camera') return;
