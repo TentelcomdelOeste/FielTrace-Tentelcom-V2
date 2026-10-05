@@ -625,7 +625,7 @@ export default function App() {
         await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
-          aspectRatio: 'fill',
+          aspectRatio: '16:9',
           aspectMode: 'cover',
           storeToFile: false,
           disableAudio: true,
