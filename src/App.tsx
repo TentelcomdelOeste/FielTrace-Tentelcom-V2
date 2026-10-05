@@ -259,6 +259,8 @@ export default function App() {
     side: 'panoramic' | 'meterage';
   } | null>(null);
   const [showAltaCaptureModal, setShowAltaCaptureModal] = useState(false);
+  const [altaPromptMode, setAltaPromptMode] = useState<'type' | 'meterage' | null>(null);
+  const [altaMeterageDraft, setAltaMeterageDraft] = useState('');
   const [aceroCaptureDraft, setAceroCaptureDraft] = useState<{
     aceroId: string;
     aceroNumber: number;
@@ -855,6 +857,8 @@ export default function App() {
         altaType: 'FIBRA DE DESCARTE',
         side: 'panoramic'
       });
+      setAltaMeterageDraft('');
+      setAltaPromptMode('type');
       setShowAltaCaptureModal(true);
       return;
     }
@@ -1626,7 +1630,9 @@ export default function App() {
             ? 'Puntas de fibra – Inicial'
             : selectedEvidenceCategory.id === 'ACEROS'
               ? `Aceros – ${aceroCaptureDraft?.side === 'photo2' ? 'Metraje' : 'Panorámica'}`
-              : selectedEvidenceCategory.label;
+              : selectedEvidenceCategory.id === 'ALTAS'
+                ? `Altas – ${altaCaptureDraft?.side === 'meterage' ? 'Metraje' : 'Panorámica'}`
+                : selectedEvidenceCategory.label;
 
       // Las puntas de fibra llevan sus datos operativos dentro de la evidencia
       // como campos personalizados para que queden impresos en el overlay.
@@ -1672,6 +1678,9 @@ export default function App() {
         altaNumber: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaNumber : undefined,
         altaType: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaType : undefined,
         altaSide: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.side : undefined,
+        altaMeterage: selectedEvidenceCategory.id === 'ALTAS' && altaCaptureDraft?.side === 'meterage'
+          ? Number(altaMeterageDraft || 0)
+          : undefined,
         aceroId: selectedEvidenceCategory.id === 'ACEROS' ? (aceroCaptureDraft?.aceroId || '') : undefined,
         aceroNumber: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.aceroNumber : undefined,
         aceroSide: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.side : undefined,
@@ -3306,6 +3315,14 @@ export default function App() {
                    </p>
                  )}
 
+                 {evidenceCategory === 'ALTAS' && altaCaptureDraft?.altaId && (
+                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                     {altaCaptureDraft.side === 'meterage'
+                       ? `METRAJE ALTA ${altaCaptureDraft.altaNumber}: ${altaMeterageDraft ? `${altaMeterageDraft} M` : '—'}`
+                       : `PANORÁMICA ALTA ${altaCaptureDraft.altaNumber}`}
+                   </p>
+                 )}
+
                  {evidenceCategory === 'NAPS' && napCaptureDraft?.napName?.trim() && (
                    <p className="line-clamp-4 break-words whitespace-pre-wrap">
                      NAP: {napCaptureDraft.napName.toUpperCase()}
@@ -4100,12 +4117,16 @@ export default function App() {
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Altas</p>
                 <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
-                  {altaCaptureDraft.altaId ? 'ALTA ' + String(altaCaptureDraft.altaNumber).padStart(2, '0') : 'TIPO DE ALTA'}
+                  {altaCaptureDraft.altaId
+                    ? `ALTA ${String(altaCaptureDraft.altaNumber).padStart(2, '0')}`
+                    : 'TIPO DE ALTA'}
                 </h3>
                 <p className="text-xs text-gray-500 mt-2">
-                  {altaCaptureDraft.altaId
-                    ? 'Cada alta se documenta con 2 fotografías: una panorámica y otra de metraje.'
-                    : 'Seleccione primero el tipo de alta que desea documentar.'}
+                  {!altaCaptureDraft.altaId
+                    ? 'Seleccione primero el tipo de alta que desea documentar.'
+                    : altaPromptMode === 'meterage'
+                      ? 'Ingrese el metraje que corresponde a esta fotografía.'
+                      : '¿Qué tipo de fotografía desea tomar?'}
                 </p>
               </div>
 
@@ -4140,6 +4161,8 @@ export default function App() {
                             altaType: type,
                             side: group.hasPanoramic ? 'meterage' : 'panoramic'
                           });
+                          setAltaMeterageDraft('');
+                          setAltaPromptMode('type');
                         } else {
                           const usedNumbers = evidences
                             .filter(ev => ev.category === 'ALTAS' && ev.altaNumber != null)
@@ -4155,6 +4178,8 @@ export default function App() {
                             altaType: type,
                             side: 'panoramic'
                           });
+                          setAltaMeterageDraft('');
+                          setAltaPromptMode('type');
                         }
                       }}
                       className="w-full py-4 rounded-2xl border-2 border-blue-100 bg-blue-50 text-blue-800 text-[10px] font-black uppercase"
@@ -4163,48 +4188,135 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-              ) : (
-                <>
+              ) : altaPromptMode === 'type' ? (
+                <div className="space-y-3">
                   <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
-                    <p className="text-[9px] font-black uppercase text-gray-500">Tipo</p>
+                    <p className="text-[9px] font-black uppercase text-gray-500">Tipo de alta</p>
                     <p className="text-sm font-black uppercase text-gray-950 mt-1">{altaCaptureDraft.altaType}</p>
                     <p className="text-[9px] font-black uppercase text-blue-700 mt-2">
-                      ALTA {String(altaCaptureDraft.altaNumber).padStart(2, '0')} · {altaCaptureDraft.side === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                      ALTA {String(altaCaptureDraft.altaNumber).padStart(2, '0')}
                     </p>
                   </div>
+
                   <button
                     type="button"
                     onClick={() => {
-                      setEvidenceCategory('ALTAS');
+                      setAltaCaptureDraft(prev => prev ? { ...prev, side: 'panoramic' } : prev);
+                      setAltaPromptMode(null);
                       setShowAltaCaptureModal(false);
                       setCurrentStep('camera');
                     }}
-                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase"
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
                   >
-                    ABRIR CÁMARA
+                    PANORÁMICA
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setAltaCaptureDraft({
-                      altaId: '',
-                      altaNumber: 0,
-                      altaType: altaCaptureDraft.altaType,
-                      side: 'panoramic'
-                    })}
-                    className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+                    onClick={() => {
+                      setAltaCaptureDraft(prev => prev ? { ...prev, side: 'meterage' } : prev);
+                      setAltaMeterageDraft('');
+                      setAltaPromptMode('meterage');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
+                  >
+                    METRAJE
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAltaCaptureModal(false);
+                      setAltaPromptMode(null);
+                      setAltaMeterageDraft('');
+                      setAltaCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
+                    <p className="text-[9px] font-black uppercase text-gray-500">Tipo de alta</p>
+                    <p className="text-sm font-black uppercase text-gray-950 mt-1">{altaCaptureDraft.altaType}</p>
+                    <p className="text-[9px] font-black uppercase text-blue-700 mt-2">
+                      ALTA {String(altaCaptureDraft.altaNumber).padStart(2, '0')} · METRAJE
+                    </p>
+                    <div className="flex items-center gap-2 mt-3">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputMode="decimal"
+                        autoFocus
+                        value={altaMeterageDraft}
+                        onChange={(e) => setAltaMeterageDraft(e.target.value)}
+                        placeholder="Ej. 1250"
+                        className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm font-black outline-none focus:border-blue-500"
+                      />
+                      <span className="text-sm font-black text-gray-500">M</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const value = Number(altaMeterageDraft);
+                      if (!Number.isFinite(value) || value <= 0) {
+                        alert('Ingrese un metraje válido mayor que 0.');
+                        return;
+                      }
+                      setAltaPromptMode(null);
+                      setShowAltaCaptureModal(false);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    CONTINUAR A CÁMARA
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAltaMeterageDraft('');
+                      setAltaPromptMode('type');
+                    }}
+                    className="w-full py-3 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
                   >
                     CAMBIAR TIPO
                   </button>
-                </>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAltaCaptureModal(false);
+                      setAltaPromptMode(null);
+                      setAltaMeterageDraft('');
+                      setAltaCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => { setShowAltaCaptureModal(false); setAltaCaptureDraft(null); }}
-                className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
-              >
-                CANCELAR
-              </button>
+              {!altaCaptureDraft.altaId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAltaCaptureModal(false);
+                    setAltaPromptMode(null);
+                    setAltaMeterageDraft('');
+                    setAltaCaptureDraft(null);
+                  }}
+                  className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+                >
+                  CANCELAR
+                </button>
+              )}
             </motion.div>
           </motion.div>
         )}
