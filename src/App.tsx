@@ -3532,7 +3532,7 @@ export default function App() {
               drag
               dragMomentum={false}
               onClick={() => setShowQuickConfig(true)}
-              className="absolute top-6 left-6 w-10 h-10 bg-black/30 backdrop-blur-md border border-white/20 rounded-xl flex items-center justify-center text-white z-50 transition-colors hover:bg-black/50 shadow-2xl touch-none"
+              className="absolute top-[168px] right-6 w-10 h-10 bg-black/30 backdrop-blur-md border border-white/20 rounded-xl flex items-center justify-center text-white z-50 transition-colors hover:bg-black/50 shadow-2xl touch-none"
             >
               <Settings className="w-5 h-5 pointer-events-none" />
             </motion.button>
