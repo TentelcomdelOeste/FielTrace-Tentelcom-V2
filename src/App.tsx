@@ -1001,6 +1001,64 @@ export default function App() {
       return;
     }
 
+    if (category === 'MEJORAS') {
+      setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
+      setNapCaptureDraft(null);
+      setAltaCaptureDraft(null);
+      setAceroCaptureDraft(null);
+      setAceroSetChoice(null);
+      setDesechoCaptureDraft(null);
+      setDesechoSetChoice(null);
+
+      const mejoraGroups = Array.from(new Set(
+        evidences
+          .filter(ev => ev.category === 'MEJORAS' && ev.mejoraId)
+          .map(ev => ev.mejoraId as string)
+      ))
+        .map(mejoraId => {
+          const group = evidences.filter(ev => ev.category === 'MEJORAS' && ev.mejoraId === mejoraId);
+          const first = group[0];
+          const mejoraNumber = Number(first?.mejoraNumber || 0);
+          const mejoraType = (first?.mejoraType || 'PODAS') as 'SUBIDA DE BANDAS' | 'PODAS' | 'SUBIDA DE RETENIDAS';
+          const hasBefore = group.some(ev => ev.mejoraSide === 'before');
+          const hasAfter = group.some(ev => ev.mejoraSide === 'after');
+          return { mejoraId, mejoraNumber, mejoraType, hasBefore, hasAfter };
+        })
+        .filter(group => !(group.hasBefore && group.hasAfter))
+        .sort((a, b) => a.mejoraNumber - b.mejoraNumber);
+
+      if (mejoraGroups.length > 0) {
+        const group = mejoraGroups[0];
+        setMejoraSetChoice({
+          mejoraId: group.mejoraId,
+          mejoraNumber: group.mejoraNumber,
+          mejoraType: group.mejoraType,
+          missingSide: group.hasBefore ? 'after' : 'before'
+        });
+        return;
+      }
+
+      const usedNumbers = evidences
+        .filter(ev => ev.category === 'MEJORAS' && ev.mejoraNumber != null)
+        .map(ev => Number(ev.mejoraNumber))
+        .filter(Number.isFinite);
+      const mejoraNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+      const mejoraId = crypto.randomUUID
+        ? crypto.randomUUID()
+        : `mejora_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      setMejoraCaptureDraft({
+        mejoraId,
+        mejoraNumber,
+        mejoraType: 'SUBIDA DE BANDAS',
+        side: 'before'
+      });
+      setMejoraPromptMode('type');
+      setShowMejoraCaptureModal(true);
+      return;
+    }
+
     if (category === 'RESERVA') {
       setFiberCaptureDraft(null);
 
