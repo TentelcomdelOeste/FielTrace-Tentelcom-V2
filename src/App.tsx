@@ -975,7 +975,7 @@ export default function App() {
               reserveId: '',
               reserveNumber: 0,
               reelNumber: '',
-              fiberCount: ''
+              fiberCount: '',
           metraje: '',
             });
           } else {
@@ -4450,7 +4450,7 @@ export default function App() {
                                   reserveId,
                                   reserveNumber,
                                   reelNumber: '',
-                                  fiberCount: ''
+                                  fiberCount: '',
           metraje: '',
                                 });
                                 return;
@@ -4499,7 +4499,7 @@ export default function App() {
                         .filter(Number.isFinite);
                       const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
                       const reserveId = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber, reelNumber: '', fiberCount: '' });
+                      setReserveCaptureDraft({ side: 'initial', reserveId, reserveNumber, reelNumber: '', fiberCount: '', metraje: '' });
                     }}
                     className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide"
                   >
@@ -4561,7 +4561,7 @@ export default function App() {
                   }} className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide">
                     GUARDAR Y ABRIR CÁMARA
                   </button>
-                  <button type="button" onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '' })} className="w-full py-3 rounded-2xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase">
+                  <button type="button" onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '', metraje: '' })} className="w-full py-3 rounded-2xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase">
                     CAMBIAR RESERVA
                   </button>
                   <button type="button" onClick={() => { setShowReserveCaptureModal(false); setReserveCaptureDraft(null); }} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">
@@ -4699,7 +4699,7 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '' })}
+                    onClick={() => setReserveCaptureDraft({ side: 'initial', reserveId: '', reserveNumber: 0, reelNumber: '', fiberCount: '', metraje: '' })}
                     className="w-full py-3 rounded-2xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase"
                   >
                     Cambiar reserva
@@ -5060,7 +5060,7 @@ export default function App() {
                                       reserveId,
                                       reserveNumber,
                                       reelNumber: '',
-                                      fiberCount: ''
+                                      fiberCount: '',
           metraje: '',
                                     });
                                   } else {
