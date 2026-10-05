@@ -83,7 +83,7 @@ export type EvidenceCategory =
   | 'CABLEADO'
   | 'MEDICION'
   | 'ALTAS'
-  | 'OTROS';
+  | 'MEJORAS';
 
 export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }> = [
   { id: 'PUNTAS_FIBRA', label: 'Puntas de fibra' },
@@ -93,7 +93,7 @@ export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }>
   { id: 'MUFA', label: 'MUFA' },
   { id: 'RESERVA', label: 'Reservas' },
   { id: 'ALTAS', label: 'Altas' },
-  { id: 'OTROS', label: 'Otros' },
+  { id: 'MEJORAS', label: 'Mejoras' },
 ];
 
 export interface Evidence {
@@ -163,6 +163,14 @@ export interface Evidence {
   desechoPhotoType?: 'panoramic' | 'meterage';
   /** Metraje ingresado cuando la foto de DESECHOS es de tipo METRAJE. */
   desechoMeterage?: number;
+  /** Identificador del set de MEJORAS (Antes + Después). */
+  mejoraId?: string;
+  /** Número visible del set de MEJORAS dentro del proyecto. */
+  mejoraNumber?: number;
+  /** Tipo de mejora documentada. */
+  mejoraType?: 'SUBIDA DE BANDAS' | 'PODAS' | 'SUBIDA DE RETENIDAS';
+  /** Parte del set de MEJORAS documentada. */
+  mejoraSide?: 'before' | 'after';
   /** Identificador del set de ALTA (Panorámica + Metraje). */
   altaId?: string;
   /** Número visible del set de ALTA dentro del proyecto. */
