@@ -4103,7 +4103,7 @@ export default function App() {
               </div>
 
               <div className="space-y-2 max-h-[55vh] overflow-y-auto">
-                {fiberPairs.map(pair => (
+                {fiberPairs.filter(pair => !pair.complete).map(pair => (
                   <div key={pair.pairId} className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
