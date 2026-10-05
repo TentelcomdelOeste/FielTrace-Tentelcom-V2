@@ -947,8 +947,8 @@ export default function App() {
           reelNumber: '',
           fiberCount: '',
           metraje: '',
-          metraje: ''
-        });
+
+});
       } else if (reserveGroups.length === 1) {
         const pending = reserveGroups[0];
 
@@ -960,8 +960,8 @@ export default function App() {
             reelNumber: '',
             fiberCount: '',
           metraje: '',
-          metraje: ''
-          });
+
+});
         } else {
           const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
           const inheritedReel = getReserveReelNumber(pending.reserveId, pending.reserveNumber);
@@ -976,6 +976,7 @@ export default function App() {
               reserveNumber: 0,
               reelNumber: '',
               fiberCount: ''
+          metraje: '',
             });
           } else {
             setReserveCaptureDraft({
@@ -984,8 +985,8 @@ export default function App() {
               reserveNumber: pending.reserveNumber,
               reelNumber: inheritedReel,
               fiberCount: inheritedFiberCount,
-          metraje: ''
-            });
+          metraje: '',
+});
           }
         }
       } else {
@@ -1007,8 +1008,8 @@ export default function App() {
           reelNumber: '',
           fiberCount: '',
           metraje: '',
-          metraje: ''
-        });
+
+});
       }
 
       setShowReserveCaptureModal(true);
@@ -1234,8 +1235,8 @@ export default function App() {
       reserveNumber: Number(selected.reserveNumber || 1),
       reelNumber: inheritedReel,
       fiberCount: inheritedFiberCount,
-      metraje: ''
-    });
+          metraje: '',
+});
     setShowReserveCaptureModal(true);
   };
 
@@ -4450,6 +4451,7 @@ export default function App() {
                                   reserveNumber,
                                   reelNumber: '',
                                   fiberCount: ''
+          metraje: '',
                                 });
                                 return;
                               }
@@ -4467,8 +4469,8 @@ export default function App() {
                                 reserveNumber,
                                 reelNumber: inheritedReel,
                                 fiberCount: inheritedFiberCount,
-      metraje: ''
-                              });
+          metraje: '',
+});
                             }}
                             className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
                           >
@@ -5059,6 +5061,7 @@ export default function App() {
                                       reserveNumber,
                                       reelNumber: '',
                                       fiberCount: ''
+          metraje: '',
                                     });
                                   } else {
                                     const inheritedReel = getReserveReelNumber(reserveId, reserveNumber);
@@ -5075,8 +5078,8 @@ export default function App() {
                                       reserveNumber,
                                       reelNumber: inheritedReel,
                                       fiberCount: inheritedFiberCount,
-      metraje: ''
-                                    });
+          metraje: '',
+});
                                   }
 
                                   setShowReserveCaptureModal(true);
