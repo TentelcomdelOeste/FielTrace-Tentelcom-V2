@@ -276,6 +276,20 @@ export default function App() {
   const [showAceroCaptureModal, setShowAceroCaptureModal] = useState(false);
   const [aceroPromptMode, setAceroPromptMode] = useState<'type' | 'meterage' | null>(null);
   const [aceroMeterageDraft, setAceroMeterageDraft] = useState('');
+
+  const [desechoCaptureDraft, setDesechoCaptureDraft] = useState<{
+    desechoId: string;
+    desechoNumber: number;
+    side: 'photo1' | 'photo2';
+  } | null>(null);
+  const [desechoSetChoice, setDesechoSetChoice] = useState<{
+    desechoId: string;
+    desechoNumber: number;
+    missingSide: 'photo1' | 'photo2';
+  } | null>(null);
+  const [showDesechoCaptureModal, setShowDesechoCaptureModal] = useState(false);
+  const [desechoPromptMode, setDesechoPromptMode] = useState<'type' | 'meterage' | null>(null);
+  const [desechoMeterageDraft, setDesechoMeterageDraft] = useState('');
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -916,6 +930,60 @@ export default function App() {
       setAceroMeterageDraft('');
       setAceroPromptMode('type');
       setShowAceroCaptureModal(true);
+      return;
+    }
+
+    if (category === 'DESECHOS') {
+      setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
+      setNapCaptureDraft(null);
+      setAltaCaptureDraft(null);
+      setAceroCaptureDraft(null);
+      setAceroSetChoice(null);
+
+      const desechoGroups = Array.from(new Set(
+        evidences
+          .filter(ev => ev.category === 'DESECHOS' && ev.desechoId)
+          .map(ev => ev.desechoId as string)
+      ))
+        .map(desechoId => {
+          const group = evidences.filter(ev => ev.category === 'DESECHOS' && ev.desechoId === desechoId);
+          const first = group[0];
+          const desechoNumber = Number(first?.desechoNumber || 0);
+          const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');
+          const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
+          return { desechoId, desechoNumber, hasPhoto1, hasPhoto2 };
+        })
+        .filter(group => !(group.hasPhoto1 && group.hasPhoto2))
+        .sort((a, b) => a.desechoNumber - b.desechoNumber);
+
+      if (desechoGroups.length > 0) {
+        const group = desechoGroups[0];
+        setDesechoSetChoice({
+          desechoId: group.desechoId,
+          desechoNumber: group.desechoNumber,
+          missingSide: group.hasPhoto1 ? 'photo2' : 'photo1'
+        });
+        return;
+      }
+
+      const usedNumbers = evidences
+        .filter(ev => ev.category === 'DESECHOS' && ev.desechoNumber != null)
+        .map(ev => Number(ev.desechoNumber))
+        .filter(Number.isFinite);
+      const desechoNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+      const desechoId = crypto.randomUUID
+        ? crypto.randomUUID()
+        : `desecho_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      setDesechoCaptureDraft({
+        desechoId,
+        desechoNumber,
+        side: 'photo1'
+      });
+      setDesechoMeterageDraft('');
+      setDesechoPromptMode('type');
+      setShowDesechoCaptureModal(true);
       return;
     }
 
@@ -1632,7 +1700,9 @@ export default function App() {
             ? 'Puntas de fibra – Inicial'
             : selectedEvidenceCategory.id === 'ACEROS'
               ? `Aceros – ${aceroCaptureDraft?.side === 'photo2' ? 'Metraje' : 'Panorámica'}`
-              : selectedEvidenceCategory.id === 'ALTAS'
+              : selectedEvidenceCategory.id === 'DESECHOS'
+                ? `Desechos – ${desechoCaptureDraft?.side === 'photo2' ? 'Metraje' : 'Panorámica'}`
+                : selectedEvidenceCategory.id === 'ALTAS'
                 ? `Altas – ${altaCaptureDraft?.side === 'meterage' ? 'Metraje' : 'Panorámica'}`
                 : selectedEvidenceCategory.label;
 
@@ -1697,6 +1767,15 @@ export default function App() {
           : undefined,
         aceroMeterage: selectedEvidenceCategory.id === 'ACEROS' && aceroCaptureDraft?.side === 'photo2'
           ? Number(aceroMeterageDraft || 0)
+          : undefined,
+        desechoId: selectedEvidenceCategory.id === 'DESECHOS' ? (desechoCaptureDraft?.desechoId || '') : undefined,
+        desechoNumber: selectedEvidenceCategory.id === 'DESECHOS' ? desechoCaptureDraft?.desechoNumber : undefined,
+        desechoSide: selectedEvidenceCategory.id === 'DESECHOS' ? desechoCaptureDraft?.side : undefined,
+        desechoPhotoType: selectedEvidenceCategory.id === 'DESECHOS'
+          ? (desechoCaptureDraft?.side === 'photo2' ? 'meterage' : 'panoramic')
+          : undefined,
+        desechoMeterage: selectedEvidenceCategory.id === 'DESECHOS' && desechoCaptureDraft?.side === 'photo2'
+          ? Number(desechoMeterageDraft || 0)
           : undefined,
         napId: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napId || '') : undefined,
         napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
@@ -1797,12 +1876,17 @@ export default function App() {
 
           // Las reservas son fotografías individuales. Después de cada captura
           // regresamos al proyecto para evitar que el técnico tome fotos extra.
-          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || selectedEvidenceCategory.id === 'ACEROS' || evidenceCategory === 'PUNTAS_FIBRA') {
+          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || selectedEvidenceCategory.id === 'ACEROS' || selectedEvidenceCategory.id === 'DESECHOS' || evidenceCategory === 'PUNTAS_FIBRA') {
             setShowReserveCaptureModal(false);
             setShowAltaCaptureModal(false);
             setReserveCaptureDraft(null);
             setAltaCaptureDraft(null);
             setAceroCaptureDraft(null);
+            setDesechoCaptureDraft(null);
+            setDesechoSetChoice(null);
+            setShowDesechoCaptureModal(false);
+            setDesechoPromptMode(null);
+            setDesechoMeterageDraft('');
             setFiberCaptureDraft(null);
             setCurrentStep('history');
           } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
@@ -2087,6 +2171,33 @@ export default function App() {
         aceroCount: aceroGroups.length,
         aceroCompletedCount: completedAceros,
         aceroPendingLabels: pendingAceroLabels,
+        reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
+        fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
+      };
+    }
+
+    if (category.id === 'DESECHOS') {
+      const desechoIds = Array.from(new Set(categoryEvidences.map(ev => ev.desechoId).filter(Boolean))) as string[];
+      const desechoGroups = desechoIds.map(desechoId => {
+        const group = categoryEvidences.filter(ev => ev.desechoId === desechoId);
+        const first = group[0];
+        const desechoNumber = Number(first?.desechoNumber || 0);
+        const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');
+        const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
+        return { desechoId, desechoNumber, hasPhoto1, hasPhoto2, count: group.length, complete: hasPhoto1 && hasPhoto2 };
+      }).sort((a, b) => a.desechoNumber - b.desechoNumber);
+      const completedDesechos = desechoGroups.filter(item => item.complete).length;
+      const pendingDesechoLabels = desechoGroups.filter(item => !item.complete).map(item => {
+        const missing = !item.hasPhoto1 ? 'PANORÁMICA' : 'METRAJE';
+        return `DESECHO ${String(item.desechoNumber).padStart(2, '0')}: FALTA ${missing}`;
+      });
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: desechoGroups.length > 0 && desechoGroups.every(item => item.complete),
+        desechoCount: desechoGroups.length,
+        desechoCompletedCount: completedDesechos,
+        desechoPendingLabels: pendingDesechoLabels,
         reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
         fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
       };
@@ -2448,6 +2559,12 @@ export default function App() {
                                       ? (category.completed
                                           ? '✓ ' + category.aceroCompletedCount + '/' + category.aceroCount + ' ACEROS COMPLETOS · ' + category.count + ' FOTOS'
                                           : '⚠ ' + category.aceroCompletedCount + '/' + category.aceroCount + ' ACEROS COMPLETOS · ' + (category.aceroPendingLabels || []).join(' · '))
+                                      : 'PENDIENTE · 0 FOTOS')
+                                : category.id === 'DESECHOS'
+                                  ? (category.desechoCount
+                                      ? (category.completed
+                                          ? '✓ ' + category.desechoCompletedCount + '/' + category.desechoCount + ' DESECHOS COMPLETOS · ' + category.count + ' FOTOS'
+                                          : '⚠ ' + category.desechoCompletedCount + '/' + category.desechoCount + ' DESECHOS COMPLETOS · ' + (category.desechoPendingLabels || []).join(' · '))
                                       : 'PENDIENTE · 0 FOTOS')
                                 : category.id === 'NAPS'
                                   ? (category.napCount
@@ -3320,6 +3437,14 @@ export default function App() {
                      {aceroCaptureDraft.side === 'photo2'
                        ? `METRAJE ${aceroCaptureDraft.aceroNumber}: ${aceroMeterageDraft ? `${aceroMeterageDraft} M` : '—'}`
                        : `PANORÁMICA ACERO ${aceroCaptureDraft.aceroNumber}`}
+                   </p>
+                 )}
+
+                 {evidenceCategory === 'DESECHOS' && desechoCaptureDraft && (
+                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                     {desechoCaptureDraft.side === 'photo2'
+                       ? `METRAJE DESECHO ${desechoCaptureDraft.desechoNumber}: ${desechoMeterageDraft ? `${desechoMeterageDraft} M` : '—'}`
+                       : `PANORÁMICA DESECHO ${desechoCaptureDraft.desechoNumber}`}
                    </p>
                  )}
 
@@ -4599,6 +4724,208 @@ export default function App() {
           </motion.div>
         )}
 
+        {showDesechoCaptureModal && desechoCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[231] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="text-center mb-5">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+                  <CameraIcon className="w-7 h-7 text-blue-600" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Set de Desechos</p>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-950 mt-1">
+                  DESECHO {String(desechoCaptureDraft.desechoNumber).padStart(2, '0')}
+                </h3>
+                {desechoPromptMode === 'type' ? (
+                  <p className="text-xs text-gray-500 mt-2">¿Qué tipo de fotografía desea tomar?</p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-2">Ingrese el metraje que corresponde a esta fotografía.</p>
+                )}
+              </div>
+
+              {desechoPromptMode === 'type' ? (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesechoCaptureDraft(prev => prev ? { ...prev, side: 'photo1' } : prev);
+                      setDesechoPromptMode(null);
+                      setShowDesechoCaptureModal(false);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    PANORÁMICA
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesechoCaptureDraft(prev => prev ? { ...prev, side: 'photo2' } : prev);
+                      setDesechoMeterageDraft('');
+                      setDesechoPromptMode('meterage');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
+                  >
+                    METRAJE
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDesechoCaptureModal(false);
+                      setDesechoPromptMode(null);
+                      setDesechoMeterageDraft('');
+                      setDesechoCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
+                    <p className="text-[9px] font-black uppercase text-gray-500">Metraje</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputMode="decimal"
+                        autoFocus
+                        value={desechoMeterageDraft}
+                        onChange={(e) => setDesechoMeterageDraft(e.target.value)}
+                        placeholder="Ej. 1250"
+                        className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm font-black outline-none focus:border-blue-500"
+                      />
+                      <span className="text-sm font-black text-gray-500">M</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const value = Number(desechoMeterageDraft);
+                      if (!Number.isFinite(value) || value <= 0) {
+                        alert('Ingrese un metraje válido mayor que 0.');
+                        return;
+                      }
+                      setShowDesechoCaptureModal(false);
+                      setDesechoPromptMode(null);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    CONTINUAR A CÁMARA
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesechoMeterageDraft('');
+                      setDesechoPromptMode('type');
+                    }}
+                    className="w-full py-3 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+                  >
+                    CAMBIAR TIPO
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDesechoCaptureModal(false);
+                      setDesechoPromptMode(null);
+                      setDesechoMeterageDraft('');
+                      setDesechoCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {desechoSetChoice && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[230] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="text-center mb-5">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+                  <CameraIcon className="w-7 h-7 text-blue-600" />
+                </div>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-950">SET DE DESECHOS INCOMPLETO</h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  DESECHO {String(desechoSetChoice.desechoNumber).padStart(2, '0')} tiene 1 de 2 fotografías.
+                </p>
+                <p className="text-[10px] font-bold uppercase text-amber-600 mt-1">
+                  FALTA {desechoSetChoice.missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const choice = desechoSetChoice;
+                    setDesechoSetChoice(null);
+                    setEvidenceCategory('DESECHOS');
+                    setDesechoCaptureDraft({
+                      desechoId: choice.desechoId,
+                      desechoNumber: choice.desechoNumber,
+                      side: choice.missingSide
+                    });
+                    setDesechoMeterageDraft('');
+                    if (choice.missingSide === 'photo2') {
+                      setDesechoPromptMode('meterage');
+                      setShowDesechoCaptureModal(true);
+                    } else {
+                      setDesechoPromptMode(null);
+                      setCurrentStep('camera');
+                    }
+                  }}
+                  className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                >
+                  COMPLETAR DESECHO {String(desechoSetChoice.desechoNumber).padStart(2, '0')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDesechoSetChoice(null);
+                    setEvidenceCategory('DESECHOS');
+                    const usedNumbers = evidences
+                      .filter(ev => ev.category === 'DESECHOS' && ev.desechoNumber != null)
+                      .map(ev => Number(ev.desechoNumber))
+                      .filter(Number.isFinite);
+                    const desechoNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+                    const desechoId = crypto.randomUUID
+                      ? crypto.randomUUID()
+                      : `desecho_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+                    setDesechoCaptureDraft({
+                      desechoId,
+                      desechoNumber,
+                      side: 'photo1'
+                    });
+                    setDesechoMeterageDraft('');
+                    setDesechoPromptMode('type');
+                    setShowDesechoCaptureModal(true);
+                  }}
+                  className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
+                >
+                  TOMAR FOTO DE NUEVO DESECHO
+                </button>
+
+                <button type="button" onClick={() => setDesechoSetChoice(null)} className="w-full py-3 text-[10px] font-black uppercase text-gray-500">
+                  CANCELAR
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showReserveCaptureModal && reserveCaptureDraft && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[221] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
             <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5 max-h-[88vh] overflow-y-auto">
@@ -4940,7 +5267,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS' || storageEvidenceCategory === 'DESECHOS'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
@@ -5226,6 +5553,97 @@ export default function App() {
                                     side: missingSide
                                   });
                                   setCurrentStep('camera');
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'DESECHOS' ? (() => {
+                    const desechoPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'DESECHOS' && ev.desechoId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.desechoNumber || 0) - Number(b.desechoNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { photo1: 1, photo2: 2 };
+                        return (sideOrder[a.desechoSide || ''] || 99) - (sideOrder[b.desechoSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      desechoPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.desechoId || `legacy-desecho-${ev.desechoNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const desechoNumber = Number(group[0]?.desechoNumber || groupIndex + 1);
+                      const desechoId = group[0]?.desechoId || '';
+                      const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');
+                      const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
+                      const missingSide: 'photo1' | 'photo2' | null =
+                        !hasPhoto1 ? 'photo1' : !hasPhoto2 ? 'photo2' : null;
+
+                      return (
+                        <div key={desechoId || `desecho-group-${desechoNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                DESECHO {String(desechoNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.desechoSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('DESECHOS');
+                                  setDesechoCaptureDraft({
+                                    desechoId,
+                                    desechoNumber,
+                                    side: missingSide
+                                  });
+                                  setDesechoMeterageDraft('');
+                                  if (missingSide === 'photo2') {
+                                    setDesechoPromptMode('meterage');
+                                    setShowDesechoCaptureModal(true);
+                                  } else {
+                                    setDesechoPromptMode(null);
+                                    setCurrentStep('camera');
+                                  }
                                 }}
                                 className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
                               >
