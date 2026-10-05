@@ -73,6 +73,7 @@ public class MainActivity extends BridgeActivity {
     applyCameraWebViewFixes();
     refreshNativeWebAssetsIfVersionChanged();
     requestDownloadNotificationPermission();
+    requestCameraPermission();
   }
 
   @Override
@@ -203,6 +204,30 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception ignored) {}
       });
     } catch (Exception ignored) {}
+  }
+
+  private void requestCameraPermission() {
+    try {
+      if (checkSelfPermission(Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        requestPermissions(new String[]{Manifest.permission.CAMERA}, 9102);
+      }
+    } catch (Exception ignored) {}
+  }
+
+  @Override
+  public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    if (requestCode == 9102) {
+      try {
+        WebView webView = this.bridge == null ? null : this.bridge.getWebView();
+        if (webView != null) {
+          webView.post(() -> webView.evaluateJavascript(
+              "window.dispatchEvent(new Event('fieldtrace-camera-permission'));",
+              null
+          ));
+        }
+      } catch (Exception ignored) {}
+    }
   }
 
   private void requestDownloadNotificationPermission() {
