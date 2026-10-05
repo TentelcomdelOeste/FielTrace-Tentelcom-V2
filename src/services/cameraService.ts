@@ -139,15 +139,41 @@ export const cameraService = {
           if (metadata.settings?.showLocation && metadata.ubicacion) rawLines.push(`${metadata.ubicacion.toUpperCase()}`);
           if (metadata.settings?.showTech) rawLines.push(`${metadata.baseFields?.tecnico || 'N/A'}`);
 
-          (metadata.customFields || []).forEach((cf: any) => {
-            if (cf.active !== false && cf.showInPhoto) {
+          const isFiberCapture = metadata.category === 'PUNTAS_FIBRA_INICIAL' || metadata.category === 'PUNTAS_FIBRA_FINAL';
+          const fiberFieldNames = new Set(['PUNTA', 'TIPO', 'METRAJE', 'NÚMERO DE CARRETE', 'CANTIDAD DE FIBRAS']);
+
+          // Mantener el mismo orden que se ve en vivo:
+          // PUNTA INICIAL/FINAL + metraje, luego carrete y cantidad de fibras.
+          if (isFiberCapture) {
+            (metadata.customFields || []).forEach((cf: any) => {
+              if (cf.active === false || !cf.showInPhoto || fiberFieldNames.has(String(cf.name || '').trim().toUpperCase())) return;
               if (cf.value && String(cf.value).trim() !== '') {
                 rawLines.push(`${cf.name.toUpperCase()}: ${String(cf.value).toUpperCase()}`);
               } else {
                 rawLines.push(`${cf.name.toUpperCase()}`);
               }
-            }
-          });
+            });
+
+            const sideLabel = metadata.fiberSide === 'initial' ? 'INICIAL' : 'FINAL';
+            const pairNumber = metadata.fiberPairNumber ?? '';
+            const meterage = Number(metadata.fiberMeterage || 0);
+            rawLines.push(`PUNTA ${sideLabel} ${pairNumber}: ${meterage > 0 ? `${meterage} M` : '—'}`);
+
+            const reelNumber = String(metadata.fiberReelNumber || '').trim();
+            const fiberCount = Number(metadata.fiberCount || 0);
+            if (reelNumber) rawLines.push(`NÚMERO DE CARRETE: ${reelNumber.toUpperCase()}`);
+            if (fiberCount > 0) rawLines.push(`CANTIDAD DE FIBRAS: ${fiberCount}`);
+          } else {
+            (metadata.customFields || []).forEach((cf: any) => {
+              if (cf.active !== false && cf.showInPhoto) {
+                if (cf.value && String(cf.value).trim() !== '') {
+                  rawLines.push(`${cf.name.toUpperCase()}: ${String(cf.value).toUpperCase()}`);
+                } else {
+                  rawLines.push(`${cf.name.toUpperCase()}`);
+                }
+              }
+            });
+          }
 
           if (rawLines.length === 0) return resolve(imageSrc);
 
