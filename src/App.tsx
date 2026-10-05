@@ -1585,7 +1585,9 @@ export default function App() {
           ? 'Puntas de fibra – Final'
           : captureCategoryId === 'PUNTAS_FIBRA_INICIAL'
             ? 'Puntas de fibra – Inicial'
-            : selectedEvidenceCategory.label;
+            : selectedEvidenceCategory.id === 'ACEROS'
+              ? `Aceros – ${aceroCaptureDraft?.side === 'photo2' ? 'Metraje' : 'Panorámica'}`
+              : selectedEvidenceCategory.label;
 
       const viewfinderEl = document.getElementById('camera-viewfinder');
       const vfRect = viewfinderEl ? viewfinderEl.getBoundingClientRect() : null;
@@ -1995,7 +1997,7 @@ export default function App() {
       }).sort((a, b) => a.aceroNumber - b.aceroNumber);
       const completedAceros = aceroGroups.filter(acero => acero.complete).length;
       const pendingAceroLabels = aceroGroups.filter(acero => !acero.complete).map(acero => {
-        const missing = !acero.hasPhoto1 ? 'FOTO 1' : 'FOTO 2';
+        const missing = !acero.hasPhoto1 ? 'PANORÁMICA' : 'METRAJE';
         return `ACERO ${String(acero.aceroNumber).padStart(2, '0')}: FALTA ${missing}`;
       });
       return {
@@ -3162,6 +3164,11 @@ export default function App() {
               <p className="text-[10px] font-black uppercase text-white mt-0.5">
                 {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
               </p>
+              {evidenceCategory === 'ACEROS' && aceroCaptureDraft && (
+                <p className="text-[9px] font-black uppercase text-blue-200 mt-1">
+                  {aceroCaptureDraft.side === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                </p>
+              )}
             </div>
           </div>
 
@@ -4111,7 +4118,7 @@ export default function App() {
                   ACERO {String(aceroSetChoice.aceroNumber).padStart(2, '0')} tiene 1 de 2 fotografías.
                 </p>
                 <p className="text-[10px] font-bold uppercase text-amber-600 mt-1">
-                  FALTA {aceroSetChoice.missingSide === 'photo1' ? 'FOTO 1' : 'FOTO 2'}
+                  FALTA {aceroSetChoice.missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                 </p>
               </div>
 
@@ -4672,7 +4679,7 @@ export default function App() {
                                 </div>
                                 <div className="p-2.5">
                                   <p className="text-[9px] font-black uppercase text-gray-900">
-                                    {ev.aceroSide === 'photo1' ? 'FOTO 1' : 'FOTO 2'}
+                                    {ev.aceroSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                   </p>
                                   <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
@@ -4698,7 +4705,7 @@ export default function App() {
                               >
                                 <CameraIcon className="w-8 h-8" />
                                 <span className="text-[9px] font-black uppercase text-center px-2">
-                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'FOTO 1' : 'FOTO 2'}
+                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
                               </button>
                             )}
