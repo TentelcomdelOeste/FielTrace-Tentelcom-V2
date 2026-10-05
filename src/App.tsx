@@ -946,6 +946,7 @@ export default function App() {
           reserveNumber: 0,
           reelNumber: '',
           fiberCount: '',
+          metraje: '',
           metraje: ''
         });
       } else if (reserveGroups.length === 1) {
@@ -958,6 +959,7 @@ export default function App() {
             reserveNumber: pending.reserveNumber,
             reelNumber: '',
             fiberCount: '',
+          metraje: '',
           metraje: ''
           });
         } else {
@@ -1004,6 +1006,7 @@ export default function App() {
           reserveNumber,
           reelNumber: '',
           fiberCount: '',
+          metraje: '',
           metraje: ''
         });
       }
@@ -1056,7 +1059,7 @@ export default function App() {
         pairNumber: pairId
           ? Number(existingPair?.fiberPairNumber || nextNumber)
           : nextNumber,
-        metraje: '',
+
         reelNumber: existingPair?.fiberReelNumber || '',
         fiberCount: existingPair?.fiberCount ? String(existingPair.fiberCount) : ''
       });
@@ -1077,7 +1080,7 @@ export default function App() {
         side: 'final',
         pairId: selected.pairId,
         pairNumber: selected.pairNumber,
-        metraje: '',
+
         reelNumber: initialEvidence?.fiberReelNumber || '',
         fiberCount: initialEvidence?.fiberCount ? String(initialEvidence.fiberCount) : ''
       });
@@ -1170,6 +1173,7 @@ export default function App() {
         const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '', fiberCount: '',
           metraje: '',
+
           metraje: '' });
       }
 
@@ -1231,7 +1235,8 @@ export default function App() {
       reserveId: selected.reserveId,
       reserveNumber: Number(selected.reserveNumber || 1),
       reelNumber: inheritedReel,
-      fiberCount: inheritedFiberCount
+      fiberCount: inheritedFiberCount,
+      metraje: ''
     });
     setShowReserveCaptureModal(true);
   };
@@ -4442,7 +4447,8 @@ export default function App() {
                                 reserveId,
                                 reserveNumber,
                                 reelNumber: inheritedReel,
-                                fiberCount: inheritedFiberCount
+                                fiberCount: inheritedFiberCount,
+      metraje: ''
                               });
                             }}
                             className="w-full p-4 rounded-2xl border border-blue-200 bg-blue-50 text-left active:scale-[0.98] transition-transform"
@@ -5001,7 +5007,8 @@ export default function App() {
                                       reserveId,
                                       reserveNumber,
                                       reelNumber: inheritedReel,
-                                      fiberCount: inheritedFiberCount
+                                      fiberCount: inheritedFiberCount,
+      metraje: ''
                                     });
                                   }
 
@@ -5090,7 +5097,7 @@ export default function App() {
                                       side: 'initial',
                                       pairId,
                                       pairNumber,
-                                      metraje: '',
+
                                       reelNumber: '',
                                       fiberCount: ''
                                     });
@@ -5106,7 +5113,7 @@ export default function App() {
                                       side: 'final',
                                       pairId,
                                       pairNumber,
-                                      metraje: '',
+
                                       reelNumber: initial.fiberReelNumber || '',
                                       fiberCount: String(initial.fiberCount || '')
                                     });
