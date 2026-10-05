@@ -198,6 +198,20 @@ export const cameraService = {
             }
           }
 
+          if (metadata.category === 'MEJORAS') {
+            const mejoraNumber = metadata.mejoraNumber ?? '';
+            const mejoraType = String(metadata.mejoraType || '').trim();
+            const mejoraSide = metadata.mejoraSide === 'before' ? 'ANTES' : 'DESPUÉS';
+            const label = mejoraType === 'SUBIDA DE BANDAS'
+              ? 'SUBIDA DE BANDA'
+              : mejoraType === 'PODAS'
+                ? 'PODA'
+                : mejoraType === 'SUBIDA DE RETENIDAS'
+                  ? 'SUBIDA DE RETENIDA'
+                  : mejoraType || 'MEJORA';
+            rawLines.push(`${label} ${mejoraNumber}: ${mejoraSide}`);
+          }
+
           if (metadata.category === 'ALTAS') {
             const altaNumber = metadata.altaNumber ?? '';
             const altaType = String(metadata.altaType || '').trim();
