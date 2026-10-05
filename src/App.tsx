@@ -338,6 +338,9 @@ export default function App() {
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
   const [confirmDeleteProjectsStep, setConfirmDeleteProjectsStep] = useState<0 | 1 | 2>(0);
   const [pendingDeleteProjectIds, setPendingDeleteProjectIds] = useState<number[]>([]);
+  const [pendingCloudDeleteProject, setPendingCloudDeleteProject] = useState<{ uuid: string; name: string } | null>(null);
+  const [cloudDeleteStep, setCloudDeleteStep] = useState<0 | 1 | 2>(0);
+  const [cloudDeleteRunning, setCloudDeleteRunning] = useState(false);
   const [viewingEvidence, setViewingEvidence] = useState<any | null>(null);
   const [editingEvidence, setEditingEvidence] = useState<any | null>(null);
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
@@ -862,6 +865,40 @@ export default function App() {
       alert('No se pudo abrir el proyecto compartido.');
     } finally {
       setCloudImportingUuid(null);
+    }
+  };
+
+  const requestDeleteCloudProject = (cloudProject: any) => {
+    const uuid = String(cloudProject?.uuid || cloudProject?.id || '');
+    if (!uuid) return;
+    setPendingCloudDeleteProject({ uuid, name: String(cloudProject?.name || 'Proyecto sin nombre') });
+    setCloudDeleteStep(1);
+  };
+
+  const executeDeleteCloudProject = async () => {
+    const target = pendingCloudDeleteProject;
+    if (!target || cloudDeleteRunning) return;
+    setCloudDeleteRunning(true);
+    try {
+      await firebaseService.deleteCloudProject(target.uuid);
+      setCloudProjects(prev => prev.filter(p => String(p.uuid || p.id) !== target.uuid));
+      const localMatch = projects.find(p => String(p.uuid || '') === target.uuid);
+      if (localMatch?.id != null) {
+        await storageService.deleteProject(localMatch.id);
+        setProjects(prev => prev.filter(p => p.id !== localMatch.id));
+        if (selectedProject?.id === localMatch.id) {
+          setSelectedProject(null);
+          setEvidences([]);
+          setCurrentStep('home');
+        }
+      }
+      setCloudDeleteStep(0);
+      setPendingCloudDeleteProject(null);
+    } catch (error: any) {
+      console.error('[Cloud Projects] Error eliminando proyecto compartido:', error);
+      alert(error?.message || 'No se pudo eliminar el proyecto compartido. Verifique la conexión y los permisos de Firebase.');
+    } finally {
+      setCloudDeleteRunning(false);
     }
   };
 
@@ -5653,27 +5690,68 @@ export default function App() {
                       const uuid = String(p.uuid || p.id);
                       const importing = cloudImportingUuid === uuid;
                       return (
-                        <button
+                        <div
                           key={uuid}
-                          type="button"
-                          disabled={!!cloudImportingUuid}
-                          onClick={() => { void importAndOpenCloudProject(p); }}
-                          className="w-full p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between text-left shadow-sm active:scale-[0.99] disabled:opacity-60"
+                          className="w-full p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between text-left shadow-sm"
                         >
-                          <div className="min-w-0 pr-3">
-                            <p className="text-[13px] font-black uppercase text-gray-950 truncate">{p.name || 'Proyecto sin nombre'}</p>
-                            <p className="text-[9px] font-bold uppercase text-gray-400 truncate">{p.client || 'Sin cliente'}</p>
-                            <p className="text-[8px] font-bold uppercase text-gray-300 mt-1">Actualizado: {p.updatedAt ? new Date(p.updatedAt).toLocaleString('es-CR') : '—'}</p>
+                          <button
+                            type="button"
+                            disabled={!!cloudImportingUuid || cloudDeleteRunning}
+                            onClick={() => { void importAndOpenCloudProject(p); }}
+                            className="min-w-0 flex-1 text-left active:scale-[0.99] disabled:opacity-60"
+                          >
+                            <div className="min-w-0 pr-3">
+                              <p className="text-[13px] font-black uppercase text-gray-950 truncate">{p.name || 'Proyecto sin nombre'}</p>
+                              <p className="text-[9px] font-bold uppercase text-gray-400 truncate">{p.client || 'Sin cliente'}</p>
+                              <p className="text-[8px] font-bold uppercase text-gray-300 mt-1">Actualizado: {p.updatedAt ? new Date(p.updatedAt).toLocaleString('es-CR') : '—'}</p>
+                            </div>
+                          </button>
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            {importing ? (
+                              <RefreshCcw className="w-5 h-5 text-blue-600 animate-spin" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-blue-600" />
+                            )}
+                            <button
+                              type="button"
+                              disabled={!!cloudImportingUuid || cloudDeleteRunning}
+                              onClick={(e) => { e.stopPropagation(); requestDeleteCloudProject(p); }}
+                              className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-500 active:scale-95 disabled:opacity-50"
+                              title="Eliminar proyecto compartido"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                          {importing ? (
-                            <RefreshCcw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
-                          ) : (
-                            <ChevronRight className="w-5 h-5 text-blue-600 shrink-0" />
-                          )}
-                        </button>
+                        </div>
                       );
                     })
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {cloudDeleteStep === 1 && pendingCloudDeleteProject && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
+              <h3 className="text-base font-black uppercase tracking-tight text-gray-950">¿Eliminar proyecto compartido?</h3>
+              <p className="text-sm text-gray-600">Se eliminará <span className="font-bold text-gray-900">{pendingCloudDeleteProject.name}</span> de Firebase junto con todos sus registros y fotografías almacenadas en la nube.</p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => { setCloudDeleteStep(0); setPendingCloudDeleteProject(null); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button type="button" onClick={() => setCloudDeleteStep(2)} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Continuar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {cloudDeleteStep === 2 && pendingCloudDeleteProject && (
+          <motion.div initial={{ opacity: 0.95 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[221] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border-2 border-red-200">
+              <h3 className="text-base font-black uppercase tracking-tight text-red-700">Confirmación final</h3>
+              <p className="text-sm text-gray-600">Esta acción <span className="font-bold text-red-600">no se puede deshacer</span>. Se eliminarán definitivamente el proyecto, sus evidencias y sus fotografías de Firebase.</p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" disabled={cloudDeleteRunning} onClick={() => { setCloudDeleteStep(0); setPendingCloudDeleteProject(null); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider disabled:opacity-50">Cancelar</button>
+                <button type="button" disabled={cloudDeleteRunning} onClick={() => { void executeDeleteCloudProject(); }} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider disabled:opacity-60">{cloudDeleteRunning ? 'Eliminando...' : 'Sí, eliminar'}</button>
               </div>
             </motion.div>
           </motion.div>
