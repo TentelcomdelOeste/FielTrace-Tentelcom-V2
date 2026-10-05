@@ -314,6 +314,7 @@ export default function App() {
   const [cameraPermissionTick, setCameraPermissionTick] = useState(0);
   const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
   const [webCameraError, setWebCameraError] = useState<string | null>(null);
+  const [nativeCameraError, setNativeCameraError] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -519,8 +520,14 @@ export default function App() {
 
           webCameraStreamRef.current = stream;
 
-          // El <video> ya está montado porque este efecto corre después del render.
-          const video = webCameraVideoRef.current;
+          // En móviles el ref puede tardar un frame en quedar montado. Esperamos explícitamente
+          // el elemento en lugar de fallar y dejar una pantalla negra.
+          let video: HTMLVideoElement | null = null;
+          for (let i = 0; i < 40 && active; i++) {
+            video = webCameraVideoRef.current;
+            if (video) break;
+            await new Promise(resolve => window.setTimeout(resolve, 50));
+          }
           if (!video) throw new Error('VIDEO_ELEMENT_NOT_READY');
 
           video.autoplay = true;
@@ -530,40 +537,39 @@ export default function App() {
           video.setAttribute('autoplay', 'true');
           video.setAttribute('muted', 'true');
           video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+          video.style.display = 'block';
+          video.style.visibility = 'visible';
+          video.style.opacity = '1';
+
+          // No llamar video.load() después de asignar MediaStream: load() reinicia
+          // el elemento y puede abortar el flujo recién asociado.
           video.srcObject = stream;
-
-          // Forzar el arranque del elemento en navegadores móviles.
-          try { video.load(); } catch {}
-          await new Promise<void>((resolve) => {
-            const finish = () => {
-              video.removeEventListener('loadedmetadata', finish);
-              video.removeEventListener('canplay', finish);
-              resolve();
-            };
-            video.addEventListener('loadedmetadata', finish, { once: true });
-            video.addEventListener('canplay', finish, { once: true });
-            if (video.readyState >= 2 && video.videoWidth > 0) finish();
-            window.setTimeout(finish, 1200);
-          });
-
-          if (!active) return;
 
           try {
             await video.play();
           } catch (playError) {
             console.warn('[WebCamera] play() retry:', playError);
-            await new Promise(resolve => window.setTimeout(resolve, 150));
+            await new Promise(resolve => window.setTimeout(resolve, 250));
+            if (!active) return;
             await video.play();
           }
 
           if (!active) return;
 
-          // Algunas versiones de Chromium necesitan un frame adicional después de play().
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          // Esperar realmente a que Chromium entregue dimensiones/frame.
+          const deadline = Date.now() + 6000;
+          while (active && Date.now() < deadline) {
+            if (video.videoWidth > 0 && video.videoHeight > 0 && tracks[0].readyState === 'live') break;
+            await new Promise(resolve => window.setTimeout(resolve, 100));
+          }
 
           if (video.videoWidth <= 0 || video.videoHeight <= 0 || tracks[0].readyState !== 'live') {
             throw new Error('VIDEO_NO_FRAMES');
           }
+
+          try { await video.play(); } catch {}
+          if (!active) return;
 
           setWebCameraError(null);
           console.log('[WebCamera] ready:', {
@@ -617,12 +623,31 @@ export default function App() {
       };
     }
 
+    document.documentElement.classList.add('native-camera-active');
+    setNativeCameraError(null);
+
     (async () => {
       try {
+        const permission = await CameraPreview.checkPermissions({ disableAudio: true });
+        let cameraPermission = permission?.camera;
+        if (cameraPermission !== 'granted') {
+          const requested = await CameraPreview.requestPermissions({
+            disableAudio: true,
+            showSettingsAlert: true,
+            title: 'Permiso de cámara',
+            message: 'Field Trace necesita la cámara para tomar fotografías de evidencia.'
+          });
+          cameraPermission = requested?.camera;
+        }
+        if (cameraPermission !== 'granted') {
+          throw new Error('CAMERA_PERMISSION_DENIED');
+        }
+
+        await CameraPreview.stop({ force: true }).catch(() => {});
+
         // Preview fotográfico estable. No activamos el modo de video aquí:
-        // la captura de fotos usa CameraPreview.capture() y el modo video podía
-        // dejar el preview nativo negro en algunos dispositivos Android.
-        await CameraPreview.start({
+        // la captura de fotos usa CameraPreview.capture().
+        const started = await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
           aspectRatio: '16:9',
@@ -632,11 +657,33 @@ export default function App() {
           initialZoomLevel: 1,
           rotateWhenOrientationChanged: true
         });
+
         if (!active) return;
+
+        const previewWidth = Math.max(1, Math.round(window.innerWidth));
+        const previewHeight = Math.max(1, Math.round(window.innerHeight));
+        await CameraPreview.setPreviewSize({
+          x: 0,
+          y: 0,
+          width: previewWidth,
+          height: previewHeight
+        }).catch(() => {});
+
+        console.log('[Camera] native preview ready:', started);
         await CameraPreview.setZoom({ level: cameraZoom });
         await ensureFlashArmed(flashMode);
-      } catch (error) {
+        setNativeCameraError(null);
+      } catch (error: any) {
+        if (!active) return;
         console.error('[Camera] start:', error);
+        const name = String(error?.name || '');
+        const message = String(error?.message || '');
+        const detail = name || message ? ' (' + (name || message) + ')' : '.';
+        setNativeCameraError(
+          message === 'CAMERA_PERMISSION_DENIED'
+            ? 'El permiso de cámara está bloqueado. Permita la cámara para Field Trace y vuelva a intentarlo.'
+            : 'No se pudo iniciar la cámara nativa' + detail
+        );
       }
     })();
 
@@ -3748,6 +3795,33 @@ export default function App() {
                 )}
               </>
             )}
+
+            {isNativeCamera && nativeCameraError && (
+              <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/90 p-6">
+                <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
+                    <CameraIcon className="h-7 w-7 text-red-600" />
+                  </div>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-red-600">CÁMARA NATIVA</p>
+                  <p className="mt-2 text-sm font-bold leading-relaxed text-gray-800">{nativeCameraError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setCameraPermissionTick(v => v + 1)}
+                    className="mt-5 w-full rounded-2xl bg-blue-600 py-4 text-[11px] font-black uppercase tracking-wider text-white"
+                  >
+                    REINTENTAR CÁMARA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep('history')}
+                    className="mt-2 w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    VOLVER
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="absolute inset-0 bg-transparent pointer-events-none" aria-hidden="true" />
             
             {/* Flash Feedback Layer */}
