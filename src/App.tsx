@@ -241,6 +241,7 @@ export default function App() {
     reserveNumber: number;
     reelNumber: string;
     fiberCount: string;
+    metraje: string;
   } | null>(null);
   const [showReserveCaptureModal, setShowReserveCaptureModal] = useState(false);
   const [napCaptureDraft, setNapCaptureDraft] = useState<{
@@ -944,7 +945,8 @@ export default function App() {
           reserveId: '',
           reserveNumber: 0,
           reelNumber: '',
-          fiberCount: ''
+          fiberCount: '',
+          metraje: ''
         });
       } else if (reserveGroups.length === 1) {
         const pending = reserveGroups[0];
@@ -955,7 +957,8 @@ export default function App() {
             reserveId: pending.reserveId,
             reserveNumber: pending.reserveNumber,
             reelNumber: '',
-            fiberCount: ''
+            fiberCount: '',
+          metraje: ''
           });
         } else {
           const missingSide: 'final' | 'roll' = !pending.hasFinal ? 'final' : 'roll';
@@ -978,7 +981,8 @@ export default function App() {
               reserveId: pending.reserveId,
               reserveNumber: pending.reserveNumber,
               reelNumber: inheritedReel,
-              fiberCount: inheritedFiberCount
+              fiberCount: inheritedFiberCount,
+          metraje: ''
             });
           }
         }
@@ -999,7 +1003,8 @@ export default function App() {
           reserveId,
           reserveNumber,
           reelNumber: '',
-          fiberCount: ''
+          fiberCount: '',
+          metraje: ''
         });
       }
 
@@ -1156,13 +1161,16 @@ export default function App() {
           reserveId: existing.reserveId,
           reserveNumber: Number(existing.reserveNumber || 1),
           reelNumber: inheritedReel,
-          fiberCount: getReserveFiberCount(existing.reserveId, Number(existing.reserveNumber || 0))
+          fiberCount: getReserveFiberCount(existing.reserveId, Number(existing.reserveNumber || 0)),
+          metraje: ''
         });
       } else {
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
         const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
         const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '', fiberCount: '' });
+        setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '', fiberCount: '',
+          metraje: '',
+          metraje: '' });
       }
 
       if (side === 'initial' && reserveCaptureDraft?.reserveId) {
