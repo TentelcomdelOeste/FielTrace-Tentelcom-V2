@@ -492,7 +492,19 @@ export default function App() {
 
     (async () => {
       try {
-        await CameraPreview.start({ position: cameraFacing, toBack: true, aspectRatio: 'fill', aspectMode: 'cover', storeToFile: false, disableAudio: false, enableVideoMode: true, videoQuality: '1080p', videoCodec: 'avc1', initialZoomLevel: 1, rotateWhenOrientationChanged: true });
+        // Preview fotográfico estable. No activamos el modo de video aquí:
+        // la captura de fotos usa CameraPreview.capture() y el modo video podía
+        // dejar el preview nativo negro en algunos dispositivos Android.
+        await CameraPreview.start({
+          position: cameraFacing,
+          toBack: true,
+          aspectRatio: 'fill',
+          aspectMode: 'cover',
+          storeToFile: false,
+          disableAudio: true,
+          initialZoomLevel: 1,
+          rotateWhenOrientationChanged: true
+        });
         if (!active) return;
         await CameraPreview.setZoom({ level: cameraZoom });
         await ensureFlashArmed(flashMode);
