@@ -187,6 +187,17 @@ export const cameraService = {
             }
           }
 
+          if (metadata.category === 'DESECHOS') {
+            const desechoNumber = metadata.desechoNumber ?? '';
+            const photoType = metadata.desechoPhotoType || (metadata.desechoSide === 'photo2' ? 'meterage' : 'panoramic');
+            if (photoType === 'meterage') {
+              const meterage = Number(metadata.desechoMeterage || 0);
+              rawLines.push(`METRAJE DESECHO ${desechoNumber}: ${meterage > 0 ? `${meterage} M` : '—'}`);
+            } else {
+              rawLines.push(`PANORÁMICA DESECHO ${desechoNumber}`);
+            }
+          }
+
           if (metadata.category === 'ALTAS') {
             const altaNumber = metadata.altaNumber ?? '';
             const altaType = String(metadata.altaType || '').trim();
