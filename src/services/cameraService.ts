@@ -162,7 +162,7 @@ export const cameraService = {
             const reelNumber = String(metadata.fiberReelNumber || '').trim();
             const fiberCount = Number(metadata.fiberCount || 0);
             if (reelNumber) rawLines.push(`NÚMERO DE CARRETE: ${reelNumber.toUpperCase()}`);
-            if (fiberCount > 0) rawLines.push(`CANTIDAD DE FIBRAS: ${fiberCount}`);
+            if (fiberCount > 0) rawLines.push(`FIBRA ÓPTICA DE: ${fiberCount}`);
           } else {
             (metadata.customFields || []).forEach((cf: any) => {
               if (cf.active !== false && cf.showInPhoto) {
@@ -213,7 +213,7 @@ export const cameraService = {
               const reel = String(metadata.altaReelNumber || '').trim();
               const fibers = Number(metadata.altaFiberCount || 0);
               if (reel) rawLines.push(`CARRETE: ${reel.toUpperCase()}`);
-              if (fibers > 0) rawLines.push(`CANTIDAD DE FIBRAS: ${fibers}`);
+              if (fibers > 0) rawLines.push(`FIBRA ÓPTICA DE: ${fibers}`);
             }
           }
 
@@ -229,7 +229,7 @@ export const cameraService = {
               const reel = String(metadata.reserveReelNumber || '').trim();
               const fibers = Number(metadata.reserveFiberCount || 0);
               if (reel) rawLines.push(`CARRETE: ${reel.toUpperCase()}`);
-              if (fibers > 0) rawLines.push(`CANTIDAD DE FIBRAS: ${fibers}`);
+              if (fibers > 0) rawLines.push(`FIBRA ÓPTICA DE: ${fibers}`);
             }
           }
 
