@@ -1589,6 +1589,18 @@ export default function App() {
               ? `Aceros – ${aceroCaptureDraft?.side === 'photo2' ? 'Metraje' : 'Panorámica'}`
               : selectedEvidenceCategory.label;
 
+      // Las puntas de fibra llevan sus datos operativos dentro de la evidencia
+      // como campos personalizados para que queden impresos en el overlay.
+      if (isFiberCategory(captureCategoryId) && fiberCaptureDraft) {
+        customFieldsSnapshot.push(
+          { name: 'PUNTA', value: String(fiberCaptureDraft.pairNumber), showInPhoto: true, active: true },
+          { name: 'TIPO', value: fiberCaptureDraft.side === 'initial' ? 'INICIAL' : 'FINAL', showInPhoto: true, active: true },
+          { name: 'NÚMERO DE CARRETE', value: fiberCaptureDraft.reelNumber.trim(), showInPhoto: true, active: true },
+          { name: 'CANTIDAD DE FIBRAS', value: fiberCaptureDraft.fiberCount.trim(), showInPhoto: true, active: true },
+          { name: 'METRAJE', value: `${fiberCaptureDraft.metraje.trim()} M`, showInPhoto: true, active: true }
+        );
+      }
+
       const viewfinderEl = document.getElementById('camera-viewfinder');
       const vfRect = viewfinderEl ? viewfinderEl.getBoundingClientRect() : null;
       const viewfinderMetrics = vfRect && vfRect.width > 0 && vfRect.height > 0
@@ -3230,6 +3242,16 @@ export default function App() {
                  {selectedProject.customFields.filter(f => f.active !== false && f.showInPhoto && (f.name.trim() !== '' || f.value.trim() !== '')).map((f, i) => (
                    <p key={i} className="line-clamp-4 break-words whitespace-pre-wrap">{f.value && f.value.trim() !== '' ? `${f.name.toUpperCase()}: ${f.value.toUpperCase()}` : f.name.toUpperCase()}</p>
                  ))}
+                 
+                 {evidenceCategory === 'PUNTAS_FIBRA' && fiberCaptureDraft && (
+                   <>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">PUNTA: {fiberCaptureDraft.pairNumber}</p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">TIPO: {fiberCaptureDraft.side === 'initial' ? 'INICIAL' : 'FINAL'}</p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">NÚMERO DE CARRETE: {fiberCaptureDraft.reelNumber || '—'}</p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {fiberCaptureDraft.fiberCount || '—'}</p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">METRAJE: {fiberCaptureDraft.metraje ? `${fiberCaptureDraft.metraje} M` : '—'}</p>
+                   </>
+                 )}
               </div>
             </div>
 
