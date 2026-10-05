@@ -5074,13 +5074,27 @@ export default function App() {
                                   setShowStorageEvidenceViewer(false);
                                   setStorageEvidenceCategory(null);
                                   setEvidenceCategory('ALTAS');
+                                  setAltaMeterageDraft('');
+                                  setAltaReelDraft('');
+                                  setAltaFiberCountDraft('');
                                   setAltaCaptureDraft({
                                     altaId,
                                     altaNumber,
                                     altaType,
                                     side: missingSide
                                   });
-                                  setShowAltaCaptureModal(true);
+
+                                  // Al completar desde VER FOTOS, la foto faltante
+                                  // debe conservar exactamente su lado. No reutilizar
+                                  // el estado anterior del modal (por ejemplo METRAJE).
+                                  if (missingSide === 'panoramic') {
+                                    setAltaPromptMode(null);
+                                    setShowAltaCaptureModal(false);
+                                    setCurrentStep('camera');
+                                  } else {
+                                    setAltaPromptMode('meterage');
+                                    setShowAltaCaptureModal(true);
+                                  }
                                 }}
                                 className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
                               >
