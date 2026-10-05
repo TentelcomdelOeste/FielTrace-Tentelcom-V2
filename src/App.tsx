@@ -4178,16 +4178,27 @@ export default function App() {
 
                         if (groups.length > 0) {
                           const group = groups[0];
+                          const missingSide: 'panoramic' | 'meterage' = group.hasPanoramic ? 'meterage' : 'panoramic';
                           setAltaCaptureDraft({
                             altaId: group.altaId,
                             altaNumber: group.altaNumber,
                             altaType: type,
-                            side: group.hasPanoramic ? 'meterage' : 'panoramic'
+                            side: missingSide
                           });
                           setAltaMeterageDraft('');
                           setAltaReelDraft('');
                           setAltaFiberCountDraft('');
-                          setAltaPromptMode('type');
+
+                          // Un set de ALTA solo admite una panorámica y un metraje.
+                          // Si ya existe una de las dos, no volvemos a ofrecerla:
+                          // continuamos directamente con la parte que falta.
+                          if (missingSide === 'panoramic') {
+                            setAltaPromptMode(null);
+                            setShowAltaCaptureModal(false);
+                            setCurrentStep('camera');
+                          } else {
+                            setAltaPromptMode('meterage');
+                          }
                         } else {
                           const usedNumbers = evidences
                             .filter(ev => ev.category === 'ALTAS' && ev.altaNumber != null)
