@@ -215,6 +215,33 @@ export const firebaseService = {
     }
   },
 
+  /** Elimina definitivamente un proyecto compartido, sus evidencias y sus fotografías de Firebase. */
+  async deleteCloudProject(projectUuid: string): Promise<void> {
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión anónima.');
+    if (!navigator.onLine) throw new Error('Se necesita conexión a Internet para eliminar un proyecto compartido.');
+
+    const normalizedUuid = String(projectUuid);
+    const evidenceSnapshot = await getDocs(collection(db, 'projects', normalizedUuid, 'evidences'));
+
+    for (const evidenceDoc of evidenceSnapshot.docs) {
+      const evidence: any = evidenceDoc.data();
+      if (evidence?.photoStoragePath) {
+        try {
+          await deleteObject(ref(storage, evidence.photoStoragePath));
+        } catch (error: any) {
+          if (error?.code !== 'storage/object-not-found') throw error;
+        }
+      }
+    }
+
+    for (const evidenceDoc of evidenceSnapshot.docs) {
+      await deleteDoc(evidenceDoc.ref);
+    }
+    await deleteDoc(doc(db, 'projects', normalizedUuid));
+    console.log('[Firebase] Proyecto compartido ' + normalizedUuid + ' eliminado completamente.');
+  },
+
   /** Obtiene los proyectos compartidos disponibles en Firebase para trabajar desde otro dispositivo. */
   async getCloudProjects(): Promise<any[]> {
     const uid = await ensureAuthenticated();
