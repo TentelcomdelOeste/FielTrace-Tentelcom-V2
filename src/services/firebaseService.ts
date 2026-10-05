@@ -109,46 +109,101 @@ export const firebaseService = {
 
       // Copia limpia sin objetos binarios ni datos pesados de foto
       const cloudPayload = {
+        id: evidence.id ?? null,
         uuid: evidenceUuid,
-        projectId: evidence.projectId,
+        projectId: evidence.projectId ?? null,
         projectUuid,
         projectName: evidence.projectName || '',
+        photoPath: evidence.photoPath || '',
+        photoStoragePath: evidence.photoStoragePath || '',
+        photoUrl: evidence.photoUrl || '',
+
+        category: evidence.category || 'OTROS',
+        categoryLabel: evidence.categoryLabel || 'Otros',
+
+        capturedAt: evidence.capturedAt ? new Date(evidence.capturedAt).toISOString() : null,
         fecha: evidence.fecha || '',
         hora: evidence.hora || '',
-        timestamp: evidence.timestamp || Date.now(),
-        latitude: evidence.latitude || 0,
-        longitude: evidence.longitude || 0,
-        gpsAccuracy: evidence.gpsAccuracy || null,
+        timestamp: evidence.timestamp ?? Date.now(),
+        latitude: evidence.latitude ?? 0,
+        longitude: evidence.longitude ?? 0,
+        gpsAccuracy: evidence.gpsAccuracy ?? null,
         gpsCapturedAt: evidence.gpsCapturedAt ? new Date(evidence.gpsCapturedAt).toISOString() : null,
         ubicacion: evidence.ubicacion || '',
+
+        baseFields: {
+          posteId: evidence.baseFields?.posteId || '',
+          tecnico: evidence.baseFields?.tecnico || '',
+          observaciones: evidence.baseFields?.observaciones || '',
+          materiales: evidence.baseFields?.materiales || ''
+        },
         tecnico: evidence.baseFields?.tecnico || '',
         posteId: evidence.baseFields?.posteId || '',
         observaciones: evidence.baseFields?.observaciones || '',
         materiales: evidence.baseFields?.materiales || '',
         customFields: evidence.customFields || [],
-        photoPath: evidence.photoPath || '',
-        photoStoragePath: evidence.photoStoragePath || '',
-        photoUrl: evidence.photoUrl || '',
-        category: evidence.category || 'OTROS',
-        categoryLabel: evidence.categoryLabel || 'Otros',
+        sharedWhatsApp: evidence.sharedWhatsApp ?? false,
+        locked: evidence.locked ?? false,
+
+        photo: evidence.photo ? {
+          fileName: evidence.photo.fileName || '',
+          uri: evidence.photo.uri || '',
+          mimeType: evidence.photo.mimeType || '',
+          createdAt: evidence.photo.createdAt ? new Date(evidence.photo.createdAt).toISOString() : null
+        } : null,
+
         fiberPairId: evidence.fiberPairId || '',
-        fiberPairNumber: evidence.fiberPairNumber || null,
+        fiberPairNumber: evidence.fiberPairNumber ?? null,
         fiberMeterage: evidence.fiberMeterage ?? null,
         fiberReelNumber: evidence.fiberReelNumber || '',
+        fiberCount: evidence.fiberCount ?? null,
         fiberSide: evidence.fiberSide || null,
+
         reserveId: evidence.reserveId || '',
-        reserveNumber: evidence.reserveNumber || null,
+        reserveNumber: evidence.reserveNumber ?? null,
         reserveSide: evidence.reserveSide || null,
         reserveReelNumber: evidence.reserveReelNumber || '',
         reserveFiberCount: evidence.reserveFiberCount ?? null,
+        reserveMeterage: evidence.reserveMeterage ?? null,
+
         napId: evidence.napId || '',
-        napNumber: evidence.napNumber || null,
+        napNumber: evidence.napNumber ?? null,
         napName: evidence.napName || '',
-        napPhotoNumber: evidence.napPhotoNumber || null,
+        napPhotoNumber: evidence.napPhotoNumber ?? null,
+
+        aceroId: evidence.aceroId || '',
+        aceroNumber: evidence.aceroNumber ?? null,
+        aceroSide: evidence.aceroSide || null,
+        aceroPhotoType: evidence.aceroPhotoType || null,
+        aceroMeterage: evidence.aceroMeterage ?? null,
+
+        desechoId: evidence.desechoId || '',
+        desechoNumber: evidence.desechoNumber ?? null,
+        desechoSide: evidence.desechoSide || null,
+        desechoPhotoType: evidence.desechoPhotoType || null,
+        desechoMeterage: evidence.desechoMeterage ?? null,
+
+        mejoraId: evidence.mejoraId || '',
+        mejoraNumber: evidence.mejoraNumber ?? null,
+        mejoraType: evidence.mejoraType || null,
+        mejoraSide: evidence.mejoraSide || null,
+
+        altaId: evidence.altaId || '',
+        altaNumber: evidence.altaNumber ?? null,
+        altaType: evidence.altaType || null,
+        altaSide: evidence.altaSide || null,
+        altaMeterage: evidence.altaMeterage ?? null,
+        altaReelNumber: evidence.altaReelNumber || '',
+        altaFiberCount: evidence.altaFiberCount ?? null,
+
         createdAt: evidence.createdAt ? new Date(evidence.createdAt).toISOString() : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        syncCreatedAt: evidence.syncCreatedAt ? new Date(evidence.syncCreatedAt).toISOString() : null,
+        syncUpdatedAt: evidence.syncUpdatedAt ? new Date(evidence.syncUpdatedAt).toISOString() : null,
+        lastSyncedAt: new Date().toISOString(),
+        retryCount: evidence.retryCount ?? 0,
         syncStatus: 'synced',
-        schemaVersion: 2
+        schemaVersion: 3
       };
 
       await setDoc(docRef, cloudPayload, { merge: true });
@@ -177,15 +232,49 @@ export const firebaseService = {
       const docRef = doc(db, 'projects', String(projectUuid));
 
       const projectPayload = {
+        id: project.id ?? null,
         uuid: projectUuid,
-        id: project.id || null,
         name: project.name || '',
         client: project.client || '',
         description: project.description || '',
+        type: project.type || '',
+        templateId: project.templateId ?? null,
+
+        showDateTime: project.showDateTime ?? true,
+        dateTimeFormat: project.dateTimeFormat || 'format1',
+        showGps: project.showGps ?? true,
+        showLocation: project.showLocation ?? true,
+        showTech: project.showTech ?? true,
+
         techName: project.techName || '',
+        customFields: project.customFields || [],
+        locationFormat: project.locationFormat || 'completa',
+        customLocationFormat: project.customLocationFormat || {
+          road: false,
+          suburb: false,
+          city: false,
+          state: false
+        },
+
+        allowPdf: project.allowPdf ?? true,
+        allowExcel: project.allowExcel ?? true,
+        overlayPosition: project.overlayPosition || 'top-left',
+        fontSizeScale: project.fontSizeScale || 'medium',
+        fontSizeValue: project.fontSizeValue ?? null,
+        overlayColor: project.overlayColor || '',
+        logoImage: project.logoImage || null,
+        logoPosition: project.logoPosition || null,
+        logoSize: project.logoSize ?? null,
+        logoOpacity: project.logoOpacity ?? null,
+
+        createdAt: project.createdAt ? new Date(project.createdAt).toISOString() : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        syncCreatedAt: project.syncCreatedAt ? new Date(project.syncCreatedAt).toISOString() : null,
+        syncUpdatedAt: project.syncUpdatedAt ? new Date(project.syncUpdatedAt).toISOString() : null,
+        lastSyncedAt: new Date().toISOString(),
+        retryCount: project.retryCount ?? 0,
         syncStatus: 'synced',
-        schemaVersion: 2
+        schemaVersion: 3
       };
 
       await setDoc(docRef, projectPayload, { merge: true });
