@@ -1657,6 +1657,9 @@ export default function App() {
         reserveSide: selectedEvidenceCategory.id === 'RESERVA' ? reserveCaptureDraft?.side : undefined,
         reserveReelNumber: selectedEvidenceCategory.id === 'RESERVA' ? (reserveCaptureDraft?.reelNumber || '').trim() : undefined,
         reserveFiberCount: selectedEvidenceCategory.id === 'RESERVA' ? Number(reserveCaptureDraft?.fiberCount || 0) : undefined,
+        reserveMeterage: selectedEvidenceCategory.id === 'RESERVA' && reserveCaptureDraft?.side !== 'roll'
+          ? Number(String(reserveCaptureDraft?.metraje || '0').replace(',', '.'))
+          : undefined,
         altaId: selectedEvidenceCategory.id === 'ALTAS' ? (altaCaptureDraft?.altaId || '') : undefined,
         altaNumber: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaNumber : undefined,
         altaType: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaType : undefined,
@@ -3296,6 +3299,24 @@ export default function App() {
                    <p className="line-clamp-4 break-words whitespace-pre-wrap">
                      NAP: {napCaptureDraft.napName.toUpperCase()}
                    </p>
+                 )}
+ 
+                 {evidenceCategory === 'RESERVA' && reserveCaptureDraft && (
+                   <>
+                     {reserveCaptureDraft.side === 'roll' ? (
+                       <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                         RESERVA DETALLADO {reserveCaptureDraft.reserveNumber}
+                       </p>
+                     ) : (
+                       <>
+                         <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                           {reserveCaptureDraft.side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'} {reserveCaptureDraft.reserveNumber}: {reserveCaptureDraft.metraje ? reserveCaptureDraft.metraje + ' M' : '—'}
+                         </p>
+                         <p className="line-clamp-4 break-words whitespace-pre-wrap">CARRETE: {reserveCaptureDraft.reelNumber || '—'}</p>
+                         <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {reserveCaptureDraft.fiberCount || '—'}</p>
+                       </>
+                     )}
+                   </>
                  )}
               </div>
             </div>
