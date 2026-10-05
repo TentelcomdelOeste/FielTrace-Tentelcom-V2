@@ -141,6 +141,12 @@ export interface Evidence {
   napName?: string;
   /** Número de fotografía dentro del set del NAP (1 a 9). */
   napPhotoNumber?: number;
+  /** Identificador del set de ACEROS (Foto 1 + Foto 2). */
+  aceroId?: string;
+  /** Número visible del set de ACEROS dentro del proyecto. */
+  aceroNumber?: number;
+  /** Foto dentro del set de ACEROS. */
+  aceroSide?: 'photo1' | 'photo2';
   /** Identificador del set de ALTA (Panorámica + Metraje). */
   altaId?: string;
   /** Número visible del set de ALTA dentro del proyecto. */
