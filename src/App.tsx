@@ -3741,11 +3741,8 @@ export default function App() {
 
       {/* CAMERA VIEW (OPERATIONAL FOCUS) - UNCONSTRAINED FULLSCREEN OVERLAY */}
       {currentStep === 'camera' && selectedProject && (
-        <motion.div 
+        <div
           key="camera"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
           className="fixed inset-0 bg-transparent z-50 flex flex-col pointer-events-auto"
         >
           {/* Category selected from the project checklist */}
@@ -4097,7 +4094,7 @@ export default function App() {
               </button>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       <AnimatePresence>
