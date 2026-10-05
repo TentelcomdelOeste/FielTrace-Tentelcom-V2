@@ -197,7 +197,7 @@ export const cameraService = {
             } else {
               rawLines.push(`PANORÁMICA ALTA ${altaNumber}`);
             }
-            if (altaType) rawLines.push(`TIPO DE ALTA: ${altaType.toUpperCase()}`);
+            if (altaType) rawLines.push(altaType.toUpperCase());
             if (altaType === 'FIBRA DE DESCARTE' || altaType === 'FIBRA DE DESECHO') {
               const reel = String(metadata.altaReelNumber || '').trim();
               const fibers = Number(metadata.altaFiberCount || 0);
