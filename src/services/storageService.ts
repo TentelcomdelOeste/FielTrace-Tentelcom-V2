@@ -543,6 +543,83 @@ export const storageService = {
     return n;
   },
 
+  /**
+   * Importa un proyecto compartido desde Firebase al almacenamiento local.
+   * Conserva el UUID de nube para que nuevas fotos sigan en el mismo proyecto.
+   */
+  async importCloudProject(cloudProject: any, cloudEvidences: any[] = []): Promise<Project> {
+    const cloudUuid = String(cloudProject.uuid || cloudProject.id);
+    const existingProjects = await manager.getAll<Project>(STORE_PROJECTS);
+    const existing = existingProjects.find(project => project.uuid === cloudUuid);
+
+    const toDate = (value: any, fallback = new Date()) => {
+      const date = value ? new Date(value) : fallback;
+      return Number.isNaN(date.getTime()) ? fallback : date;
+    };
+
+    let localProject: Project;
+    if (existing?.id != null) {
+      localProject = {
+        ...existing,
+        ...cloudProject,
+        id: existing.id,
+        uuid: cloudUuid,
+        createdAt: toDate(cloudProject.createdAt, existing.createdAt),
+        updatedAt: toDate(cloudProject.updatedAt, new Date()),
+        syncStatus: 'synced',
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION
+      } as Project;
+      await manager.put(STORE_PROJECTS, localProject);
+    } else {
+      const { id: _remoteId, ...cloudData } = cloudProject;
+      localProject = {
+        ...cloudData,
+        uuid: cloudUuid,
+        createdAt: toDate(cloudProject.createdAt),
+        updatedAt: toDate(cloudProject.updatedAt),
+        syncStatus: 'synced',
+        lastSyncedAt: new Date(),
+        retryCount: 0,
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION
+      } as Project;
+      const localId = await manager.add(STORE_PROJECTS, localProject);
+      localProject = await manager.get<Project>(STORE_PROJECTS, localId);
+    }
+
+    const localEvidences = await manager.getAll<Evidence>(STORE_EVIDENCES);
+    for (const remote of cloudEvidences) {
+      const uuid = String(remote.uuid || remote.id || ('ev_' + Date.now()));
+      const existingEvidence = localEvidences.find(ev => ev.uuid === uuid && ev.projectUuid === cloudUuid);
+      const normalized: any = {
+        ...remote,
+        uuid,
+        projectId: localProject.id,
+        projectUuid: cloudUuid,
+        projectName: remote.projectName || localProject.name || '',
+        createdAt: toDate(remote.createdAt || remote.capturedAt),
+        updatedAt: toDate(remote.updatedAt || remote.createdAt || remote.capturedAt),
+        capturedAt: remote.capturedAt ? toDate(remote.capturedAt) : undefined,
+        gpsCapturedAt: remote.gpsCapturedAt ? toDate(remote.gpsCapturedAt) : undefined,
+        lastSyncedAt: new Date(),
+        syncStatus: 'synced',
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
+        syncError: undefined
+      };
+      delete normalized.id;
+      if (existingEvidence?.id != null) {
+        await manager.put(STORE_EVIDENCES, { ...existingEvidence, ...normalized, id: existingEvidence.id });
+      } else {
+        await manager.add(STORE_EVIDENCES, normalized);
+      }
+    }
+    return localProject;
+  },
+
+  async getCloudProjectEvidences(projectUuid: string): Promise<Evidence[]> {
+    const remoteEvidences = await firebaseService.getCloudProjectEvidences(projectUuid);
+    return remoteEvidences as Evidence[];
+  },
+
   async saveTemplate(template: Template): Promise<number> {
     const uuid = crypto.randomUUID ? crypto.randomUUID() : 'tpl_' + Date.now();
     return manager.add(STORE_TEMPLATES, { ...template, uuid });
