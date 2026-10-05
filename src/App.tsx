@@ -3331,7 +3331,7 @@ export default function App() {
                          : `PANORÁMICA ALTA ${altaCaptureDraft.altaNumber}`}
                      </p>
                      <p className="line-clamp-4 break-words whitespace-pre-wrap">
-                       TIPO DE ALTA: {altaCaptureDraft.altaType}
+                       {altaCaptureDraft.altaType}
                      </p>
                      {(altaCaptureDraft.altaType === 'FIBRA DE DESCARTE' || altaCaptureDraft.altaType === 'FIBRA DE DESECHO') && (
                        <>
