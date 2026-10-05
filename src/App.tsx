@@ -4384,31 +4384,72 @@ export default function App() {
                     return groups.map((group: any[], groupIndex: number) => {
                       const altaNumber = Number(group[0]?.altaNumber || groupIndex + 1);
                       const altaType = group[0]?.altaType || 'ALTA';
+                      const altaId = group[0]?.altaId || '';
                       const hasPanoramic = group.some(ev => ev.altaSide === 'panoramic');
                       const hasMeterage = group.some(ev => ev.altaSide === 'meterage');
+                      const missingSide: 'panoramic' | 'meterage' | null =
+                        !hasPanoramic ? 'panoramic' : !hasMeterage ? 'meterage' : null;
+
                       return (
-                        <div key={group[0]?.altaId || `alta-group-${altaNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                        <div key={altaId || `alta-group-${altaNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
                           <div className="flex items-center justify-between gap-3 px-1 pb-3">
                             <div>
-                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">ALTA {String(altaNumber).padStart(2, '0')}</p>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                ALTA {String(altaNumber).padStart(2, '0')}
+                              </p>
                               <p className="text-[8px] font-bold uppercase text-gray-500 mt-1">{altaType}</p>
-                              <p className={"text-[8px] font-bold uppercase mt-1 " + (hasPanoramic && hasMeterage ? 'text-gray-400' : 'text-amber-600')}>
-                                {hasPanoramic && hasMeterage ? '2/2 FOTOS · SET COMPLETO' : group.length + '/2 FOTOS · FALTA ' + (!hasPanoramic ? 'PANORÁMICA' : 'METRAJE')}
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE')
+                                  : '2/2 FOTOS · SET COMPLETO'}
                               </p>
                             </div>
                           </div>
+
                           <div className="grid grid-cols-2 gap-3">
                             {group.map((ev: any, index: number) => (
-                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                              <button
+                                key={ev.id || ev.uuid || index}
+                                type="button"
+                                onClick={() => setViewingEvidence(ev)}
+                                className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
+                              >
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
                                   <img src={ev.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">{ev.altaSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}</p>
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.altaSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                                  </p>
                                   <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('ALTAS');
+                                  setAltaCaptureDraft({
+                                    altaId,
+                                    altaNumber,
+                                    altaType,
+                                    side: missingSide
+                                  });
+                                  setShowAltaCaptureModal(true);
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
