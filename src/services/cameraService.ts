@@ -187,6 +187,22 @@ export const cameraService = {
             }
           }
 
+          if (metadata.category === 'RESERVA') {
+            const reserveNumber = metadata.reserveNumber ?? '';
+            const side = metadata.reserveSide;
+            if (side === 'roll') {
+              rawLines.push(`RESERVA DETALLADO ${reserveNumber}`);
+            } else {
+              const label = side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL';
+              const meterage = Number(metadata.reserveMeterage || 0);
+              rawLines.push(`${label} ${reserveNumber}: ${meterage > 0 ? `${meterage} M` : '—'}`);
+              const reel = String(metadata.reserveReelNumber || '').trim();
+              const fibers = Number(metadata.reserveFiberCount || 0);
+              if (reel) rawLines.push(`CARRETE: ${reel.toUpperCase()}`);
+              if (fibers > 0) rawLines.push(`CANTIDAD DE FIBRAS: ${fibers}`);
+            }
+          }
+
           if (metadata.category === 'NAPS' && String(metadata.napName || '').trim()) {
             rawLines.push(`NAP: ${String(metadata.napName).trim().toUpperCase()}`);
           }
