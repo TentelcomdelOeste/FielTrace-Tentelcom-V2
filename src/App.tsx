@@ -261,6 +261,8 @@ export default function App() {
   const [showAltaCaptureModal, setShowAltaCaptureModal] = useState(false);
   const [altaPromptMode, setAltaPromptMode] = useState<'type' | 'meterage' | null>(null);
   const [altaMeterageDraft, setAltaMeterageDraft] = useState('');
+  const [altaReelDraft, setAltaReelDraft] = useState('');
+  const [altaFiberCountDraft, setAltaFiberCountDraft] = useState('');
   const [aceroCaptureDraft, setAceroCaptureDraft] = useState<{
     aceroId: string;
     aceroNumber: number;
@@ -1680,6 +1682,12 @@ export default function App() {
         altaSide: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.side : undefined,
         altaMeterage: selectedEvidenceCategory.id === 'ALTAS' && altaCaptureDraft?.side === 'meterage'
           ? Number(altaMeterageDraft || 0)
+          : undefined,
+        altaReelNumber: selectedEvidenceCategory.id === 'ALTAS' && (altaCaptureDraft?.altaType === 'FIBRA DE DESCARTE' || altaCaptureDraft?.altaType === 'FIBRA DE DESECHO')
+          ? altaReelDraft.trim() || undefined
+          : undefined,
+        altaFiberCount: selectedEvidenceCategory.id === 'ALTAS' && (altaCaptureDraft?.altaType === 'FIBRA DE DESCARTE' || altaCaptureDraft?.altaType === 'FIBRA DE DESECHO')
+          ? Number(altaFiberCountDraft || 0) || undefined
           : undefined,
         aceroId: selectedEvidenceCategory.id === 'ACEROS' ? (aceroCaptureDraft?.aceroId || '') : undefined,
         aceroNumber: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.aceroNumber : undefined,
@@ -3325,6 +3333,16 @@ export default function App() {
                      <p className="line-clamp-4 break-words whitespace-pre-wrap">
                        TIPO DE ALTA: {altaCaptureDraft.altaType}
                      </p>
+                     {(altaCaptureDraft.altaType === 'FIBRA DE DESCARTE' || altaCaptureDraft.altaType === 'FIBRA DE DESECHO') && (
+                       <>
+                         {altaReelDraft.trim() && (
+                           <p className="line-clamp-4 break-words whitespace-pre-wrap">CARRETE: {altaReelDraft}</p>
+                         )}
+                         {altaFiberCountDraft && (
+                           <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {altaFiberCountDraft}</p>
+                         )}
+                       </>
+                     )}
                    </>
                  )}
 
@@ -4167,6 +4185,8 @@ export default function App() {
                             side: group.hasPanoramic ? 'meterage' : 'panoramic'
                           });
                           setAltaMeterageDraft('');
+                          setAltaReelDraft('');
+                          setAltaFiberCountDraft('');
                           setAltaPromptMode('type');
                         } else {
                           const usedNumbers = evidences
@@ -4184,6 +4204,8 @@ export default function App() {
                             side: 'panoramic'
                           });
                           setAltaMeterageDraft('');
+                          setAltaReelDraft('');
+                          setAltaFiberCountDraft('');
                           setAltaPromptMode('type');
                         }
                       }}
@@ -4263,6 +4285,35 @@ export default function App() {
                       />
                       <span className="text-sm font-black text-gray-500">M</span>
                     </div>
+
+                    {(altaCaptureDraft.altaType === 'FIBRA DE DESCARTE' || altaCaptureDraft.altaType === 'FIBRA DE DESECHO') && (
+                      <div className="mt-4 space-y-3">
+                        <div>
+                          <p className="text-[9px] font-black uppercase text-gray-500">Número de carrete <span className="text-gray-400">(opcional)</span></p>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={altaReelDraft}
+                            onChange={(e) => setAltaReelDraft(e.target.value)}
+                            placeholder="Ej. 123456"
+                            className="w-full mt-1.5 px-4 py-3 rounded-xl border border-gray-200 text-sm font-black outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-black uppercase text-gray-500">Cantidad de fibras <span className="text-gray-400">(opcional)</span></p>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            inputMode="numeric"
+                            value={altaFiberCountDraft}
+                            onChange={(e) => setAltaFiberCountDraft(e.target.value)}
+                            placeholder="Ej. 48"
+                            className="w-full mt-1.5 px-4 py-3 rounded-xl border border-gray-200 text-sm font-black outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -4286,6 +4337,8 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setAltaMeterageDraft('');
+                      setAltaReelDraft('');
+                      setAltaFiberCountDraft('');
                       setAltaPromptMode('type');
                     }}
                     className="w-full py-3 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
