@@ -5835,7 +5835,7 @@ export default function App() {
                                       side: 'initial',
                                       pairId,
                                       pairNumber,
-
+                                      metraje: '',
                                       reelNumber: '',
                                       fiberCount: ''
                                     });
@@ -5851,7 +5851,7 @@ export default function App() {
                                       side: 'final',
                                       pairId,
                                       pairNumber,
-
+                                      metraje: '',
                                       reelNumber: initial.fiberReelNumber || '',
                                       fiberCount: String(initial.fiberCount || '')
                                     });
