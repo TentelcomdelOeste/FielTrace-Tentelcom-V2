@@ -16,7 +16,7 @@ const STORE_EVIDENCES = 'evidences';
 const STORE_PHOTOS = 'photos'; // Web preview fallback only
 const STORE_TEMPLATES = 'templates';
 const STORE_SYNC_QUEUE = 'syncQueue';
-const CURRENT_SYNC_SCHEMA_VERSION = 2;
+const CURRENT_SYNC_SCHEMA_VERSION = 3;
 
 // Evita ciclos de sincronización concurrentes al iniciar la app y al recuperar conexión.
 let syncInProgress = false;
@@ -301,8 +301,9 @@ export const storageService = {
   },
 
   /**
-   * Sincroniza proyectos y evidencias locales. Los registros antiguos sin estado
-   * de sincronización también entran aquí. Las fotos nunca se suben.
+   * Sincroniza proyectos y evidencias locales. Los registros antiguos y los
+   * registros de versiones anteriores también entran aquí. Las fotos se suben
+   * primero a Firebase Storage cuando existe una copia local pendiente.
    */
   async syncAllLocalData(): Promise<{ projects: number; evidences: number }> {
     if (!navigator.onLine || syncInProgress) return { projects: 0, evidences: 0 };
