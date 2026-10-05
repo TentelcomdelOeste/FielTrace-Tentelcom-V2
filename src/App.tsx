@@ -3181,7 +3181,7 @@ export default function App() {
           className="fixed inset-0 bg-transparent z-50 flex flex-col pointer-events-auto"
         >
           {/* Category selected from the project checklist */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="absolute top-1 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
             <div className="bg-black/25 backdrop-blur-md border border-white/10 rounded-lg px-2.5 py-1 shadow-sm">
               <p className="text-[8px] font-semibold text-white/75 whitespace-nowrap">
                 Evidencia: {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
