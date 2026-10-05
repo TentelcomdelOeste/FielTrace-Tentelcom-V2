@@ -468,11 +468,16 @@ export default function App() {
       const startWebCamera = async () => {
         const stopExistingStream = () => {
           const existing = webCameraStreamRef.current;
-          if (existing) existing.getTracks().forEach(track => track.stop());
+          if (existing) {
+            existing.getTracks().forEach(track => {
+              try { track.stop(); } catch {}
+            });
+          }
           webCameraStreamRef.current = null;
-          if (webCameraVideoRef.current) {
-            webCameraVideoRef.current.pause();
-            webCameraVideoRef.current.srcObject = null;
+          const currentVideo = webCameraVideoRef.current;
+          if (currentVideo) {
+            try { currentVideo.pause(); } catch {}
+            currentVideo.srcObject = null;
           }
         };
 
@@ -482,22 +487,22 @@ export default function App() {
 
           stopExistingStream();
 
-          const preferredConstraints: MediaStreamConstraints = {
-            video: {
-              facingMode: { ideal: cameraFacing === 'rear' ? 'environment' : 'user' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 }
-            },
-            audio: false
-          };
-
+          // Mantener el flujo web sencillo y compatible con Brave/Chrome Android.
+          // Las restricciones "ideal" no deben impedir que el preview entregue frames.
           let stream: MediaStream;
           try {
-            stream = await navigator.mediaDevices.getUserMedia(preferredConstraints);
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: cameraFacing === 'rear' ? { ideal: 'environment' } : { ideal: 'user' },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              },
+              audio: false
+            });
           } catch (firstError: any) {
             const name = String(firstError?.name || '');
-            if (!['OverconstrainedError', 'NotFoundError'].includes(name)) throw firstError;
-            console.warn('[WebCamera] preferred constraints failed, retrying with basic video:', firstError);
+            if (!['OverconstrainedError', 'NotFoundError', 'AbortError'].includes(name)) throw firstError;
+            console.warn('[WebCamera] retrying with basic video:', firstError);
             stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
           }
 
@@ -507,51 +512,58 @@ export default function App() {
           }
 
           const tracks = stream.getVideoTracks();
-          if (!tracks.length) {
+          if (!tracks.length || tracks[0].readyState !== 'live') {
             stream.getTracks().forEach(track => track.stop());
-            throw new Error('NO_VIDEO_TRACK');
+            throw new Error('NO_LIVE_VIDEO_TRACK');
           }
 
           webCameraStreamRef.current = stream;
-          const video = webCameraVideoRef.current;
-          if (!video) {
-            stream.getTracks().forEach(track => track.stop());
-            webCameraStreamRef.current = null;
-            throw new Error('VIDEO_ELEMENT_NOT_READY');
-          }
 
-          video.srcObject = stream;
+          // El <video> ya está montado porque este efecto corre después del render.
+          const video = webCameraVideoRef.current;
+          if (!video) throw new Error('VIDEO_ELEMENT_NOT_READY');
+
+          video.autoplay = true;
           video.muted = true;
           video.defaultMuted = true;
           video.playsInline = true;
-          video.autoplay = true;
-          video.setAttribute('playsinline', 'true');
           video.setAttribute('autoplay', 'true');
+          video.setAttribute('muted', 'true');
+          video.setAttribute('playsinline', 'true');
+          video.srcObject = stream;
 
-          await new Promise<void>((resolve, reject) => {
-            let settled = false;
-            const finish = (error?: Error) => {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timeout);
-              video.removeEventListener('loadedmetadata', onReady);
-              video.removeEventListener('canplay', onReady);
-              if (error) reject(error);
-              else resolve();
+          // Forzar el arranque del elemento en navegadores móviles.
+          try { video.load(); } catch {}
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              video.removeEventListener('loadedmetadata', finish);
+              video.removeEventListener('canplay', finish);
+              resolve();
             };
-            const onReady = () => {
-              if (video.videoWidth > 0 && video.videoHeight > 0) finish();
-            };
-            const timeout = window.setTimeout(() => finish(new Error('VIDEO_METADATA_TIMEOUT')), 5000);
-            video.addEventListener('loadedmetadata', onReady);
-            video.addEventListener('canplay', onReady);
-            if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) onReady();
+            video.addEventListener('loadedmetadata', finish, { once: true });
+            video.addEventListener('canplay', finish, { once: true });
+            if (video.readyState >= 2 && video.videoWidth > 0) finish();
+            window.setTimeout(finish, 1200);
           });
 
-          await video.play();
+          if (!active) return;
+
+          try {
+            await video.play();
+          } catch (playError) {
+            console.warn('[WebCamera] play() retry:', playError);
+            await new Promise(resolve => window.setTimeout(resolve, 150));
+            await video.play();
+          }
 
           if (!active) return;
-          if (video.videoWidth <= 0 || video.videoHeight <= 0) throw new Error('VIDEO_NO_FRAMES');
+
+          // Algunas versiones de Chromium necesitan un frame adicional después de play().
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+          if (video.videoWidth <= 0 || video.videoHeight <= 0 || tracks[0].readyState !== 'live') {
+            throw new Error('VIDEO_NO_FRAMES');
+          }
 
           setWebCameraError(null);
           console.log('[WebCamera] ready:', {
@@ -573,10 +585,10 @@ export default function App() {
                 ? 'Este navegador no permite acceso a la cámara desde esta página.'
                 : error?.message === 'VIDEO_ELEMENT_NOT_READY'
                   ? 'La vista de cámara todavía no está lista. Intente nuevamente.'
-                  : error?.message === 'VIDEO_METADATA_TIMEOUT' || error?.message === 'VIDEO_NO_FRAMES'
-                    ? 'El navegador abrió la cámara, pero no está entregando imagen.'
+                  : error?.message === 'VIDEO_NO_FRAMES' || error?.message === 'NO_LIVE_VIDEO_TRACK'
+                    ? 'La cámara abrió, pero el navegador no está entregando imagen.'
                     : name === 'NotAllowedError' || name === 'SecurityError'
-                      ? 'El permiso de cámara está bloqueado. Permita la cámara para localhost y pulse REINTENTAR.'
+                      ? 'El permiso de cámara está bloqueado. Permita la cámara para este sitio y pulse REINTENTAR.'
                       : name === 'NotFoundError'
                         ? 'No se encontró una cámara disponible en el navegador.'
                         : name === 'NotReadableError'
@@ -594,10 +606,12 @@ export default function App() {
       return () => {
         active = false;
         const stream = webCameraStreamRef.current;
-        if (stream) stream.getTracks().forEach(track => track.stop());
+        if (stream) stream.getTracks().forEach(track => {
+          try { track.stop(); } catch {}
+        });
         webCameraStreamRef.current = null;
         if (webCameraVideoRef.current) {
-          webCameraVideoRef.current.pause();
+          try { webCameraVideoRef.current.pause(); } catch {}
           webCameraVideoRef.current.srcObject = null;
         }
       };
