@@ -816,16 +816,31 @@ export default function App() {
 
       if (napGroups.length > 0) {
         const nap = napGroups[0];
-        setNapCaptureDraft({ napId: nap.napId, napNumber: nap.napNumber, napName: nap.napName, photoNumber: nap.count + 1, remainingPhotos: 9 - nap.count });
+        const draft = {
+          napId: nap.napId,
+          napNumber: nap.napNumber,
+          napName: nap.napName,
+          photoNumber: nap.count + 1,
+          remainingPhotos: 9 - nap.count
+        };
+        setNapCaptureDraft(draft);
+
+        // Si el NAP ya tiene nombre guardado, no volvemos a pedirlo.
+        // Al pulsar TOMAR FOTO se entra directamente a la cámara.
+        if (nap.napName.trim()) {
+          setShowNapCaptureModal(false);
+          setCurrentStep('camera');
+        } else {
+          setShowNapCaptureModal(true);
+        }
       } else {
         const usedNumbers = evidences.filter(ev => ev.category === 'NAPS' && ev.napNumber != null)
           .map(ev => Number(ev.napNumber)).filter(Number.isFinite);
         const napNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
         const napId = crypto.randomUUID ? crypto.randomUUID() : `nap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         setNapCaptureDraft({ napId, napNumber, napName: '', photoNumber: 1, remainingPhotos: 9 });
+        setShowNapCaptureModal(true);
       }
-
-      setShowNapCaptureModal(true);
       return;
     }
 
@@ -3263,6 +3278,12 @@ export default function App() {
                      {aceroCaptureDraft.side === 'photo2'
                        ? `METRAJE ${aceroCaptureDraft.aceroNumber}: ${aceroMeterageDraft ? `${aceroMeterageDraft} M` : '—'}`
                        : `PANORÁMICA ACERO ${aceroCaptureDraft.aceroNumber}`}
+                   </p>
+                 )}
+
+                 {evidenceCategory === 'NAPS' && napCaptureDraft?.napName?.trim() && (
+                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                     NAP: {napCaptureDraft.napName.toUpperCase()}
                    </p>
                  )}
               </div>
