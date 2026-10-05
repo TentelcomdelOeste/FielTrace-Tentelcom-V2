@@ -3346,10 +3346,17 @@ export default function App() {
                    </>
                  )}
 
-                 {evidenceCategory === 'NAPS' && napCaptureDraft?.napName?.trim() && (
-                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
-                     NAP: {napCaptureDraft.napName.toUpperCase()}
-                   </p>
+                 {evidenceCategory === 'NAPS' && napCaptureDraft && (
+                   <>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                       FOTO {napCaptureDraft.photoNumber}/9
+                     </p>
+                     {napCaptureDraft.napName?.trim() && (
+                       <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                         NAP: {napCaptureDraft.napName.toUpperCase()}
+                       </p>
+                     )}
+                   </>
                  )}
  
                  {evidenceCategory === 'RESERVA' && reserveCaptureDraft && (
@@ -4973,31 +4980,71 @@ export default function App() {
                           </div>
 
                           <div className="grid grid-cols-2 gap-3">
-                            {group.map((ev: any, index: number) => (
-                              <button
-                                key={ev.id || ev.uuid || index}
-                                type="button"
-                                onClick={() => setViewingEvidence(ev)}
-                                className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
-                              >
-                                <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <img
-                                    src={ev.photoUrl}
-                                    alt={ev.napName || 'NAP'}
-                                    className="w-full h-full object-cover"
-                                    loading="lazy"
-                                  />
-                                </div>
-                                <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">
-                                    FOTO {ev.napPhotoNumber || index + 1}/9
-                                  </p>
-                                  <p className="text-[8px] font-bold text-gray-400 mt-1">
-                                    {ev.fecha} {ev.hora || ''}
-                                  </p>
-                                </div>
-                              </button>
-                            ))}
+                            {Array.from({ length: 9 }, (_, slotIndex) => {
+                              const photoNumber = slotIndex + 1;
+                              const ev = group.find((item: any) => Number(item.napPhotoNumber) === photoNumber);
+
+                              if (ev) {
+                                return (
+                                  <button
+                                    key={ev.id || ev.uuid || `nap-photo-${photoNumber}`}
+                                    type="button"
+                                    onClick={() => setViewingEvidence(ev)}
+                                    className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
+                                  >
+                                    <div className="aspect-[4/5] bg-black overflow-hidden">
+                                      <img
+                                        src={ev.photoUrl}
+                                        alt={ev.napName || 'NAP'}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                      />
+                                    </div>
+                                    <div className="p-2.5">
+                                      <p className="text-[9px] font-black uppercase text-gray-900">
+                                        FOTO {photoNumber}/9
+                                      </p>
+                                      <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                        {ev.fecha} {ev.hora || ''}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  key={`nap-missing-${photoNumber}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const napId = group[0]?.napId || '';
+                                    const napNumber = Number(group[0]?.napNumber || groupIndex + 1);
+                                    const napName = group[0]?.napName || '';
+                                    setViewingEvidence(null);
+                                    setShowStorageEvidenceViewer(false);
+                                    setStorageEvidenceCategory(null);
+                                    setEvidenceCategory('NAPS');
+                                    // Captura puntual: al volver de la cámara se regresa
+                                    // al visor después de completar únicamente esta foto.
+                                    setNapCaptureDraft({
+                                      napId,
+                                      napNumber,
+                                      napName,
+                                      photoNumber,
+                                      remainingPhotos: 1
+                                    });
+                                    setShowNapCaptureModal(false);
+                                    setCurrentStep('camera');
+                                  }}
+                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                                >
+                                  <CameraIcon className="w-8 h-8" />
+                                  <span className="text-[9px] font-black uppercase text-center px-2">
+                                    TOMAR FOTO<br />FOTO {photoNumber}/9
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       );
