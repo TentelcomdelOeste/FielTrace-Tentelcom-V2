@@ -290,6 +290,20 @@ export default function App() {
   const [showDesechoCaptureModal, setShowDesechoCaptureModal] = useState(false);
   const [desechoPromptMode, setDesechoPromptMode] = useState<'type' | 'meterage' | null>(null);
   const [desechoMeterageDraft, setDesechoMeterageDraft] = useState('');
+  const [mejoraCaptureDraft, setMejoraCaptureDraft] = useState<{
+    mejoraId: string;
+    mejoraNumber: number;
+    mejoraType: 'SUBIDA DE BANDAS' | 'PODAS' | 'SUBIDA DE RETENIDAS';
+    side: 'before' | 'after';
+  } | null>(null);
+  const [mejoraSetChoice, setMejoraSetChoice] = useState<{
+    mejoraId: string;
+    mejoraNumber: number;
+    mejoraType: 'SUBIDA DE BANDAS' | 'PODAS' | 'SUBIDA DE RETENIDAS';
+    missingSide: 'before' | 'after';
+  } | null>(null);
+  const [showMejoraCaptureModal, setShowMejoraCaptureModal] = useState(false);
+  const [mejoraPromptMode, setMejoraPromptMode] = useState<'type' | 'side' | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
