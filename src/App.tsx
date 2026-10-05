@@ -212,6 +212,7 @@ import { Capacitor } from '@capacitor/core';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
+import { firebaseService } from './services/firebaseService';
 import { exportService } from './services/exportService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
@@ -221,6 +222,11 @@ import { EVIDENCE_CATEGORIES, type EvidenceCategory, type Project, type Evidence
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [cloudProjects, setCloudProjects] = useState<any[]>([]);
+  const [cloudSearchTerm, setCloudSearchTerm] = useState("");
+  const [showCloudProjects, setShowCloudProjects] = useState(false);
+  const [cloudProjectsLoading, setCloudProjectsLoading] = useState(false);
+  const [cloudImportingUuid, setCloudImportingUuid] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -819,6 +825,44 @@ export default function App() {
     const evs = await storageService.getEvidencesByProject(p.id!);
     setEvidences(evs);
     setCurrentStep('history');
+  };
+
+  const openCloudProjects = async () => {
+    setShowCloudProjects(true);
+    setCloudProjectsLoading(true);
+    try {
+      const remoteProjects = await firebaseService.getCloudProjects();
+      setCloudProjects(remoteProjects);
+    } catch (error) {
+      console.error('[Cloud Projects] Error:', error);
+      alert('No se pudieron cargar los proyectos compartidos desde Firebase.');
+    } finally {
+      setCloudProjectsLoading(false);
+    }
+  };
+
+  const importAndOpenCloudProject = async (cloudProject: any) => {
+    const uuid = String(cloudProject.uuid || cloudProject.id);
+    setCloudImportingUuid(uuid);
+    try {
+      const remoteEvidences = await firebaseService.getCloudProjectEvidences(uuid);
+      const localProject = await storageService.importCloudProject(cloudProject, remoteEvidences);
+      const evs = await storageService.getEvidencesByProject(localProject.id!);
+      setProjects(prev => {
+        const without = prev.filter(p => p.uuid !== localProject.uuid);
+        return [localProject, ...without];
+      });
+      setSelectedProject(localProject);
+      setEvidences(evs);
+      setShowCloudProjects(false);
+      setCloudSearchTerm('');
+      setCurrentStep('history');
+    } catch (error) {
+      console.error('[Cloud Projects] Error importando:', error);
+      alert('No se pudo abrir el proyecto compartido.');
+    } finally {
+      setCloudImportingUuid(null);
+    }
   };
 
   const isFiberCategory = (category: EvidenceCategory) =>
@@ -2453,7 +2497,16 @@ export default function App() {
 
                 <div className="space-y-5">
                   <div className="flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-2">
                     <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Proyectos Recientes</span>
+                    <button
+                      type="button"
+                      onClick={() => { void openCloudProjects(); }}
+                      className="text-blue-600 font-black text-[9px] uppercase tracking-tight bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-xl"
+                    >
+                      Proyectos compartidos
+                    </button>
+                  </div>
                     <div className="flex items-center gap-1">
                       {!projectSelectMode ? (
                         <>
@@ -5529,6 +5582,99 @@ export default function App() {
                   </button>
                 </>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showCloudProjects && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[190] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-5">
+            <motion.div
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              className="w-full max-w-xl max-h-[88vh] bg-white rounded-t-[2rem] sm:rounded-[2rem] overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="flex items-center justify-between px-5 py-5 border-b border-gray-100">
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-tight">Proyectos compartidos</h2>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mt-1">Proyectos disponibles en Firebase</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCloudProjects(false)}
+                  className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-4 border-b border-gray-100">
+                <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-4 py-3 rounded-2xl">
+                  <Search className="w-4 h-4 text-gray-400" />
+                  <input
+                    value={cloudSearchTerm}
+                    onChange={e => setCloudSearchTerm(e.target.value)}
+                    placeholder="BUSCAR PROYECTO O CLIENTE..."
+                    className="flex-1 bg-transparent outline-none text-xs font-black uppercase"
+                  />
+                  {cloudSearchTerm && (
+                    <button type="button" onClick={() => setCloudSearchTerm('')}>
+                      <X className="w-4 h-4 text-gray-400" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {cloudProjectsLoading ? (
+                  <div className="py-16 text-center">
+                    <RefreshCcw className="w-7 h-7 mx-auto text-blue-500 animate-spin mb-3" />
+                    <p className="text-[10px] font-black uppercase text-gray-400">Cargando desde Firebase...</p>
+                  </div>
+                ) : cloudProjects.filter((p: any) => {
+                  const term = cloudSearchTerm.toLowerCase().trim();
+                  if (!term) return true;
+                  return String(p.name || '').toLowerCase().includes(term) ||
+                    String(p.client || '').toLowerCase().includes(term) ||
+                    String(p.techName || '').toLowerCase().includes(term);
+                }).length === 0 ? (
+                  <div className="py-16 text-center">
+                    <CloudUpload className="w-9 h-9 mx-auto text-gray-300 mb-3" />
+                    <p className="text-[11px] font-black uppercase text-gray-500">No hay proyectos compartidos</p>
+                  </div>
+                ) : (
+                  cloudProjects
+                    .filter((p: any) => {
+                      const term = cloudSearchTerm.toLowerCase().trim();
+                      if (!term) return true;
+                      return String(p.name || '').toLowerCase().includes(term) ||
+                        String(p.client || '').toLowerCase().includes(term) ||
+                        String(p.techName || '').toLowerCase().includes(term);
+                    })
+                    .map((p: any) => {
+                      const uuid = String(p.uuid || p.id);
+                      const importing = cloudImportingUuid === uuid;
+                      return (
+                        <button
+                          key={uuid}
+                          type="button"
+                          disabled={!!cloudImportingUuid}
+                          onClick={() => { void importAndOpenCloudProject(p); }}
+                          className="w-full p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between text-left shadow-sm active:scale-[0.99] disabled:opacity-60"
+                        >
+                          <div className="min-w-0 pr-3">
+                            <p className="text-[13px] font-black uppercase text-gray-950 truncate">{p.name || 'Proyecto sin nombre'}</p>
+                            <p className="text-[9px] font-bold uppercase text-gray-400 truncate">{p.client || 'Sin cliente'}</p>
+                            <p className="text-[8px] font-bold uppercase text-gray-300 mt-1">Actualizado: {p.updatedAt ? new Date(p.updatedAt).toLocaleString('es-CR') : '—'}</p>
+                          </div>
+                          {importing ? (
+                            <RefreshCcw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-5 h-5 text-blue-600 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}
