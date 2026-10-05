@@ -3316,11 +3316,16 @@ export default function App() {
                  )}
 
                  {evidenceCategory === 'ALTAS' && altaCaptureDraft?.altaId && (
-                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
-                     {altaCaptureDraft.side === 'meterage'
-                       ? `METRAJE ALTA ${altaCaptureDraft.altaNumber}: ${altaMeterageDraft ? `${altaMeterageDraft} M` : '—'}`
-                       : `PANORÁMICA ALTA ${altaCaptureDraft.altaNumber}`}
-                   </p>
+                   <>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                       {altaCaptureDraft.side === 'meterage'
+                         ? `METRAJE ALTA ${altaCaptureDraft.altaNumber}: ${altaMeterageDraft ? `${altaMeterageDraft} M` : '—'}`
+                         : `PANORÁMICA ALTA ${altaCaptureDraft.altaNumber}`}
+                     </p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                       TIPO DE ALTA: {altaCaptureDraft.altaType}
+                     </p>
+                   </>
                  )}
 
                  {evidenceCategory === 'NAPS' && napCaptureDraft?.napName?.trim() && (
