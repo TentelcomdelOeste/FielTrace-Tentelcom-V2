@@ -161,6 +161,8 @@ export interface Evidence {
   altaType?: 'FIBRA DE DESCARTE' | 'FIBRA DE DESECHO' | 'ALTAS EN ACERO';
   /** Parte del set de ALTA documentada. */
   altaSide?: 'panoramic' | 'meterage';
+  /** Metraje ingresado cuando la foto de ALTA es de tipo METRAJE. */
+  altaMeterage?: number;
 
   photo?: {
     fileName: string;
