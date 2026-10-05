@@ -5949,6 +5949,98 @@ export default function App() {
                         </div>
                       );
                     });
+                  })() : storageEvidenceCategory === 'MEJORAS' ? (() => {
+                    const mejoraPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MEJORAS' && ev.mejoraId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.mejoraNumber || 0) - Number(b.mejoraNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { before: 1, after: 2 };
+                        return (sideOrder[a.mejoraSide || ''] || 99) - (sideOrder[b.mejoraSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      mejoraPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.mejoraId || `legacy-mejora-${ev.mejoraNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    const getMejoraLabel = (type: string) =>
+                      type === 'SUBIDA DE BANDAS' ? 'SUBIDA DE BANDA'
+                      : type === 'PODAS' ? 'PODA'
+                      : type === 'SUBIDA DE RETENIDAS' ? 'SUBIDA DE RETENIDA'
+                      : type;
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const mejoraNumber = Number(group[0]?.mejoraNumber || groupIndex + 1);
+                      const mejoraId = group[0]?.mejoraId || '';
+                      const mejoraType = group[0]?.mejoraType || 'MEJORA';
+                      const hasBefore = group.some(ev => ev.mejoraSide === 'before');
+                      const hasAfter = group.some(ev => ev.mejoraSide === 'after');
+                      const missingSide: 'before' | 'after' | null =
+                        !hasBefore ? 'before' : !hasAfter ? 'after' : null;
+
+                      return (
+                        <div key={mejoraId || `mejora-group-${mejoraNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                {getMejoraLabel(mejoraType)} {String(mejoraNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'before' ? 'ANTES' : 'DESPUÉS')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {getMejoraLabel(ev.mejoraType || mejoraType)} · {ev.mejoraSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('MEJORAS');
+                                  setMejoraCaptureDraft({
+                                    mejoraId,
+                                    mejoraNumber,
+                                    mejoraType,
+                                    side: missingSide
+                                  });
+                                  setCurrentStep('camera');
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
                   })() : storageEvidenceCategory === 'RESERVA' ? (() => {
                     const reservationPhotos = evidences
                       .filter((ev: any) => !!ev.photoUrl && ev.category === 'RESERVA' && ev.reserveId)
