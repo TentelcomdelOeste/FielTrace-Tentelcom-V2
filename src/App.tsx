@@ -263,6 +263,11 @@ export default function App() {
     aceroNumber: number;
     side: 'photo1' | 'photo2';
   } | null>(null);
+  const [aceroSetChoice, setAceroSetChoice] = useState<{
+    aceroId: string;
+    aceroNumber: number;
+    missingSide: 'photo1' | 'photo2';
+  } | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -857,30 +862,32 @@ export default function App() {
         .filter(group => !(group.hasPhoto1 && group.hasPhoto2))
         .sort((a, b) => a.aceroNumber - b.aceroNumber);
 
+      // Si existe un set incompleto, preguntamos antes de decidir si se completa
+      // o si el usuario quiere iniciar un ACERO completamente nuevo.
       if (aceroGroups.length > 0) {
         const group = aceroGroups[0];
-        setAceroCaptureDraft({
+        setAceroSetChoice({
           aceroId: group.aceroId,
           aceroNumber: group.aceroNumber,
-          side: group.hasPhoto1 ? 'photo2' : 'photo1'
+          missingSide: group.hasPhoto1 ? 'photo2' : 'photo1'
         });
-      } else {
-        const usedNumbers = evidences
-          .filter(ev => ev.category === 'ACEROS' && ev.aceroNumber != null)
-          .map(ev => Number(ev.aceroNumber))
-          .filter(Number.isFinite);
-        const aceroNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-        const aceroId = crypto.randomUUID
-          ? crypto.randomUUID()
-          : `acero_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        setAceroCaptureDraft({
-          aceroId,
-          aceroNumber,
-          side: 'photo1'
-        });
+        return;
       }
 
+      const usedNumbers = evidences
+        .filter(ev => ev.category === 'ACEROS' && ev.aceroNumber != null)
+        .map(ev => Number(ev.aceroNumber))
+        .filter(Number.isFinite);
+      const aceroNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+      const aceroId = crypto.randomUUID
+        ? crypto.randomUUID()
+        : `acero_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      setAceroCaptureDraft({
+        aceroId,
+        aceroNumber,
+        side: 'photo1'
+      });
       setCurrentStep('camera');
       return;
     }
@@ -4088,6 +4095,75 @@ export default function App() {
               >
                 CANCELAR
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {aceroSetChoice && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[230] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="text-center mb-5">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+                  <CameraIcon className="w-7 h-7 text-blue-600" />
+                </div>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-950">SET DE ACEROS INCOMPLETO</h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  ACERO {String(aceroSetChoice.aceroNumber).padStart(2, '0')} tiene 1 de 2 fotografías.
+                </p>
+                <p className="text-[10px] font-bold uppercase text-amber-600 mt-1">
+                  FALTA {aceroSetChoice.missingSide === 'photo1' ? 'FOTO 1' : 'FOTO 2'}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const choice = aceroSetChoice;
+                    setAceroSetChoice(null);
+                    setEvidenceCategory('ACEROS');
+                    setAceroCaptureDraft({
+                      aceroId: choice.aceroId,
+                      aceroNumber: choice.aceroNumber,
+                      side: choice.missingSide
+                    });
+                    setCurrentStep('camera');
+                  }}
+                  className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                >
+                  COMPLETAR ACERO {String(aceroSetChoice.aceroNumber).padStart(2, '0')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAceroSetChoice(null);
+                    setEvidenceCategory('ACEROS');
+                    const usedNumbers = evidences
+                      .filter(ev => ev.category === 'ACEROS' && ev.aceroNumber != null)
+                      .map(ev => Number(ev.aceroNumber))
+                      .filter(Number.isFinite);
+                    const aceroNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+                    const aceroId = crypto.randomUUID
+                      ? crypto.randomUUID()
+                      : `acero_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+                    setAceroCaptureDraft({
+                      aceroId,
+                      aceroNumber,
+                      side: 'photo1'
+                    });
+                    setCurrentStep('camera');
+                  }}
+                  className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
+                >
+                  TOMAR FOTO DE NUEVO ACERO
+                </button>
+
+                <button type="button" onClick={() => setAceroSetChoice(null)} className="w-full py-3 text-[10px] font-black uppercase text-gray-500">
+                  CANCELAR
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
