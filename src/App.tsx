@@ -1999,10 +1999,13 @@ export default function App() {
             .map(side => side === 'initial' ? 'INICIAL' : side === 'final' ? 'FINAL' : 'ROLLO');
           return {
             reserveNumber,
-            label: `RESERVA ${String(reserveNumber).padStart(2, '0')}: FALTA ${missingSides.join(' Y ')}`
+            missingSides,
+            label: missingSides.length
+              ? `RESERVA ${String(reserveNumber).padStart(2, '0')}: FALTA ${missingSides.join(' Y ')}`
+              : ''
           };
         })
-        .filter(item => item.label.includes('FALTA'))
+        .filter(item => item.missingSides.length > 0)
         .sort((a, b) => a.reserveNumber - b.reserveNumber)
         .map(item => item.label);
       const pendingReserves = pendingReserveLabels.length;
