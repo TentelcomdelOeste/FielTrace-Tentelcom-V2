@@ -191,7 +191,8 @@ export const storageService = {
   /**
    * Guarda la evidencia en IndexedDB (solo metadatos y referencia robusta a la foto de la galería).
    * En plataformas móviles (Android/iOS), la foto está en la galería nativa.
-   * En Web, se guarda un respaldo temporal en STORE_PHOTOS para la vista previa de la app.
+   * La fotografía NO se persiste en IndexedDB como almacenamiento permanente; en Web,
+   * solo se conserva un respaldo temporal en STORE_PHOTOS cuando Firebase Storage no está disponible.
    */
   async addEvidence(evidence: Evidence, imageBase64: string): Promise<number> {
     const project = await this.getProject(evidence.projectId);
