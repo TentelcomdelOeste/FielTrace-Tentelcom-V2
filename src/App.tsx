@@ -1778,6 +1778,8 @@ export default function App() {
                 ? `Desechos – ${desechoCaptureDraft?.side === 'photo2' ? 'Metraje' : 'Panorámica'}`
                 : selectedEvidenceCategory.id === 'ALTAS'
                 ? `Altas – ${altaCaptureDraft?.side === 'meterage' ? 'Metraje' : 'Panorámica'}`
+                : selectedEvidenceCategory.id === 'MEJORAS'
+                ? `Mejoras – ${mejoraCaptureDraft?.mejoraType || ''}`
                 : selectedEvidenceCategory.label;
 
       // Las puntas de fibra llevan sus datos operativos dentro de la evidencia
@@ -1851,6 +1853,10 @@ export default function App() {
         desechoMeterage: selectedEvidenceCategory.id === 'DESECHOS' && desechoCaptureDraft?.side === 'photo2'
           ? Number(desechoMeterageDraft || 0)
           : undefined,
+        mejoraId: selectedEvidenceCategory.id === 'MEJORAS' ? (mejoraCaptureDraft?.mejoraId || '') : undefined,
+        mejoraNumber: selectedEvidenceCategory.id === 'MEJORAS' ? mejoraCaptureDraft?.mejoraNumber : undefined,
+        mejoraType: selectedEvidenceCategory.id === 'MEJORAS' ? mejoraCaptureDraft?.mejoraType : undefined,
+        mejoraSide: selectedEvidenceCategory.id === 'MEJORAS' ? mejoraCaptureDraft?.side : undefined,
         napId: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napId || '') : undefined,
         napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
         napName: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napName || '').trim() : undefined,
@@ -2645,6 +2651,12 @@ export default function App() {
                                       ? (category.completed
                                           ? '✓ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.count + ' FOTOS'
                                           : '⚠ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.pendingNapLabels.join(' · '))
+                                      : 'PENDIENTE · 0 FOTOS')
+                                : category.id === 'MEJORAS'
+                                  ? (category.mejoraCount
+                                      ? (category.completed
+                                          ? '✓ ' + category.mejoraCompletedCount + '/' + category.mejoraCount + ' MEJORAS COMPLETAS · ' + category.count + ' FOTOS'
+                                          : '⚠ ' + category.mejoraCompletedCount + '/' + category.mejoraCount + ' MEJORAS COMPLETAS · ' + (category.mejoraPendingLabels || []).join(' · '))
                                       : 'PENDIENTE · 0 FOTOS')
                                 : category.id === 'ALTAS'
                                   ? (category.altaCount
@@ -3519,6 +3531,14 @@ export default function App() {
                      {desechoCaptureDraft.side === 'photo2'
                        ? `METRAJE DESECHO ${desechoCaptureDraft.desechoNumber}: ${desechoMeterageDraft ? `${desechoMeterageDraft} M` : '—'}`
                        : `PANORÁMICA DESECHO ${desechoCaptureDraft.desechoNumber}`}
+                   </p>
+                 )}
+
+                 {evidenceCategory === 'MEJORAS' && mejoraCaptureDraft && (
+                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                     {mejoraCaptureDraft.mejoraType === 'SUBIDA DE BANDAS'
+                       ? `SUBIDA DE BANDA ${mejoraCaptureDraft.mejoraNumber}: ${mejoraCaptureDraft.side === 'before' ? 'ANTES' : 'DESPUÉS'}`
+                       : `${mejoraCaptureDraft.mejoraType.slice(0, -1)} ${mejoraCaptureDraft.mejoraNumber}: ${mejoraCaptureDraft.side === 'before' ? 'ANTES' : 'DESPUÉS'}`}
                    </p>
                  )}
 
