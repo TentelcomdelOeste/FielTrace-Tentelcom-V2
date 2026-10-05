@@ -213,25 +213,50 @@ export const cameraService = {
             const subLines = rawLine.split('\n');
             for (const subLine of subLines) {
               const words = subLine.split(' ');
-              let currentLine = words[0] || '';
-              let subLineCount = 1;
+              let currentLine = '';
+              let subLineCount = 0;
 
-              for (let i = 1; i < words.length; i++) {
-                const word = words[i];
-                const testLine = currentLine + ' ' + word;
-                if (ctx.measureText(testLine).width > maxTextWidth) {
-                  if (subLineCount >= 4) {
-                    currentLine += '...';
-                    break;
-                  } else {
+              for (const word of words) {
+                const candidate = currentLine ? currentLine + ' ' + word : word;
+
+                if (ctx.measureText(candidate).width <= maxTextWidth) {
+                  currentLine = candidate;
+                  continue;
+                }
+
+                // Si una palabra sola supera el ancho disponible (por ejemplo,
+                // un nombre de NAP muy largo), también la partimos por caracteres
+                // para que todo el texto quede visible en la fotografía.
+                if (ctx.measureText(word).width > maxTextWidth) {
+                  if (currentLine) {
                     lines.push(currentLine);
-                    currentLine = word;
+                    currentLine = '';
                     subLineCount++;
                   }
+
+                  let chunk = '';
+                  for (const char of word) {
+                    const testChunk = chunk + char;
+                    if (ctx.measureText(testChunk).width > maxTextWidth) {
+                      if (chunk) {
+                        lines.push(chunk);
+                        subLineCount++;
+                      }
+                      chunk = char;
+                    } else {
+                      chunk = testChunk;
+                    }
+                  }
+                  currentLine = chunk;
                 } else {
-                  currentLine = testLine;
+                  if (currentLine) {
+                    lines.push(currentLine);
+                    subLineCount++;
+                  }
+                  currentLine = word;
                 }
               }
+
               if (currentLine) lines.push(currentLine);
             }
           }
