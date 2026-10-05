@@ -1889,6 +1889,34 @@ export default function App() {
       };
     }
 
+    if (category.id === 'ALTAS') {
+      const altaIds = Array.from(new Set(categoryEvidences.map(ev => ev.altaId).filter(Boolean))) as string[];
+      const altaGroups = altaIds.map(altaId => {
+        const group = categoryEvidences.filter(ev => ev.altaId === altaId);
+        const first = group[0];
+        const altaNumber = Number(first?.altaNumber || 0);
+        const altaType = first?.altaType || 'ALTA';
+        const hasPanoramic = group.some(ev => ev.altaSide === 'panoramic');
+        const hasMeterage = group.some(ev => ev.altaSide === 'meterage');
+        return { altaId, altaNumber, altaType, hasPanoramic, hasMeterage, count: group.length, complete: hasPanoramic && hasMeterage };
+      }).sort((a, b) => a.altaNumber - b.altaNumber);
+      const completedAltas = altaGroups.filter(alta => alta.complete).length;
+      const pendingAltaLabels = altaGroups.filter(alta => !alta.complete).map(alta => {
+        const missing = [!alta.hasPanoramic ? 'PANORÁMICA' : '', !alta.hasMeterage ? 'METRAJE' : ''].filter(Boolean).join(' Y ');
+        return `ALTA ${String(alta.altaNumber).padStart(2, '0')} · ${alta.altaType}: FALTA ${missing}`;
+      });
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: altaGroups.length > 0 && altaGroups.every(alta => alta.complete),
+        altaCount: altaGroups.length,
+        altaCompletedCount: completedAltas,
+        altaPendingLabels: pendingAltaLabels,
+        reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
+        fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
+      };
+    }
+
     if (category.id === 'NAPS') {
       const napIds = Array.from(new Set(categoryEvidences.map(ev => ev.napId).filter(Boolean))) as string[];
       const napGroups = napIds.map(napId => {
@@ -1941,6 +1969,9 @@ export default function App() {
       fiberPendingCount: 0,
       fiberPendingLabels: [],
       fiberRole: null,
+      altaCount: 0,
+      altaCompletedCount: 0,
+      altaPendingLabels: [],
     };
   });
   const completedEvidenceCategories = evidenceCategoryProgress.filter(category => category.completed).length;
@@ -2242,6 +2273,12 @@ export default function App() {
                                       ? (category.completed
                                           ? '✓ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.count + ' FOTOS'
                                           : '⚠ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.pendingNapLabels.join(' · '))
+                                      : 'PENDIENTE · 0 FOTOS')
+                                : category.id === 'ALTAS'
+                                  ? (category.altaCount
+                                      ? (category.completed
+                                          ? '✓ ' + category.altaCompletedCount + '/' + category.altaCount + ' ALTAS COMPLETAS · ' + category.count + ' FOTOS'
+                                          : '⚠ ' + category.altaCompletedCount + '/' + category.altaCount + ' ALTAS COMPLETAS · ' + (category.altaPendingLabels || []).join(' · '))
                                       : 'PENDIENTE · 0 FOTOS')
                                 : (category.completed
                                     ? `Completada · ${category.count} foto${category.count === 1 ? '' : 's'}`
@@ -4256,7 +4293,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'PUNTAS_FIBRA'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
@@ -4318,6 +4355,57 @@ export default function App() {
                                   <p className="text-[8px] font-bold text-gray-400 mt-1">
                                     {ev.fecha} {ev.hora || ''}
                                   </p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'ALTAS' ? (() => {
+                    const altaPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ALTAS' && ev.altaId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.altaNumber || 0) - Number(b.altaNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { panoramic: 1, meterage: 2 };
+                        return (sideOrder[a.altaSide || ''] || 99) - (sideOrder[b.altaSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      altaPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.altaId || `legacy-alta-${ev.altaNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const altaNumber = Number(group[0]?.altaNumber || groupIndex + 1);
+                      const altaType = group[0]?.altaType || 'ALTA';
+                      const hasPanoramic = group.some(ev => ev.altaSide === 'panoramic');
+                      const hasMeterage = group.some(ev => ev.altaSide === 'meterage');
+                      return (
+                        <div key={group[0]?.altaId || `alta-group-${altaNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">ALTA {String(altaNumber).padStart(2, '0')}</p>
+                              <p className="text-[8px] font-bold uppercase text-gray-500 mt-1">{altaType}</p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (hasPanoramic && hasMeterage ? 'text-gray-400' : 'text-amber-600')}>
+                                {hasPanoramic && hasMeterage ? '2/2 FOTOS · SET COMPLETO' : group.length + '/2 FOTOS · FALTA ' + (!hasPanoramic ? 'PANORÁMICA' : 'METRAJE')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">{ev.altaSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
