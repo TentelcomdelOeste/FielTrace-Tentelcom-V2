@@ -187,6 +187,10 @@ export const cameraService = {
             }
           }
 
+          if (metadata.category === 'NAPS' && String(metadata.napName || '').trim()) {
+            rawLines.push(`NAP: ${String(metadata.napName).trim().toUpperCase()}`);
+          }
+
           if (rawLines.length === 0) return resolve(imageSrc);
 
           const p_overlayPos = metadata.settings?.overlayPosition || 'top-left';
