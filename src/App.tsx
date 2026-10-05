@@ -1130,6 +1130,7 @@ export default function App() {
           ? Number(existingPair?.fiberPairNumber || nextNumber)
           : nextNumber,
 
+        metraje: '',
         reelNumber: existingPair?.fiberReelNumber || '',
         fiberCount: existingPair?.fiberCount ? String(existingPair.fiberCount) : ''
       });
@@ -1150,12 +1151,13 @@ export default function App() {
         side: 'final',
         pairId: selected.pairId,
         pairNumber: selected.pairNumber,
-
+        metraje: '',
         reelNumber: initialEvidence?.fiberReelNumber || '',
         fiberCount: initialEvidence?.fiberCount ? String(initialEvidence.fiberCount) : ''
       });
     }
 
+    setEvidenceCategory('PUNTAS_FIBRA');
     setShowFiberPairSelector(false);
     setShowFiberCaptureModal(true);
   };
@@ -4121,7 +4123,7 @@ export default function App() {
                     </div>
                   </div>
                 ))}
-                <button type="button" onClick={() => openFiberSide('initial')} className="w-full py-3 rounded-2xl border-2 border-dashed border-blue-200 text-blue-700 text-[10px] font-black uppercase">+ Nueva punta</button>
+                <button type="button" onClick={() => openFiberSide('initial')} className="w-full py-3 rounded-2xl border-2 border-dashed border-blue-200 text-blue-700 text-[10px] font-black uppercase">Nueva punta</button>
               </div>
 
               <button type="button" onClick={() => setShowFiberPairSelector(false)} className="w-full py-3.5 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
