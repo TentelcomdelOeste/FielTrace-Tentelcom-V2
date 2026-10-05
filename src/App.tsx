@@ -4846,6 +4846,103 @@ export default function App() {
           </motion.div>
         )}
 
+        {showMejoraCaptureModal && mejoraCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[232] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="text-center mb-5">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+                  <CameraIcon className="w-7 h-7 text-blue-600" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">MEJORAS</p>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-950 mt-1">
+                  MEJORA {String(mejoraCaptureDraft.mejoraNumber).padStart(2, '0')}
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  {mejoraPromptMode === 'type' ? 'Seleccione el tipo de mejora que desea documentar.' : '¿La fotografía corresponde al antes o al después?'}
+                </p>
+              </div>
+
+              {mejoraPromptMode === 'type' ? (
+                <div className="space-y-3">
+                  {(['SUBIDA DE BANDAS', 'PODAS', 'SUBIDA DE RETENIDAS'] as const).map(type => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        setMejoraCaptureDraft(prev => prev ? { ...prev, mejoraType: type } : prev);
+                        setMejoraPromptMode('side');
+                      }}
+                      className="w-full py-4 rounded-2xl bg-blue-50 text-blue-800 text-[11px] font-black uppercase tracking-wider border border-blue-100"
+                    >
+                      {type}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMejoraCaptureModal(false);
+                      setMejoraPromptMode(null);
+                      setMejoraCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-gray-50 border border-gray-200 p-4">
+                    <p className="text-[9px] font-black uppercase text-gray-500">TIPO DE MEJORA</p>
+                    <p className="text-sm font-black text-gray-950 mt-1">{mejoraCaptureDraft.mejoraType}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMejoraCaptureDraft(prev => prev ? { ...prev, side: 'before' } : prev);
+                      setShowMejoraCaptureModal(false);
+                      setMejoraPromptMode(null);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    ANTES
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMejoraCaptureDraft(prev => prev ? { ...prev, side: 'after' } : prev);
+                      setShowMejoraCaptureModal(false);
+                      setMejoraPromptMode(null);
+                      setCurrentStep('camera');
+                    }}
+                    className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                  >
+                    DESPUÉS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMejoraPromptMode('type')}
+                    className="w-full py-3 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase"
+                  >
+                    CAMBIAR TIPO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMejoraCaptureModal(false);
+                      setMejoraPromptMode(null);
+                      setMejoraCaptureDraft(null);
+                    }}
+                    className="w-full py-3 text-[10px] font-black uppercase text-gray-500"
+                  >
+                    CANCELAR
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
         {showDesechoCaptureModal && desechoCaptureDraft && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[231] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
             <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
@@ -4966,6 +5063,79 @@ export default function App() {
                   </button>
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {mejoraSetChoice && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[231] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+              <div className="text-center mb-5">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
+                  <CameraIcon className="w-7 h-7 text-blue-600" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">MEJORAS</p>
+                <h3 className="text-base font-black uppercase tracking-tight text-gray-950">
+                  MEJORA {String(mejoraSetChoice.mejoraNumber).padStart(2, '0')}
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  {mejoraSetChoice.mejoraType}
+                </p>
+                <p className="text-[10px] font-bold uppercase text-amber-600 mt-1">
+                  FALTA {mejoraSetChoice.missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const choice = mejoraSetChoice;
+                    setMejoraSetChoice(null);
+                    setEvidenceCategory('MEJORAS');
+                    setMejoraCaptureDraft({
+                      mejoraId: choice.mejoraId,
+                      mejoraNumber: choice.mejoraNumber,
+                      mejoraType: choice.mejoraType,
+                      side: choice.missingSide
+                    });
+                    setCurrentStep('camera');
+                  }}
+                  className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
+                >
+                  COMPLETAR MEJORA {String(mejoraSetChoice.mejoraNumber).padStart(2, '0')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMejoraSetChoice(null);
+                    const usedNumbers = evidences
+                      .filter(ev => ev.category === 'MEJORAS' && ev.mejoraNumber != null)
+                      .map(ev => Number(ev.mejoraNumber))
+                      .filter(Number.isFinite);
+                    const mejoraNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+                    const mejoraId = crypto.randomUUID
+                      ? crypto.randomUUID()
+                      : `mejora_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                    setMejoraCaptureDraft({
+                      mejoraId,
+                      mejoraNumber,
+                      mejoraType: 'SUBIDA DE BANDAS',
+                      side: 'before'
+                    });
+                    setMejoraPromptMode('type');
+                    setShowMejoraCaptureModal(true);
+                  }}
+                  className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
+                >
+                  TOMAR FOTO DE NUEVA MEJORA
+                </button>
+
+                <button type="button" onClick={() => setMejoraSetChoice(null)} className="w-full py-3 text-[10px] font-black uppercase text-gray-500">
+                  CANCELAR
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
