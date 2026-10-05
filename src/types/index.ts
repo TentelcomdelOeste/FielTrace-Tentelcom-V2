@@ -147,6 +147,10 @@ export interface Evidence {
   aceroNumber?: number;
   /** Foto dentro del set de ACEROS. */
   aceroSide?: 'photo1' | 'photo2';
+  /** Tipo visual seleccionado para la foto de ACEROS. */
+  aceroPhotoType?: 'panoramic' | 'meterage';
+  /** Metraje ingresado cuando la foto de ACEROS es de tipo METRAJE. */
+  aceroMeterage?: number;
   /** Identificador del set de ALTA (Panorámica + Metraje). */
   altaId?: string;
   /** Número visible del set de ALTA dentro del proyecto. */
