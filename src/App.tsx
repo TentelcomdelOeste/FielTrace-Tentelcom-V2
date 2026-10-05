@@ -1164,11 +1164,24 @@ export default function App() {
           metraje: meterage || ''
         });
       } else {
+        // Para una reserva nueva, conservar los datos que el usuario acaba
+        // de introducir en el formulario. Antes se generaba otro ID aquí y
+        // se perdían carrete/cantidad de fibras al abrir la cámara.
         const usedNumbers = reserves.map(ev => Number(ev.reserveNumber)).filter(Number.isFinite);
-        const reserveNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-        const id = crypto.randomUUID ? crypto.randomUUID() : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        setReserveCaptureDraft({ side, reserveId: id, reserveNumber, reelNumber: '', fiberCount: '',
-          metraje: meterage || '' });
+        const reserveNumber = reserveId && reserveCaptureDraft?.reserveId === reserveId
+          ? Number(reserveCaptureDraft.reserveNumber || 1)
+          : (usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1);
+        const id = reserveId || (crypto.randomUUID
+          ? crypto.randomUUID()
+          : `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+        setReserveCaptureDraft({
+          side,
+          reserveId: id,
+          reserveNumber,
+          reelNumber: reserveCaptureDraft?.reserveId === id ? reserveCaptureDraft.reelNumber : '',
+          fiberCount: reserveCaptureDraft?.reserveId === id ? reserveCaptureDraft.fiberCount : '',
+          metraje: meterage || (reserveCaptureDraft?.reserveId === id ? reserveCaptureDraft.metraje : '')
+        });
       }
 
       if (side === 'initial' && reserveCaptureDraft?.reserveId) {
