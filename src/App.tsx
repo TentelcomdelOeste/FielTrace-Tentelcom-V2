@@ -1309,7 +1309,7 @@ export default function App() {
 
     const inheritedFiberCount = getReserveFiberCount(selected.reserveId, Number(selected.reserveNumber || 0));
     if (!inheritedReel || !inheritedFiberCount) {
-      alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras. Registre nuevamente la PUNTA INICIAL.');
+      alert('LA PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o el valor de FIBRA ÓPTICA DE. Registre nuevamente la PUNTA INICIAL.');
       return;
     }
 
@@ -1336,7 +1336,7 @@ export default function App() {
     }
     const parsedFiberCount = Number(fiberCaptureDraft.fiberCount);
     if (!Number.isInteger(parsedFiberCount) || parsedFiberCount <= 0) {
-      alert('Ingrese una cantidad de fibras válida, por ejemplo 12, 24 o 48.');
+      alert('Ingrese un valor válido de FIBRA ÓPTICA DE, por ejemplo 12, 24 o 48.');
       return;
     }
 
@@ -4985,7 +4985,7 @@ export default function App() {
                               const inheritedReel = getReserveReelNumber(reserveId, reserveNumber);
                               const inheritedFiberCount = getReserveFiberCount(reserveId, reserveNumber);
                               if (!inheritedReel || !inheritedFiberCount) {
-                                alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
+                                alert('LA PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o el valor de FIBRA ÓPTICA DE.');
                                 return;
                               }
 
