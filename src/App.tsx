@@ -3430,7 +3430,7 @@ export default function App() {
                        PUNTA {fiberCaptureDraft.side === 'initial' ? 'INICIAL' : 'FINAL'} {fiberCaptureDraft.pairNumber}: {fiberCaptureDraft.metraje ? `${fiberCaptureDraft.metraje} M` : '—'}
                      </p>
                      <p className="line-clamp-4 break-words whitespace-pre-wrap">NÚMERO DE CARRETE: {fiberCaptureDraft.reelNumber || '—'}</p>
-                     <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {fiberCaptureDraft.fiberCount || '—'}</p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">FIBRA ÓPTICA DE: {fiberCaptureDraft.fiberCount || '—'}</p>
                    </>
                  )}
  
@@ -3466,7 +3466,7 @@ export default function App() {
                            <p className="line-clamp-4 break-words whitespace-pre-wrap">CARRETE: {altaReelDraft}</p>
                          )}
                          {altaFiberCountDraft && (
-                           <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {altaFiberCountDraft}</p>
+                           <p className="line-clamp-4 break-words whitespace-pre-wrap">FIBRA ÓPTICA DE: {altaFiberCountDraft}</p>
                          )}
                        </>
                      )}
@@ -3498,7 +3498,7 @@ export default function App() {
                            {reserveCaptureDraft.side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'} {reserveCaptureDraft.reserveNumber}: {reserveCaptureDraft.metraje ? reserveCaptureDraft.metraje + ' M' : '—'}
                          </p>
                          <p className="line-clamp-4 break-words whitespace-pre-wrap">CARRETE: {reserveCaptureDraft.reelNumber || '—'}</p>
-                         <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {reserveCaptureDraft.fiberCount || '—'}</p>
+                         <p className="line-clamp-4 break-words whitespace-pre-wrap">FIBRA ÓPTICA DE: {reserveCaptureDraft.fiberCount || '—'}</p>
                        </>
                      )}
                    </>
@@ -4192,7 +4192,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
+                <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Fibra Óptica de:</label>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -4205,7 +4205,7 @@ export default function App() {
                   className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${fiberCaptureDraft.side === 'final' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
                 />
                 {fiberCaptureDraft.side === 'final' && (
-                  <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Cantidad de fibras heredada de la punta inicial</p>
+                  <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Fibra Óptica de: heredada de la punta inicial</p>
                 )}
               </div>
 
@@ -4445,7 +4445,7 @@ export default function App() {
                           />
                         </div>
                         <div>
-                          <p className="text-[9px] font-black uppercase text-gray-500">Cantidad de fibras <span className="text-gray-400">(opcional)</span></p>
+                          <p className="text-[9px] font-black uppercase text-gray-500">Fibra Óptica de: <span className="text-gray-400">(opcional)</span></p>
                           <input
                             type="number"
                             min="1"
@@ -5050,9 +5050,9 @@ export default function App() {
                     <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Carrete heredado de la PUNTA INICIAL</p>
                   </div>
                   <div>
-                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
+                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Fibra Óptica de:</label>
                     <input type="number" value={reserveCaptureDraft.fiberCount} readOnly className="w-full rounded-2xl border-2 border-gray-200 bg-gray-100 px-4 py-3 text-lg font-black text-gray-950 outline-none" />
-                    <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Cantidad de fibras heredada de la PUNTA INICIAL</p>
+                    <p className="text-[9px] font-bold uppercase text-green-600 mt-1">✓ Fibra Óptica de: heredada de la PUNTA INICIAL</p>
                   </div>
                   {reserveCaptureDraft.side === 'final' && (
                     <div>
@@ -5143,7 +5143,7 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Cantidad de fibras</label>
+                    <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Fibra Óptica de:</label>
                     <input
                       type="number"
                       inputMode="numeric"
@@ -5171,7 +5171,7 @@ export default function App() {
                     />
                     <p className="text-[9px] font-bold uppercase text-gray-500 mt-1">
                       {reserveCaptureDraft.side !== 'initial'
-                        ? `✓ Cantidad de fibras heredada de la PUNTA INICIAL: ${reserveCaptureDraft.fiberCount || 'PENDIENTE'}`
+                        ? `✓ Fibra Óptica de: heredada de la PUNTA INICIAL: ${reserveCaptureDraft.fiberCount || 'PENDIENTE'}`
                         : (reserveCaptureDraft.fiberCount ? '✓ Se reutilizará en las 3 fotos de la reserva.' : 'Ingrese una sola vez la cantidad de fibras; se reutilizará en inicial, final y rollo.')}
                     </p>
                   </div>
