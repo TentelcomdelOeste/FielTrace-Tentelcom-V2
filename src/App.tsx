@@ -1956,7 +1956,7 @@ export default function App() {
 
           // Las reservas son fotografías individuales. Después de cada captura
           // regresamos al proyecto para evitar que el técnico tome fotos extra.
-          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || selectedEvidenceCategory.id === 'ACEROS' || selectedEvidenceCategory.id === 'DESECHOS' || evidenceCategory === 'PUNTAS_FIBRA') {
+          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || selectedEvidenceCategory.id === 'ACEROS' || selectedEvidenceCategory.id === 'DESECHOS' || selectedEvidenceCategory.id === 'MEJORAS' || evidenceCategory === 'PUNTAS_FIBRA') {
             setShowReserveCaptureModal(false);
             setShowAltaCaptureModal(false);
             setReserveCaptureDraft(null);
@@ -1967,6 +1967,10 @@ export default function App() {
             setShowDesechoCaptureModal(false);
             setDesechoPromptMode(null);
             setDesechoMeterageDraft('');
+            setMejoraCaptureDraft(null);
+            setMejoraSetChoice(null);
+            setShowMejoraCaptureModal(false);
+            setMejoraPromptMode(null);
             setFiberCaptureDraft(null);
             setCurrentStep('history');
           } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
