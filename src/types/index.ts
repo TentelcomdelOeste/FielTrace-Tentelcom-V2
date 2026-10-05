@@ -133,6 +133,8 @@ export interface Evidence {
   reserveReelNumber?: string;
   /** Cantidad de fibras de la reserva (12, 24, 48, etc.). */
   reserveFiberCount?: number;
+  /** Metraje registrado para PUNTA INICIAL o PUNTA FINAL de la reserva. */
+  reserveMeterage?: number;
   /** Identificador del grupo de fotografías del NAP (9 fotos). */
   napId?: string;
   /** Número visible del NAP dentro del proyecto. */
