@@ -268,6 +268,9 @@ export default function App() {
     aceroNumber: number;
     missingSide: 'photo1' | 'photo2';
   } | null>(null);
+  const [showAceroCaptureModal, setShowAceroCaptureModal] = useState(false);
+  const [aceroPromptMode, setAceroPromptMode] = useState<'type' | 'meterage' | null>(null);
+  const [aceroMeterageDraft, setAceroMeterageDraft] = useState('');
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -888,7 +891,9 @@ export default function App() {
         aceroNumber,
         side: 'photo1'
       });
-      setCurrentStep('camera');
+      setAceroMeterageDraft('');
+      setAceroPromptMode('type');
+      setShowAceroCaptureModal(true);
       return;
     }
 
@@ -1633,6 +1638,12 @@ export default function App() {
         aceroId: selectedEvidenceCategory.id === 'ACEROS' ? (aceroCaptureDraft?.aceroId || '') : undefined,
         aceroNumber: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.aceroNumber : undefined,
         aceroSide: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.side : undefined,
+        aceroPhotoType: selectedEvidenceCategory.id === 'ACEROS'
+          ? (aceroCaptureDraft?.side === 'photo2' ? 'meterage' : 'panoramic')
+          : undefined,
+        aceroMeterage: selectedEvidenceCategory.id === 'ACEROS' && aceroCaptureDraft?.side === 'photo2'
+          ? Number(aceroMeterageDraft || 0)
+          : undefined,
         napId: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napId || '') : undefined,
         napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
         napName: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napName || '').trim() : undefined,
@@ -3246,6 +3257,14 @@ export default function App() {
                      <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {fiberCaptureDraft.fiberCount || '—'}</p>
                    </>
                  )}
+ 
+                 {evidenceCategory === 'ACEROS' && aceroCaptureDraft && (
+                   <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                     {aceroCaptureDraft.side === 'photo2'
+                       ? `METRAJE ${aceroCaptureDraft.aceroNumber}: ${aceroMeterageDraft ? `${aceroMeterageDraft} M` : '—'}`
+                       : `PANORÁMICA ACERO ${aceroCaptureDraft.aceroNumber}`}
+                   </p>
+                 )}
               </div>
             </div>
 
@@ -4150,7 +4169,14 @@ export default function App() {
                       aceroNumber: choice.aceroNumber,
                       side: choice.missingSide
                     });
-                    setCurrentStep('camera');
+                    setAceroMeterageDraft('');
+                    if (choice.missingSide === 'photo2') {
+                      setAceroPromptMode('meterage');
+                      setShowAceroCaptureModal(true);
+                    } else {
+                      setAceroPromptMode(null);
+                      setCurrentStep('camera');
+                    }
                   }}
                   className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider"
                 >
@@ -4176,7 +4202,9 @@ export default function App() {
                       aceroNumber,
                       side: 'photo1'
                     });
-                    setCurrentStep('camera');
+                    setAceroMeterageDraft('');
+                    setAceroPromptMode('type');
+                    setShowAceroCaptureModal(true);
                   }}
                   className="w-full py-4 rounded-2xl bg-gray-100 text-gray-800 text-[11px] font-black uppercase tracking-wider border border-gray-200"
                 >
