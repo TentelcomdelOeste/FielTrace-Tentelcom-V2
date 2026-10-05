@@ -215,6 +215,29 @@ export const firebaseService = {
     }
   },
 
+  /** Obtiene los proyectos compartidos disponibles en Firebase para trabajar desde otro dispositivo. */
+  async getCloudProjects(): Promise<any[]> {
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión anónima.');
+    const snapshot = await getDocs(collection(db, 'projects'));
+    return snapshot.docs
+      .map(item => ({ id: item.id, ...item.data() }))
+      .filter((project: any) => project.uuid || project.id)
+      .sort((a: any, b: any) => {
+        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTime - aTime;
+      });
+  },
+
+  /** Obtiene todas las evidencias de un proyecto compartido desde Firestore. */
+  async getCloudProjectEvidences(projectUuid: string): Promise<any[]> {
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión anónima.');
+    const snapshot = await getDocs(collection(db, 'projects', String(projectUuid), 'evidences'));
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+  },
+
   /**
    * Sincroniza un proyecto a Firestore (metadatos)
    */
