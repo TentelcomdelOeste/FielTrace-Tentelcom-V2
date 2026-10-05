@@ -258,6 +258,11 @@ export default function App() {
     side: 'panoramic' | 'meterage';
   } | null>(null);
   const [showAltaCaptureModal, setShowAltaCaptureModal] = useState(false);
+  const [aceroCaptureDraft, setAceroCaptureDraft] = useState<{
+    aceroId: string;
+    aceroNumber: number;
+    side: 'photo1' | 'photo2';
+  } | null>(null);
   const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
@@ -827,6 +832,56 @@ export default function App() {
         side: 'panoramic'
       });
       setShowAltaCaptureModal(true);
+      return;
+    }
+
+    if (category === 'ACEROS') {
+      setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
+      setNapCaptureDraft(null);
+      setAltaCaptureDraft(null);
+
+      const aceroGroups = Array.from(new Set(
+        evidences
+          .filter(ev => ev.category === 'ACEROS' && ev.aceroId)
+          .map(ev => ev.aceroId as string)
+      ))
+        .map(aceroId => {
+          const group = evidences.filter(ev => ev.category === 'ACEROS' && ev.aceroId === aceroId);
+          const first = group[0];
+          const aceroNumber = Number(first?.aceroNumber || 0);
+          const hasPhoto1 = group.some(ev => ev.aceroSide === 'photo1');
+          const hasPhoto2 = group.some(ev => ev.aceroSide === 'photo2');
+          return { aceroId, aceroNumber, hasPhoto1, hasPhoto2 };
+        })
+        .filter(group => !(group.hasPhoto1 && group.hasPhoto2))
+        .sort((a, b) => a.aceroNumber - b.aceroNumber);
+
+      if (aceroGroups.length > 0) {
+        const group = aceroGroups[0];
+        setAceroCaptureDraft({
+          aceroId: group.aceroId,
+          aceroNumber: group.aceroNumber,
+          side: group.hasPhoto1 ? 'photo2' : 'photo1'
+        });
+      } else {
+        const usedNumbers = evidences
+          .filter(ev => ev.category === 'ACEROS' && ev.aceroNumber != null)
+          .map(ev => Number(ev.aceroNumber))
+          .filter(Number.isFinite);
+        const aceroNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const aceroId = crypto.randomUUID
+          ? crypto.randomUUID()
+          : `acero_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        setAceroCaptureDraft({
+          aceroId,
+          aceroNumber,
+          side: 'photo1'
+        });
+      }
+
+      setCurrentStep('camera');
       return;
     }
 
@@ -1554,6 +1609,9 @@ export default function App() {
         altaNumber: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaNumber : undefined,
         altaType: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.altaType : undefined,
         altaSide: selectedEvidenceCategory.id === 'ALTAS' ? altaCaptureDraft?.side : undefined,
+        aceroId: selectedEvidenceCategory.id === 'ACEROS' ? (aceroCaptureDraft?.aceroId || '') : undefined,
+        aceroNumber: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.aceroNumber : undefined,
+        aceroSide: selectedEvidenceCategory.id === 'ACEROS' ? aceroCaptureDraft?.side : undefined,
         napId: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napId || '') : undefined,
         napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
         napName: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napName || '').trim() : undefined,
@@ -1653,11 +1711,12 @@ export default function App() {
 
           // Las reservas son fotografías individuales. Después de cada captura
           // regresamos al proyecto para evitar que el técnico tome fotos extra.
-          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || evidenceCategory === 'PUNTAS_FIBRA') {
+          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || selectedEvidenceCategory.id === 'ACEROS' || evidenceCategory === 'PUNTAS_FIBRA') {
             setShowReserveCaptureModal(false);
             setShowAltaCaptureModal(false);
             setReserveCaptureDraft(null);
             setAltaCaptureDraft(null);
+            setAceroCaptureDraft(null);
             setFiberCaptureDraft(null);
             setCurrentStep('history');
           } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
@@ -1912,6 +1971,33 @@ export default function App() {
         altaCount: altaGroups.length,
         altaCompletedCount: completedAltas,
         altaPendingLabels: pendingAltaLabels,
+        reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
+        fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
+      };
+    }
+
+    if (category.id === 'ACEROS') {
+      const aceroIds = Array.from(new Set(categoryEvidences.map(ev => ev.aceroId).filter(Boolean))) as string[];
+      const aceroGroups = aceroIds.map(aceroId => {
+        const group = categoryEvidences.filter(ev => ev.aceroId === aceroId);
+        const first = group[0];
+        const aceroNumber = Number(first?.aceroNumber || 0);
+        const hasPhoto1 = group.some(ev => ev.aceroSide === 'photo1');
+        const hasPhoto2 = group.some(ev => ev.aceroSide === 'photo2');
+        return { aceroId, aceroNumber, hasPhoto1, hasPhoto2, count: group.length, complete: hasPhoto1 && hasPhoto2 };
+      }).sort((a, b) => a.aceroNumber - b.aceroNumber);
+      const completedAceros = aceroGroups.filter(acero => acero.complete).length;
+      const pendingAceroLabels = aceroGroups.filter(acero => !acero.complete).map(acero => {
+        const missing = !acero.hasPhoto1 ? 'FOTO 1' : 'FOTO 2';
+        return `ACERO ${String(acero.aceroNumber).padStart(2, '0')}: FALTA ${missing}`;
+      });
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: aceroGroups.length > 0 && aceroGroups.every(acero => acero.complete),
+        aceroCount: aceroGroups.length,
+        aceroCompletedCount: completedAceros,
+        aceroPendingLabels: pendingAceroLabels,
         reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
         fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
       };
@@ -2268,6 +2354,12 @@ export default function App() {
                                         ? `✓ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.count} fotos`
                                         : `⚠ ${category.fiberCompleteCount}/${category.fiberPairCount} puntas completas · ${category.fiberPendingLabels.join(' · ')}`)
                                     : 'Pendiente · 0 fotos')
+                                : category.id === 'ACEROS'
+                                  ? (category.aceroCount
+                                      ? (category.completed
+                                          ? '✓ ' + category.aceroCompletedCount + '/' + category.aceroCount + ' ACEROS COMPLETOS · ' + category.count + ' FOTOS'
+                                          : '⚠ ' + category.aceroCompletedCount + '/' + category.aceroCount + ' ACEROS COMPLETOS · ' + (category.aceroPendingLabels || []).join(' · '))
+                                      : 'PENDIENTE · 0 FOTOS')
                                 : category.id === 'NAPS'
                                   ? (category.napCount
                                       ? (category.completed
@@ -4293,7 +4385,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
@@ -4447,6 +4539,90 @@ export default function App() {
                                 <CameraIcon className="w-8 h-8" />
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'ACEROS' ? (() => {
+                    const aceroPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ACEROS' && ev.aceroId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.aceroNumber || 0) - Number(b.aceroNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { photo1: 1, photo2: 2 };
+                        return (sideOrder[a.aceroSide || ''] || 99) - (sideOrder[b.aceroSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      aceroPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.aceroId || `legacy-acero-${ev.aceroNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const aceroNumber = Number(group[0]?.aceroNumber || groupIndex + 1);
+                      const aceroId = group[0]?.aceroId || '';
+                      const hasPhoto1 = group.some(ev => ev.aceroSide === 'photo1');
+                      const hasPhoto2 = group.some(ev => ev.aceroSide === 'photo2');
+                      const missingSide: 'photo1' | 'photo2' | null =
+                        !hasPhoto1 ? 'photo1' : !hasPhoto2 ? 'photo2' : null;
+
+                      return (
+                        <div key={aceroId || `acero-group-${aceroNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                ACERO {String(aceroNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'photo1' ? 'FOTO 1' : 'FOTO 2')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.aceroSide === 'photo1' ? 'FOTO 1' : 'FOTO 2'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('ACEROS');
+                                  setAceroCaptureDraft({
+                                    aceroId,
+                                    aceroNumber,
+                                    side: missingSide
+                                  });
+                                  setCurrentStep('camera');
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'FOTO 1' : 'FOTO 2'}
                                 </span>
                               </button>
                             )}
