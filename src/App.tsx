@@ -3170,17 +3170,11 @@ export default function App() {
           className="fixed inset-0 bg-transparent z-50 flex flex-col pointer-events-auto"
         >
           {/* Category selected from the project checklist */}
-          <div className="absolute top-4 left-4 z-50 pointer-events-none">
-            <div className="bg-black/45 backdrop-blur-md border border-white/15 rounded-xl px-3 py-2">
-              <p className="text-[8px] font-black uppercase tracking-widest text-white/60">Evidencia</p>
-              <p className="text-[10px] font-black uppercase text-white mt-0.5">
-                {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+            <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-lg px-2.5 py-1">
+              <p className="text-[8px] font-semibold text-white/75 whitespace-nowrap">
+                Evidencia: {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
               </p>
-              {evidenceCategory === 'ACEROS' && aceroCaptureDraft && (
-                <p className="text-[9px] font-black uppercase text-blue-200 mt-1">
-                  {aceroCaptureDraft.side === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
-                </p>
-              )}
             </div>
           </div>
 
@@ -3245,11 +3239,11 @@ export default function App() {
                  
                  {evidenceCategory === 'PUNTAS_FIBRA' && fiberCaptureDraft && (
                    <>
-                     <p className="line-clamp-4 break-words whitespace-pre-wrap">PUNTA: {fiberCaptureDraft.pairNumber}</p>
-                     <p className="line-clamp-4 break-words whitespace-pre-wrap">TIPO: {fiberCaptureDraft.side === 'initial' ? 'INICIAL' : 'FINAL'}</p>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                       PUNTA {fiberCaptureDraft.side === 'initial' ? 'INICIAL' : 'FINAL'} {fiberCaptureDraft.pairNumber}: {fiberCaptureDraft.metraje ? `${fiberCaptureDraft.metraje} M` : '—'}
+                     </p>
                      <p className="line-clamp-4 break-words whitespace-pre-wrap">NÚMERO DE CARRETE: {fiberCaptureDraft.reelNumber || '—'}</p>
                      <p className="line-clamp-4 break-words whitespace-pre-wrap">CANTIDAD DE FIBRAS: {fiberCaptureDraft.fiberCount || '—'}</p>
-                     <p className="line-clamp-4 break-words whitespace-pre-wrap">METRAJE: {fiberCaptureDraft.metraje ? `${fiberCaptureDraft.metraje} M` : '—'}</p>
                    </>
                  )}
               </div>
