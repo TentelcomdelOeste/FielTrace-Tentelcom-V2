@@ -363,6 +363,14 @@ async function addEvidenceSheet(
       });
     }
 
+    // DESECHOS sigue el mismo flujo de dos evidencias: panorámica primero y metraje después.
+    if (category.id === 'DESECHOS') {
+      group.items.sort((a, b) => {
+        const rank = (ev: MemoryEvidence) => ev.desechoSide === 'photo1' ? 0 : ev.desechoSide === 'photo2' ? 1 : 2;
+        return rank(a) - rank(b);
+      });
+    }
+
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
     for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3).height = 125;
@@ -465,6 +473,12 @@ async function addEvidenceSheet(
         desc.value = ev
           ? (ev.aceroSide === 'photo2'
             ? 'Metraje: ' + clean(ev.aceroMeterage)
+            : 'Panorámica')
+          : (index === 0 ? 'Panorámica' : 'Metraje:');
+      } else if (category.id === 'DESECHOS') {
+        desc.value = ev
+          ? (ev.desechoSide === 'photo2'
+            ? 'Metraje: ' + clean(ev.desechoMeterage)
             : 'Panorámica')
           : (index === 0 ? 'Panorámica' : 'Metraje:');
       } else {
