@@ -68,6 +68,21 @@ function getFormattedLocationText(loc: any, selectedProject: any): string {
   return text || "Ubicación detectada";
 }
 
+const NAPS_PHOTO_TITLES = [
+  'FUSIÓN REALIZADA',
+  'RESERVA DE HILOS',
+  'ETIQUETAS INTERNAS',
+  'ETIQUETA ORIGEN',
+  'ETIQUETA EXTREMO',
+  'RESERVA DE BUFFER',
+  'DETALLADO',
+  'PUNTA INICIO',
+  'PUNTA FINAL',
+] as const;
+
+const getNapsPhotoTitle = (photoNumber?: number) =>
+  NAPS_PHOTO_TITLES[(Number(photoNumber || 1) || 1) - 1] || ('FOTO ' + String(photoNumber || 1));
+
 const formatDateTime = (format: 'format1' | 'format2') => {
   const now = new Date();
   if (format === 'format2') {
@@ -3398,7 +3413,7 @@ export default function App() {
                                         <div key={'missing-' + missingIndex} className="aspect-square rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center text-center p-2">
                                           <CameraIcon className="w-5 h-5 text-amber-300 mb-1" />
                                           <p className="text-[7px] font-black uppercase text-amber-600">FALTA</p>
-                                          <p className="text-[7px] font-black uppercase text-amber-500">FOTO {group.items.length + missingIndex + 1}/{group.required}</p>
+                                          <p className="text-[7px] font-black uppercase text-amber-500">{getNapsPhotoTitle(group.items.length + missingIndex + 1)} NAP</p>
                                         </div>
                                       ))}
                                     </div>
@@ -4343,6 +4358,11 @@ export default function App() {
               <p className="text-[8px] font-semibold text-white/75 whitespace-nowrap">
                 Evidencia: {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
               </p>
+              {evidenceCategory === 'NAPS' && napCaptureDraft && (
+                <p className="text-[9px] font-black text-white whitespace-nowrap mt-0.5">
+                  {getNapsPhotoTitle(napCaptureDraft.photoNumber)} NAP
+                </p>
+              )}
             </div>
           </div>
 
@@ -6715,7 +6735,7 @@ export default function App() {
                                     </div>
                                     <div className="p-2.5">
                                       <p className="text-[9px] font-black uppercase text-gray-900">
-                                        FOTO {photoNumber}/9
+                                        {getNapsPhotoTitle(photoNumber)} NAP
                                       </p>
                                       <p className="text-[8px] font-bold text-gray-400 mt-1">
                                         {ev.fecha} {ev.hora || ''}
@@ -6753,7 +6773,7 @@ export default function App() {
                                 >
                                   <CameraIcon className="w-8 h-8" />
                                   <span className="text-[9px] font-black uppercase text-center px-2">
-                                    TOMAR FOTO<br />FOTO {photoNumber}/9
+                                    TOMAR FOTO<br />{getNapsPhotoTitle(photoNumber)} NAP
                                   </span>
                                 </button>
                               );
