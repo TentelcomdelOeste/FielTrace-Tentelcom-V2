@@ -360,52 +360,28 @@ async function addEvidenceSheet(
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
-            // Excel móvil no siempre respeta de forma consistente los offsets
-            // fraccionarios de un anchor. Para garantizar el centrado, creamos una
-            // pequeña imagen-compuesto del tamaño exacto de la celda: la foto queda
-            // centrada dentro de ese lienzo y Excel solo tiene que colocar el lienzo
-            // completo en la celda.
-            const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = Math.round(PHOTO_CELL_WIDTH_PX);
-            compositeCanvas.height = Math.round(PHOTO_CELL_HEIGHT_PX);
-            const compositeContext = compositeCanvas.getContext('2d', { alpha: false });
-            if (!compositeContext) throw new Error('No se pudo crear el lienzo de la fotografía.');
-
-            compositeContext.fillStyle = '#F3F5F7';
-            compositeContext.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
-
-            const offsetX = (compositeCanvas.width - imageWidth) / 2;
-            const offsetY = (compositeCanvas.height - imageHeight) / 2;
-            const sourceImage = new Image();
-            sourceImage.src = image.base64;
-            await new Promise<void>((resolve, reject) => {
-              sourceImage.onload = () => resolve();
-              sourceImage.onerror = () => reject(new Error('No se pudo preparar la fotografía para Excel.'));
-            });
-            compositeContext.drawImage(sourceImage, offsetX, offsetY, imageWidth, imageHeight);
-            const compositeBlob = await new Promise<Blob>((resolve, reject) => {
-              compositeCanvas.toBlob(
-                blob => blob ? resolve(blob) : reject(new Error('No se pudo preparar la fotografía centrada.')),
-                'image/jpeg',
-                EXCEL_COMPOSITE_JPEG_QUALITY,
-              );
-            });
-            compositeCanvas.width = 1;
-            compositeCanvas.height = 1;
-            sourceImage.src = '';
-
-            const compositeBase64 = await blobToDataUrl(compositeBlob);
+            // Insertar ÚNICAMENTE la fotografía. No se crea un lienzo gris
+            // intermedio: la imagen conserva toda la nitidez de la versión optimizada.
             const imageId = workbook.addImage({
-              base64: compositeBase64,
-              extension: 'jpeg',
+              base64: image.base64,
+              extension: image.extension,
             });
 
-            // El lienzo completo ocupa exactamente el recuadro de la fotografía.
+            // Centrado mediante el punto inicial; las dimensiones reales de la foto
+            // se mantienen con ext, respetando su relación de aspecto.
+            const offsetX = Math.max(0, (PHOTO_CELL_WIDTH_PX - imageWidth) / 2);
+            const offsetY = Math.max(0, (PHOTO_CELL_HEIGHT_PX - imageHeight) / 2);
+            const colOffset = offsetX / PHOTO_CELL_WIDTH_PX;
+            const rowOffset = offsetY / PHOTO_CELL_HEIGHT_PX;
+
             sheet.addImage(imageId, {
-              tl: { col: col - 1, row: blockRow - 1 },
+              tl: {
+                col: col - 1 + colOffset,
+                row: blockRow - 1 + rowOffset,
+              },
               ext: {
-                width: Math.round(PHOTO_CELL_WIDTH_PX),
-                height: Math.round(PHOTO_CELL_HEIGHT_PX),
+                width: imageWidth,
+                height: imageHeight,
               },
               editAs: 'oneCell',
             });
