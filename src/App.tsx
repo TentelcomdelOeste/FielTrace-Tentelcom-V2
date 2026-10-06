@@ -231,6 +231,8 @@ export default function App() {
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memorySelectedProject, setMemorySelectedProject] = useState<any | null>(null);
   const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
+  const [memoryPhotoFilter, setMemoryPhotoFilter] = useState('TODAS');
+  const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -3133,6 +3135,59 @@ export default function App() {
                       <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
                     </div>
 
+                    <div className="bg-white border border-gray-100 rounded-[1.75rem] p-5 shadow-sm">
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                          <p className="text-[11px] font-black uppercase">Revisión visual</p>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Compruebe las fotografías antes de generar la memoria</p>
+                        </div>
+                        <Eye className="w-5 h-5 text-blue-500" />
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        {['TODAS', ...Array.from(new Set((memorySelectedProject._evidences || []).map((ev: any) => ev.categoryLabel || ev.category || 'OTROS')))].map((filter: string) => (
+                          <button
+                            key={filter}
+                            type="button"
+                            onClick={() => setMemoryPhotoFilter(filter)}
+                            className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase whitespace-nowrap ${memoryPhotoFilter === filter ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                          >
+                            {filter}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 mt-3">
+                        {(memorySelectedProject._evidences || [])
+                          .filter((ev: any) => memoryPhotoFilter === 'TODAS' || (ev.categoryLabel || ev.category || 'OTROS') === memoryPhotoFilter)
+                          .sort((a: any, b: any) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
+                          .map((ev: any, index: number) => {
+                            const imageUrl = ev.photoUrl || ev.photo?.uri || '';
+                            return (
+                              <button
+                                key={String(ev.uuid || ev.id || index)}
+                                type="button"
+                                onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
+                                className="group relative aspect-square overflow-hidden rounded-2xl bg-gray-100 border border-gray-100 text-left"
+                              >
+                                {imageUrl ? (
+                                  <img src={imageUrl} alt={`Evidencia ${index + 1}`} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[8px] font-black text-gray-400 uppercase">Sin foto</div>
+                                )}
+                                <div className="absolute inset-x-0 bottom-0 bg-black/65 text-white px-2 py-1.5">
+                                  <p className="text-[7px] font-black uppercase truncate">{ev.categoryLabel || ev.category || 'OTROS'}</p>
+                                  <p className="text-[7px] text-white/70 truncate">
+                                    {ev.napName || ev.mufaName || (ev.napNumber ? `NAP ${ev.napNumber}` : '') || (ev.mufaNumber ? `MUFA ${ev.mufaNumber}` : '') || ev.baseFields?.posteId || 'EVIDENCIA'}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                      {(memorySelectedProject._evidences || []).length === 0 && (
+                        <div className="py-10 text-center text-[9px] font-black text-gray-400 uppercase">Este proyecto todavía no tiene fotografías sincronizadas.</div>
+                      )}
+                    </div>
+
                     <div className="space-y-3">
                       {memoryCategories.map((category) => {
                         const summary = memoryCategorySummary(memorySelectedProject, category.id);
@@ -3178,6 +3233,28 @@ export default function App() {
                     </div>
                   </div>
                 )}
+              {memorySelectedPhoto && (
+                <div className="fixed inset-0 z-[100] bg-black/90 p-4 md:p-8 flex items-center justify-center" onClick={() => setMemorySelectedPhoto(null)}>
+                  <button type="button" onClick={() => setMemorySelectedPhoto(null)} className="absolute top-5 right-5 w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center">
+                    <X className="w-6 h-6" />
+                  </button>
+                  <div className="max-w-6xl max-h-[90vh] w-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                    <img
+                      src={memorySelectedPhoto.photoUrl || memorySelectedPhoto.photo?.uri}
+                      alt="Evidencia"
+                      className="max-h-[78vh] max-w-full object-contain rounded-2xl"
+                    />
+                    <div className="bg-white rounded-2xl px-5 py-3 text-center max-w-xl">
+                      <p className="text-[9px] font-black uppercase">{memorySelectedPhoto.categoryLabel || memorySelectedPhoto.category || 'EVIDENCIA'}</p>
+                      <p className="text-[11px] font-black uppercase">
+                        {memorySelectedPhoto.napName || memorySelectedPhoto.mufaName ||
+                         (memorySelectedPhoto.napNumber ? `NAP ${memorySelectedPhoto.napNumber}` : '') ||
+                         (memorySelectedPhoto.mufaNumber ? `MUFA ${memorySelectedPhoto.mufaNumber}` : '') || 'FOTOGRAFÍA'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               </motion.div>
             )}
 
