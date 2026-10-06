@@ -80,7 +80,7 @@ const getDescription = (ev: MemoryEvidence, index: number, category: string) => 
 
 const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
 
-async function imageToBase64(url: string): Promise<{ base64: string; extension: 'jpeg' | 'png' }> {
+async function imageToBase64(url: string): Promise<{ base64: string; extension: 'jpeg' | 'png'; width: number; height: number }> {
   const proxyUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
@@ -98,6 +98,19 @@ async function imageToBase64(url: string): Promise<{ base64: string; extension: 
   if (!response.ok) throw new Error(`No se pudo descargar la fotografía (${response.status})`);
   const blob = await response.blob();
   const extension = blob.type.includes('png') ? 'png' : 'jpeg';
+  let width = 0;
+  let height = 0;
+  try {
+    if (typeof createImageBitmap !== 'undefined') {
+      const bitmap = await createImageBitmap(blob);
+      width = bitmap.width;
+      height = bitmap.height;
+      bitmap.close();
+    }
+  } catch {
+    // If dimensions cannot be read, the export falls back to the configured box ratio.
+  }
+
   const buffer = await blob.arrayBuffer();
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -105,7 +118,7 @@ async function imageToBase64(url: string): Promise<{ base64: string; extension: 
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
   }
-  return { base64: `data:image/${extension};base64,${btoa(binary)}`, extension };
+  return { base64: `data:image/${extension};base64,${btoa(binary)}`, extension, width, height };
 }
 
 const styleHeader = (cell: ExcelJS.Cell, fill: string = '102033') => {
@@ -136,6 +149,15 @@ async function addEvidenceSheet(
     { width: 3 }, { width: 27 }, { width: 27 }, { width: 27 },
     { width: 3 },
   ];
+
+  // Keep the three photo columns visually separated instead of letting
+  // adjacent images touch each other.
+  const PHOTO_GAP_PX = 8;
+  const PHOTO_PADDING_PX = 5;
+  const PHOTO_CELL_WIDTH_PX = 27 * 7;
+  const PHOTO_CELL_HEIGHT_PX = 125 * (96 / 72);
+  const PHOTO_BOX_WIDTH_PX = PHOTO_CELL_WIDTH_PX - PHOTO_GAP_PX - PHOTO_PADDING_PX * 2;
+  const PHOTO_BOX_HEIGHT_PX = PHOTO_CELL_HEIGHT_PX - PHOTO_PADDING_PX * 2;
 
   const groups = new Map<string, MemoryEvidence[]>();
   evidences
@@ -226,10 +248,34 @@ async function addEvidenceSheet(
         if (url) {
           try {
             const image = await imageToBase64(url);
+            const sourceWidth = image.width || 4;
+            const sourceHeight = image.height || 3;
+            const scale = Math.min(
+              PHOTO_BOX_WIDTH_PX / sourceWidth,
+              PHOTO_BOX_HEIGHT_PX / sourceHeight,
+            );
+            const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
+            const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+            // Use pixel extents rather than stretching from top-left to bottom-right.
+            // This preserves the original aspect ratio and leaves a small visual gap
+            // between neighboring photos.
             const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
+            const boxWidthRatio = PHOTO_CELL_WIDTH_PX > 0
+              ? imageWidth / PHOTO_CELL_WIDTH_PX
+              : 0.9;
+            const boxHeightRatio = PHOTO_CELL_HEIGHT_PX > 0
+              ? imageHeight / PHOTO_CELL_HEIGHT_PX
+              : 0.9;
+            const offsetX = (1 - boxWidthRatio) / 2;
+            const offsetY = (1 - boxHeightRatio) / 2;
+
             sheet.addImage(imageId, {
-              tl: { col: col - 1 + 0.04, row: blockRow - 1 + 0.04 },
-              br: { col: col + 0.96, row: blockRow + 1.96 },
+              tl: {
+                col: col - 1 + Math.max(0.02, offsetX),
+                row: blockRow - 1 + Math.max(0.02, offsetY),
+              },
+              ext: { width: imageWidth, height: imageHeight },
               editAs: 'oneCell',
             });
           } catch (error) {
