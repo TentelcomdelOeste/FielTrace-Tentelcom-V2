@@ -336,6 +336,9 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   // Anti doble-tap sin bloquear UI: ref no re-renderiza ni muestra spinner
   const capturingRef = useRef(false);
+  // NAPS se procesa de forma secuencial para impedir una décima captura
+  // mientras la evidencia anterior todavía está guardándose.
+  const napCaptureInFlightRef = useRef(false);
   const [unlockedSettings, setUnlockedSettings] = useState<Record<string, boolean>>({});
   const [lastImage, setLastImage] = useState<string | null>(null);
   const [showLastImage, setShowLastImage] = useState(false);
@@ -1220,14 +1223,23 @@ export default function App() {
         .map(napId => {
           const group = evidences.filter(ev => ev.category === 'NAPS' && ev.napId === napId);
           const first = group[0];
+          const capturedSlots = new Set(
+            group
+              .map(ev => Number(ev.napPhotoNumber))
+              .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+          );
+          const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
+            .find(n => !capturedSlots.has(n)) || 10;
+
           return {
             napId,
             napNumber: Number(first?.napNumber || 0),
             napName: first?.napName || '',
-            count: group.length
+            count: capturedSlots.size,
+            nextPhotoNumber
           };
         })
-        .filter(group => group.count < 9)
+        .filter(group => group.nextPhotoNumber <= 9)
         .sort((a, b) => a.napNumber - b.napNumber);
 
       if (napGroups.length > 0) {
@@ -1236,7 +1248,7 @@ export default function App() {
           napId: nap.napId,
           napNumber: nap.napNumber,
           napName: nap.napName,
-          photoNumber: nap.count + 1,
+          photoNumber: nap.nextPhotoNumber,
           remainingPhotos: 9 - nap.count
         };
         setNapCaptureDraft(draft);
@@ -2150,6 +2162,35 @@ export default function App() {
   const captureBatchPhoto = async () => {
     // Anti doble-tap con ref (sin spinner ni disabled en el botón)
     if (!selectedProject || capturingRef.current) return;
+
+    // NAPS tiene un límite absoluto de 9 fotografías por set.
+    // Además se bloquea una segunda captura mientras la anterior termina de
+    // guardarse, evitando que un doble toque produzca FOTO 10/9.
+    const isNapCapture = evidenceCategory === 'NAPS' && !!napCaptureDraft;
+    if (isNapCapture) {
+      if (napCaptureInFlightRef.current) return;
+
+      const napId = napCaptureDraft!.napId;
+      const napEvidences = evidences.filter(
+        ev => ev.category === 'NAPS' && ev.napId === napId
+      );
+      const capturedSlots = new Set(
+        napEvidences
+          .map(ev => Number(ev.napPhotoNumber))
+          .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+      );
+
+      if (capturedSlots.size >= 9 || napCaptureDraft!.photoNumber > 9) {
+        napCaptureInFlightRef.current = false;
+        setNapCaptureDraft(null);
+        setShowNapCaptureModal(false);
+        setCurrentStep('history');
+        return;
+      }
+
+      napCaptureInFlightRef.current = true;
+    }
+
     capturingRef.current = true;
 
     try {
@@ -2447,21 +2488,41 @@ export default function App() {
             setFiberCaptureDraft(null);
             setCurrentStep('history');
           } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
-            // El límite debe calcularse sobre las fotos que FALTABAN al iniciar,
-            // no sobre el número absoluto de la foto. Ej.: si ya había 4/9,
-            // solo deben tomarse 5 y después cerrar automáticamente la cámara.
-            const remainingAfterCapture = napCaptureDraft.remainingPhotos - 1;
+            // NAPS: exactamente 9 fotos como máximo. La novena captura cierra
+            // la cámara inmediatamente después de quedar guardada.
+            const capturedNapCount = evs.filter(
+              ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId
+            ).length;
+            const remainingAfterCapture = Math.max(0, 9 - capturedNapCount);
 
-            if (remainingAfterCapture <= 0) {
+            if (capturedNapCount >= 9 || napCaptureDraft.photoNumber >= 9) {
+              napCaptureInFlightRef.current = false;
               setNapCaptureDraft(null);
               setShowNapCaptureModal(false);
               setCurrentStep('history');
             } else {
-              setNapCaptureDraft(prev => prev ? {
-                ...prev,
-                photoNumber: prev.photoNumber + 1,
-                remainingPhotos: remainingAfterCapture
-              } : prev);
+              const capturedSlots = new Set(
+                evs
+                  .filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
+                  .map(ev => Number(ev.napPhotoNumber))
+                  .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+              );
+              const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
+                .find(n => !capturedSlots.has(n)) || 10;
+
+              if (nextPhotoNumber > 9 || remainingAfterCapture <= 0) {
+                napCaptureInFlightRef.current = false;
+                setNapCaptureDraft(null);
+                setShowNapCaptureModal(false);
+                setCurrentStep('history');
+              } else {
+                setNapCaptureDraft(prev => prev ? {
+                  ...prev,
+                  photoNumber: nextPhotoNumber,
+                  remainingPhotos: remainingAfterCapture
+                } : prev);
+                napCaptureInFlightRef.current = false;
+              }
             }
           } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
             // El límite debe calcularse sobre las fotos que FALTABAN al iniciar,
@@ -2491,6 +2552,12 @@ export default function App() {
       capturingRef.current = false;
     } finally {
       capturingRef.current = false;
+      // En NAPS el ref específico se libera únicamente después del
+      // procesamiento exitoso; si ocurre un error se libera aquí para poder
+      // reintentar la misma foto sin abrir una ranura adicional.
+      if (isNapCapture && napCaptureInFlightRef.current) {
+        napCaptureInFlightRef.current = false;
+      }
       // Re-armar el flash en background (no bloquea)
       if (flashMode === 'on') {
         void ensureFlashArmed('on');
