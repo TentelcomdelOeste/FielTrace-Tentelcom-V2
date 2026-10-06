@@ -231,7 +231,6 @@ export default function App() {
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memorySelectedProject, setMemorySelectedProject] = useState<any | null>(null);
   const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
-  const [memoryPhotoFilter, setMemoryPhotoFilter] = useState('TODAS');
   const [memorySelectedCategory, setMemorySelectedCategory] = useState<string | null>(null);
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
