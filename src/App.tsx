@@ -232,6 +232,7 @@ export default function App() {
   const [memorySelectedProject, setMemorySelectedProject] = useState<any | null>(null);
   const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
   const [memoryPhotoFilter, setMemoryPhotoFilter] = useState('TODAS');
+  const [memorySelectedCategory, setMemorySelectedCategory] = useState<string | null>(null);
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
@@ -3068,7 +3069,7 @@ export default function App() {
                     <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">Proyectos almacenados en Firebase</p>
                   </div>
                   <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <RefreshCcw className={`w-4 h-4 ${memoryLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCcw className={"w-4 h-4 " + (memoryLoading ? 'animate-spin' : '')} />
                   </button>
                 </div>
 
@@ -3108,7 +3109,7 @@ export default function App() {
                         }).map((project: any) => {
                           const total = (project._evidences || []).length;
                           return (
-                            <button key={String(project.uuid || project.id)} type="button" onClick={() => setMemorySelectedProject(project)}
+                            <button key={String(project.uuid || project.id)} type="button" onClick={() => { setMemorySelectedProject(project); setMemorySelectedCategory(null); }}
                               className="w-full p-5 bg-white border border-gray-100 rounded-[2rem] shadow-sm flex items-center justify-between text-left active:scale-[0.99]">
                               <div className="min-w-0">
                                 <p className="text-[13px] font-black uppercase truncate">{project.name || 'PROYECTO SIN NOMBRE'}</p>
@@ -3124,137 +3125,168 @@ export default function App() {
                   </>
                 ) : (
                   <div className="space-y-5">
-                    <button type="button" onClick={() => setMemorySelectedProject(null)} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
-                      <ChevronLeft className="w-4 h-4" /> Volver a proyectos
-                    </button>
+                    {!memorySelectedCategory ? (
+                      <>
+                        <button type="button" onClick={() => setMemorySelectedProject(null)} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
+                          <ChevronLeft className="w-4 h-4" /> Volver a proyectos
+                        </button>
 
-                    <div className="bg-gray-900 text-white rounded-[2rem] p-6">
-                      <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
-                      <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
-                      <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
-                      <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
-                    </div>
-
-                    <div className="bg-white border border-gray-100 rounded-[1.75rem] p-5 shadow-sm">
-                      <div className="flex items-center justify-between gap-3 mb-4">
-                        <div>
-                          <p className="text-[11px] font-black uppercase">Revisión visual</p>
-                          <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Compruebe las fotografías antes de generar la memoria</p>
+                        <div className="bg-gray-900 text-white rounded-[2rem] p-6">
+                          <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
+                          <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
+                          <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
+                          <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
                         </div>
-                        <Eye className="w-5 h-5 text-blue-500" />
-                      </div>
-                      <div className="flex gap-2 overflow-x-auto pb-2">
-                        {['TODAS', ...Array.from(new Set((memorySelectedProject._evidences || []).map((ev: any) => ev.categoryLabel || ev.category || 'OTROS')))].map((filter: string) => (
-                          <button
-                            key={filter}
-                            type="button"
-                            onClick={() => setMemoryPhotoFilter(filter)}
-                            className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase whitespace-nowrap ${memoryPhotoFilter === filter ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}
-                          >
-                            {filter}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 mt-3">
-                        {(memorySelectedProject._evidences || [])
-                          .filter((ev: any) => memoryPhotoFilter === 'TODAS' || (ev.categoryLabel || ev.category || 'OTROS') === memoryPhotoFilter)
-                          .sort((a: any, b: any) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
-                          .map((ev: any, index: number) => {
-                            const imageUrl = ev.photoUrl || ev.photo?.uri || '';
+
+                        <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
+                          <p className="text-[9px] font-black uppercase text-blue-700">Seleccione una sección</p>
+                          <p className="text-[8px] text-blue-500 font-bold uppercase mt-1">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {memoryCategories.map((category) => {
+                            const summary = memoryCategorySummary(memorySelectedProject, category.id);
+                            const status = summary.groupCount === 0 ? 'SIN REGISTROS' : summary.completeAll ? 'COMPLETO' : 'FALTAN ' + summary.missing;
                             return (
                               <button
-                                key={String(ev.uuid || ev.id || index)}
+                                key={category.id}
                                 type="button"
-                                onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
-                                className="group relative aspect-square overflow-hidden rounded-2xl bg-gray-100 border border-gray-100 text-left"
+                                onClick={() => { setMemorySelectedCategory(category.id); setMemorySelectedPhoto(null); }}
+                                className="w-full text-left bg-white border border-gray-100 rounded-[1.75rem] p-5 shadow-sm active:scale-[0.99] transition-transform"
                               >
-                                {imageUrl ? (
-                                  <img src={imageUrl} alt={`Evidencia ${index + 1}`} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[8px] font-black text-gray-400 uppercase">Sin foto</div>
-                                )}
-                                <div className="absolute inset-x-0 bottom-0 bg-black/65 text-white px-2 py-1.5">
-                                  <p className="text-[7px] font-black uppercase truncate">{ev.categoryLabel || ev.category || 'OTROS'}</p>
-                                  <p className="text-[7px] text-white/70 truncate">
-                                    {ev.napName || ev.mufaName || (ev.napNumber ? `NAP ${ev.napNumber}` : '') || (ev.mufaNumber ? `MUFA ${ev.mufaNumber}` : '') || ev.baseFields?.posteId || 'EVIDENCIA'}
-                                  </p>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-black uppercase">{category.label}</p>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">
+                                      {summary.groupCount} SET{summary.groupCount === 1 ? '' : 'S'} · {summary.captured}/{summary.requiredTotal || 0} FOTOS
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className={"px-3 py-1.5 rounded-full text-[8px] font-black uppercase " + (summary.completeAll ? 'bg-green-50 text-green-600' : summary.groupCount ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-400')}>
+                                      {status}
+                                    </span>
+                                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                                  </div>
                                 </div>
                               </button>
                             );
                           })}
-                      </div>
-                      {(memorySelectedProject._evidences || []).length === 0 && (
-                        <div className="py-10 text-center text-[9px] font-black text-gray-400 uppercase">Este proyecto todavía no tiene fotografías sincronizadas.</div>
-                      )}
-                    </div>
-
-                    <div className="space-y-3">
-                      {memoryCategories.map((category) => {
-                        const summary = memoryCategorySummary(memorySelectedProject, category.id);
-                        const status = summary.groupCount === 0 ? 'SIN REGISTROS' : summary.completeAll ? 'COMPLETO' : `FALTAN ${summary.missing}`;
+                        </div>
+                      </>
+                    ) : (
+                      (() => {
+                        const category = memoryCategories.find((item) => item.id === memorySelectedCategory);
+                        const summary = memoryCategorySummary(memorySelectedProject, memorySelectedCategory);
+                        if (!category) return null;
                         return (
-                          <div key={category.id} className="bg-white border border-gray-100 rounded-[1.75rem] p-5 shadow-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-[11px] font-black uppercase">{category.label}</p>
-                                <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">
-                                  {summary.groupCount} SET{summary.groupCount === 1 ? '' : 'S'} · {summary.captured}/{summary.requiredTotal || 0} FOTOS
-                                </p>
-                              </div>
-                              <span className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase ${summary.completeAll ? 'bg-green-50 text-green-600' : summary.groupCount ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-400'}`}>
-                                {status}
-                              </span>
+                          <>
+                            <button type="button" onClick={() => { setMemorySelectedCategory(null); setMemorySelectedPhoto(null); }} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
+                              <ChevronLeft className="w-4 h-4" /> Volver a secciones
+                            </button>
+
+                            <div className="bg-gray-900 text-white rounded-[2rem] p-6">
+                              <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Revisión de sección</p>
+                              <h3 className="mt-1 text-xl font-black uppercase">{category.label}</h3>
+                              <p className="text-[10px] text-white/50 font-bold uppercase">
+                                {summary.groupCount} SET{summary.groupCount === 1 ? '' : 'S'} · {summary.captured}/{summary.requiredTotal || 0} FOTOS
+                              </p>
                             </div>
 
-                            {summary.groups.length > 0 && (
-                              <div className="mt-4 space-y-2">
+                            {summary.groups.length === 0 ? (
+                              <div className="bg-white border border-gray-100 rounded-[1.75rem] p-10 text-center shadow-sm">
+                                <Eye className="w-10 h-10 mx-auto text-gray-200" />
+                                <p className="mt-3 text-[10px] font-black uppercase text-gray-400">Esta sección no tiene fotografías registradas.</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
                                 {summary.groups.map((group: any) => (
-                                  <div key={group.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
-                                    <div className="min-w-0">
-                                      <p className="text-[9px] font-black uppercase truncate">
-                                        {category.id === 'NAPS' ? `NAP ${String(group.number).padStart(2, '0')}` :
-                                         category.id === 'MUFA' ? `MUFA ${String(group.number).padStart(2, '0')}` :
-                                         category.id === 'PUNTAS_FIBRA' ? `PUNTA ${String(group.number).padStart(2, '0')}` :
-                                         category.id === 'RESERVA' ? `RESERVA ${String(group.number).padStart(2, '0')}` :
-                                         category.id.slice(0, -1)}
-                                      </p>
-                                      {group.name && <p className="text-[8px] text-gray-400 uppercase truncate">{group.name}</p>}
+                                  <section key={group.id} className="bg-white border border-gray-100 rounded-[1.75rem] p-4 shadow-sm">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase truncate">
+                                          {category.id === 'NAPS' ? 'NAP ' + String(group.number).padStart(2, '0') :
+                                           category.id === 'MUFA' ? 'MUFA ' + String(group.number).padStart(2, '0') :
+                                           category.id === 'PUNTAS_FIBRA' ? 'PUNTA ' + String(group.number).padStart(2, '0') :
+                                           category.id === 'RESERVA' ? 'RESERVA ' + String(group.number).padStart(2, '0') :
+                                           category.label}
+                                        </p>
+                                        {group.name && <p className="text-[8px] text-gray-400 uppercase truncate">{group.name}</p>}
+                                      </div>
+                                      <span className={"text-[9px] font-black shrink-0 " + (group.count >= group.required ? 'text-green-600' : 'text-amber-600')}>
+                                        {group.count}/{group.required}
+                                      </span>
                                     </div>
-                                    <span className={`text-[9px] font-black shrink-0 ${group.count >= group.required ? 'text-green-600' : 'text-amber-600'}`}>
-                                      {group.count}/{group.required}
-                                    </span>
-                                  </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                      {group.items.map((ev: any, photoIndex: number) => {
+                                        const imageUrl = ev.photoUrl || ev.photo?.uri || '';
+                                        return (
+                                          <button
+                                            key={String(ev.uuid || ev.id || photoIndex)}
+                                            type="button"
+                                            onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
+                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-gray-100 border border-gray-100 text-left"
+                                          >
+                                            {imageUrl ? (
+                                              <img src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
+                                            ) : (
+                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-gray-400 uppercase p-2 text-center">
+                                                <CameraIcon className="w-5 h-5 mb-1 text-gray-300" />
+                                                Sin foto
+                                              </div>
+                                            )}
+                                            <div className="absolute inset-x-0 bottom-0 bg-black/65 text-white px-2 py-1.5">
+                                              <p className="text-[7px] font-black uppercase truncate">
+                                                FOTO {photoIndex + 1}/{group.required}
+                                              </p>
+                                              <p className="text-[7px] text-white/70 truncate">
+                                                {ev.categoryLabel || ev.category || category.label}
+                                              </p>
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                      {Array.from({ length: Math.max(0, group.required - group.items.length) }).map((_, missingIndex) => (
+                                        <div key={'missing-' + missingIndex} className="aspect-square rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center text-center p-2">
+                                          <CameraIcon className="w-5 h-5 text-amber-300 mb-1" />
+                                          <p className="text-[7px] font-black uppercase text-amber-600">FALTA</p>
+                                          <p className="text-[7px] font-black uppercase text-amber-500">FOTO {group.items.length + missingIndex + 1}/{group.required}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </section>
                                 ))}
                               </div>
                             )}
-                          </div>
+                          </>
                         );
-                      })}
+                      })()
+                    )}
+                  </div>
+                )}
+
+                {memorySelectedPhoto && (
+                  <div className="fixed inset-0 z-[100] bg-black/90 p-4 md:p-8 flex items-center justify-center" onClick={() => setMemorySelectedPhoto(null)}>
+                    <button type="button" onClick={() => setMemorySelectedPhoto(null)} className="absolute top-5 right-5 w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center">
+                      <X className="w-6 h-6" />
+                    </button>
+                    <div className="max-w-6xl max-h-[90vh] w-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                      <img
+                        src={memorySelectedPhoto.photoUrl || memorySelectedPhoto.photo?.uri}
+                        alt="Evidencia"
+                        className="max-h-[78vh] max-w-full object-contain rounded-2xl"
+                      />
+                      <div className="bg-white rounded-2xl px-5 py-3 text-center max-w-xl">
+                        <p className="text-[9px] font-black uppercase">{memorySelectedPhoto.categoryLabel || memorySelectedPhoto.category || 'EVIDENCIA'}</p>
+                        <p className="text-[11px] font-black uppercase">
+                          {memorySelectedPhoto.napName || memorySelectedPhoto.mufaName ||
+                           (memorySelectedPhoto.napNumber ? 'NAP ' + memorySelectedPhoto.napNumber : '') ||
+                           (memorySelectedPhoto.mufaNumber ? 'MUFA ' + memorySelectedPhoto.mufaNumber : '') || 'FOTOGRAFÍA'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
-              {memorySelectedPhoto && (
-                <div className="fixed inset-0 z-[100] bg-black/90 p-4 md:p-8 flex items-center justify-center" onClick={() => setMemorySelectedPhoto(null)}>
-                  <button type="button" onClick={() => setMemorySelectedPhoto(null)} className="absolute top-5 right-5 w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center">
-                    <X className="w-6 h-6" />
-                  </button>
-                  <div className="max-w-6xl max-h-[90vh] w-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                    <img
-                      src={memorySelectedPhoto.photoUrl || memorySelectedPhoto.photo?.uri}
-                      alt="Evidencia"
-                      className="max-h-[78vh] max-w-full object-contain rounded-2xl"
-                    />
-                    <div className="bg-white rounded-2xl px-5 py-3 text-center max-w-xl">
-                      <p className="text-[9px] font-black uppercase">{memorySelectedPhoto.categoryLabel || memorySelectedPhoto.category || 'EVIDENCIA'}</p>
-                      <p className="text-[11px] font-black uppercase">
-                        {memorySelectedPhoto.napName || memorySelectedPhoto.mufaName ||
-                         (memorySelectedPhoto.napNumber ? `NAP ${memorySelectedPhoto.napNumber}` : '') ||
-                         (memorySelectedPhoto.mufaNumber ? `MUFA ${memorySelectedPhoto.mufaNumber}` : '') || 'FOTOGRAFÍA'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
               </motion.div>
             )}
 
