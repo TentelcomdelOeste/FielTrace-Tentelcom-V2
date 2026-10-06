@@ -355,6 +355,14 @@ async function addEvidenceSheet(
       });
     }
 
+    // ACEROS usa el mismo flujo de dos evidencias: panorámica primero y metraje después.
+    if (category.id === 'ACEROS') {
+      group.items.sort((a, b) => {
+        const rank = (ev: MemoryEvidence) => ev.aceroSide === 'photo1' ? 0 : ev.aceroSide === 'photo2' ? 1 : 2;
+        return rank(a) - rank(b);
+      });
+    }
+
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
     for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3).height = 125;
@@ -451,6 +459,12 @@ async function addEvidenceSheet(
         desc.value = ev
           ? (ev.altaSide === 'meterage'
             ? 'Metraje: ' + clean(ev.altaMeterage)
+            : 'Panorámica')
+          : (index === 0 ? 'Panorámica' : 'Metraje:');
+      } else if (category.id === 'ACEROS') {
+        desc.value = ev
+          ? (ev.aceroSide === 'photo2'
+            ? 'Metraje: ' + clean(ev.aceroMeterage)
             : 'Panorámica')
           : (index === 0 ? 'Panorámica' : 'Metraje:');
       } else {
