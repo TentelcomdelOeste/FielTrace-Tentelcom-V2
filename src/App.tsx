@@ -6634,7 +6634,7 @@ export default function App() {
                         </div>
                       );
                     });
-                  storageEvidenceCategory === 'MUFA' ? (() => {
+                  })() : storageEvidenceCategory === 'MUFA' ? (() => {
                     const mufaPhotos = evidences
                       .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA' && ev.mufaId)
                       .sort((a: any, b: any) => {
