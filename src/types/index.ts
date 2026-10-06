@@ -143,6 +143,14 @@ export interface Evidence {
   napName?: string;
   /** Número de fotografía dentro del set del NAP (1 a 9). */
   napPhotoNumber?: number;
+  /** Identificador del grupo de fotografías de la MUFA (9 fotos). */
+  mufaId?: string;
+  /** Número visible de la MUFA dentro del proyecto. */
+  mufaNumber?: number;
+  /** Nombre/código de la MUFA. */
+  mufaName?: string;
+  /** Número de fotografía dentro del set de la MUFA (1 a 9). */
+  mufaPhotoNumber?: number;
   /** Identificador del set de ACEROS (Foto 1 + Foto 2). */
   aceroId?: string;
   /** Número visible del set de ACEROS dentro del proyecto. */
