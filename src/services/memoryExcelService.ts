@@ -97,7 +97,12 @@ const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
 const EXCEL_MAX_IMAGE_WIDTH = 2000;
 const EXCEL_MAX_IMAGE_HEIGHT = 1500;
 const EXCEL_JPEG_QUALITY = 0.90;
-const EXCEL_COMPOSITE_JPEG_QUALITY = 0.92;
+// Excel drawing units: 9,525 EMU por píxel a 96 DPI.
+const EMU_PER_PIXEL = 9525;
+const EXCEL_DEFAULT_COL_WIDTH = 9.14285714285714;
+const EXCEL_DEFAULT_ROW_HEIGHT_PT = 15;
+const EXCEL_DEFAULT_COL_EMU = 640000;
+const EXCEL_DEFAULT_ROW_EMU = 180000;
 
 const blobToDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -244,11 +249,18 @@ async function addEvidenceSheet(
     { width: 3 },
   ];
 
-  // Dimensions used only for positioning the photo inside the Excel cell.
-// ExcelJS anchors are fractional column/row units, so we keep the image size
-// proportional and use a centered top-left anchor plus a pixel extents box.
-  const PHOTO_CELL_WIDTH_PX = 27 * 7 + 5;
-  const PHOTO_CELL_HEIGHT_PX = 125 * (96 / 72);
+  // Calculamos el tamaño real de la celda en EMU, igual que ExcelJS.
+  // Esto evita depender de aproximaciones de píxeles y de fracciones de columna.
+  const columnWidth = sheet.getColumn(2).width || EXCEL_DEFAULT_COL_WIDTH;
+  const photoRowHeightPt = sheet.getRow(3).height || 125;
+  const PHOTO_CELL_WIDTH_EMU = Math.floor(
+    (columnWidth / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU
+  );
+  const PHOTO_CELL_HEIGHT_EMU = Math.floor(
+    (photoRowHeightPt / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
+  );
+  const PHOTO_CELL_WIDTH_PX = PHOTO_CELL_WIDTH_EMU / EMU_PER_PIXEL;
+  const PHOTO_CELL_HEIGHT_PX = PHOTO_CELL_HEIGHT_EMU / EMU_PER_PIXEL;
   const PHOTO_SIDE_MARGIN_PX = 12;
   const PHOTO_VERTICAL_MARGIN_PX = 8;
   const PHOTO_BOX_WIDTH_PX = PHOTO_CELL_WIDTH_PX - PHOTO_SIDE_MARGIN_PX * 2;
@@ -367,24 +379,36 @@ async function addEvidenceSheet(
               extension: image.extension,
             });
 
-            // Centrado mediante el punto inicial; las dimensiones reales de la foto
-            // se mantienen con ext, respetando su relación de aspecto.
-            const offsetX = Math.max(0, (PHOTO_CELL_WIDTH_PX - imageWidth) / 2);
-            const offsetY = Math.max(0, (PHOTO_CELL_HEIGHT_PX - imageHeight) / 2);
-            const colOffset = offsetX / PHOTO_CELL_WIDTH_PX;
-            const rowOffset = offsetY / PHOTO_CELL_HEIGHT_PX;
+            // Centrado con offsets NATIVOS de Excel (EMU). No usamos
+            // col/row fraccionarios porque ExcelJS tiene reportes de diferencias
+            // en cómo esas fracciones se traducen a offsets visuales.
+            const rowHeightPt = sheet.getRow(blockRow).height || 125;
+            const columnWidthForCell = sheet.getColumn(col).width || EXCEL_DEFAULT_COL_WIDTH;
+            const cellWidthEmu = Math.floor(
+              (columnWidthForCell / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU
+            );
+            const cellHeightEmu = Math.floor(
+              (rowHeightPt / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
+            );
+            const imageWidthEmu = Math.round(imageWidth * EMU_PER_PIXEL);
+            const imageHeightEmu = Math.round(imageHeight * EMU_PER_PIXEL);
+            const offsetXEmu = Math.max(0, Math.floor((cellWidthEmu - imageWidthEmu) / 2));
+            const offsetYEmu = Math.max(0, Math.floor((cellHeightEmu - imageHeightEmu) / 2));
 
             sheet.addImage(imageId, {
               tl: {
-                col: col - 1 + colOffset,
-                row: blockRow - 1 + rowOffset,
+                col: col - 1,
+                row: blockRow - 1,
+                nativeCol: col - 1,
+                nativeColOff: offsetXEmu,
+                nativeRow: blockRow - 1,
+                nativeRowOff: offsetYEmu,
               },
               ext: {
                 width: imageWidth,
                 height: imageHeight,
               },
-              editAs: 'oneCell',
-            });
+            } as any);
           } catch (error) {
             imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
             imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
