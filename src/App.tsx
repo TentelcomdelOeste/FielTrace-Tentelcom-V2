@@ -4836,7 +4836,7 @@ export default function App() {
                 <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Nombre del MUFA</label>
                 <textarea
                   value={mufaCaptureDraft.mufaName}
-                  onChange={e => setMufaCaptureDraft(prev => prev ? { ...prev, napName: e.target.value } : prev)}
+                  onChange={e => setMufaCaptureDraft(prev => prev ? { ...prev, mufaName: e.target.value } : prev)}
                   placeholder="Ej. GT069/072"
                   readOnly={mufaCaptureDraft.photoNumber > 1}
                   rows={2}
