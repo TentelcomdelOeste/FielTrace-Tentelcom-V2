@@ -80,7 +80,32 @@ const getDescription = (ev: MemoryEvidence, index: number, category: string) => 
 
 const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
 
-async function imageToBase64(url: string): Promise<{ base64: string; extension: 'jpeg' | 'png'; width: number; height: number }> {
+// Excel no necesita la resolución completa de una foto de cámara.
+// Las imágenes se optimizan individualmente antes de entrar al workbook.
+// Esto evita mantener en memoria los archivos originales gigantes y reduce
+// drásticamente el peso final del XLSX sin modificar las fotos originales
+// almacenadas en Firebase.
+const EXCEL_MAX_IMAGE_WIDTH = 1400;
+const EXCEL_MAX_IMAGE_HEIGHT = 1050;
+const EXCEL_JPEG_QUALITY = 0.72;
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('No se pudo convertir la fotografía optimizada.'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Error leyendo la fotografía optimizada.'));
+    reader.readAsDataURL(blob);
+  });
+
+async function imageToBase64(
+  url: string,
+): Promise<{ base64: string; extension: 'jpeg'; width: number; height: number }> {
   const proxyUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
@@ -96,29 +121,83 @@ async function imageToBase64(url: string): Promise<{ base64: string; extension: 
     response = await fetch(url, { mode: 'cors' });
   }
   if (!response.ok) throw new Error(`No se pudo descargar la fotografía (${response.status})`);
-  const blob = await response.blob();
-  const extension = blob.type.includes('png') ? 'png' : 'jpeg';
-  let width = 0;
-  let height = 0;
+
+  const sourceBlob = await response.blob();
+
+  let bitmap: ImageBitmap | null = null;
+  let objectUrl = '';
+  let sourceWidth = 0;
+  let sourceHeight = 0;
+
   try {
     if (typeof createImageBitmap !== 'undefined') {
-      const bitmap = await createImageBitmap(blob);
-      width = bitmap.width;
-      height = bitmap.height;
-      bitmap.close();
+      bitmap = await createImageBitmap(sourceBlob);
+      sourceWidth = bitmap.width;
+      sourceHeight = bitmap.height;
+    } else if (typeof document !== 'undefined') {
+      objectUrl = URL.createObjectURL(sourceBlob);
+      const imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
+        image.src = objectUrl;
+      });
+      sourceWidth = imageElement.naturalWidth;
+      sourceHeight = imageElement.naturalHeight;
+      bitmap = await createImageBitmap(imageElement);
     }
-  } catch {
-    // If dimensions cannot be read, the export falls back to the configured box ratio.
+  } finally {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
   }
 
-  const buffer = await blob.arrayBuffer();
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+  if (!bitmap || !sourceWidth || !sourceHeight) {
+    throw new Error('El navegador no pudo procesar la fotografía.');
   }
-  return { base64: `data:image/${extension};base64,${btoa(binary)}`, extension, width, height };
+
+  const scale = Math.min(
+    1,
+    EXCEL_MAX_IMAGE_WIDTH / sourceWidth,
+    EXCEL_MAX_IMAGE_HEIGHT / sourceHeight,
+  );
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d', { alpha: false });
+  if (!context) {
+    bitmap.close();
+    throw new Error('El navegador no pudo crear el procesador de imágenes.');
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const optimizedBlob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error('No se pudo comprimir la fotografía para Excel.')),
+      'image/jpeg',
+      EXCEL_JPEG_QUALITY,
+    );
+  });
+
+  // Liberar la memoria del canvas inmediatamente. El Blob optimizado es mucho
+  // menor que el original y es el único recurso que necesitamos convertir.
+  canvas.width = 1;
+  canvas.height = 1;
+
+  const base64 = await blobToDataUrl(optimizedBlob);
+
+  return {
+    base64,
+    extension: 'jpeg',
+    width,
+    height,
+  };
 }
 
 const styleHeader = (cell: ExcelJS.Cell, fill: string = '102033') => {
@@ -150,12 +229,6 @@ async function addEvidenceSheet(
     { width: 3 },
   ];
 
-  // Keep the three photo columns visually separated instead of letting
-  // adjacent images touch each other.
-  // Excel column widths are expressed in character units, not pixels.
-  // For the 27-character photo columns we use the standard 96-DPI approximation
-  // (7 px per character + 5 px of Excel padding) so the image can be centered
-  // with the same visual margin on both left/right and top/bottom.
   const PHOTO_CELL_WIDTH_PX = 27 * 7 + 5;
   const PHOTO_CELL_HEIGHT_PX = 125 * (96 / 72);
   const PHOTO_SIDE_MARGIN_PX = 12;
@@ -242,15 +315,23 @@ async function addEvidenceSheet(
         : category.id === 'MUFA'
           ? group.items.find(item => Number(item.mufaPhotoNumber) === index + 1) || group.items[index]
           : group.items[index];
+
       const imageCell = sheet.getCell(blockRow, col);
       imageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F5F7' } };
-      imageCell.border = { top: { style: 'thin', color: { argb: 'D9DEE5' } }, left: { style: 'thin', color: { argb: 'D9DEE5' } }, bottom: { style: 'thin', color: { argb: 'D9DEE5' } }, right: { style: 'thin', color: { argb: 'D9DEE5' } } };
+      imageCell.border = {
+        top: { style: 'thin', color: { argb: 'D9DEE5' } },
+        left: { style: 'thin', color: { argb: 'D9DEE5' } },
+        bottom: { style: 'thin', color: { argb: 'D9DEE5' } },
+        right: { style: 'thin', color: { argb: 'D9DEE5' } },
+      };
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
         const url = getPhotoUrl(ev);
         if (url) {
           try {
+            // Cada fotografía se descarga, reduce y agrega individualmente.
+            // No se acumulan las fotos originales en memoria.
             const image = await imageToBase64(url);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
@@ -261,10 +342,11 @@ async function addEvidenceSheet(
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
-            // Anchor both corners inside the photo cell. This is more reliable
-            // than a pixel-only ext anchor when the Excel column width is customized.
-            // The image keeps its native aspect ratio and gets equal margins.
-            const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
+            const imageId = workbook.addImage({
+              base64: image.base64,
+              extension: image.extension,
+            });
+
             const widthRatio = imageWidth / PHOTO_CELL_WIDTH_PX;
             const heightRatio = imageHeight / PHOTO_CELL_HEIGHT_PX;
             const offsetX = (1 - widthRatio) / 2;
@@ -307,7 +389,6 @@ async function addEvidenceSheet(
     separator.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E8EDF2' } };
     row += 2;
 
-    // Ensure each set starts on a fresh, predictable block.
     if (row <= startRow) row = startRow + 3;
   }
 }
