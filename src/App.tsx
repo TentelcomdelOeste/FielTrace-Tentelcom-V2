@@ -4770,7 +4770,6 @@ export default function App() {
                   inputMode="decimal"
                   min="0"
                   step="0.01"
-                  autoFocus
                   value={fiberCaptureDraft.metraje}
                   onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, metraje: e.target.value } : prev)}
                   onKeyDown={(e) => { if (e.key === 'Enter') confirmFiberCapture(); }}
