@@ -68,6 +68,15 @@ const getGroupName = (ev: MemoryEvidence, category: string) =>
 const getPhotoUrl = (ev: MemoryEvidence) =>
   String(ev.photoUrl || ev.photo?.uri || '').trim();
 
+// Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
+// pero en Memoria Fotográfica representan un único set de 2 fotografías.
+const normalizeMemoryCategory = (category: unknown) => {
+  const value = String(category || '').toUpperCase();
+  return value === 'PUNTAS_FIBRA_INICIAL' || value === 'PUNTAS_FIBRA_FINAL'
+    ? 'PUNTAS_FIBRA'
+    : value;
+};
+
 const getDescription = (ev: MemoryEvidence, index: number, category: string) => {
   const explicit =
     ev.photoDescription ||
@@ -244,7 +253,7 @@ async function addEvidenceSheet(
 
   const groups = new Map<string, MemoryEvidence[]>();
   evidences
-    .filter(ev => String(ev.category || '').toUpperCase() === category.id)
+    .filter(ev => normalizeMemoryCategory(ev.category) === category.id)
     .forEach(ev => {
       const id = getGroupId(ev, category.id);
       const list = groups.get(id) || [];
@@ -348,28 +357,52 @@ async function addEvidenceSheet(
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
+            // Excel móvil no siempre respeta de forma consistente los offsets
+            // fraccionarios de un anchor. Para garantizar el centrado, creamos una
+            // pequeña imagen-compuesto del tamaño exacto de la celda: la foto queda
+            // centrada dentro de ese lienzo y Excel solo tiene que colocar el lienzo
+            // completo en la celda.
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = Math.round(PHOTO_CELL_WIDTH_PX);
+            compositeCanvas.height = Math.round(PHOTO_CELL_HEIGHT_PX);
+            const compositeContext = compositeCanvas.getContext('2d', { alpha: false });
+            if (!compositeContext) throw new Error('No se pudo crear el lienzo de la fotografía.');
+
+            compositeContext.fillStyle = '#F3F5F7';
+            compositeContext.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
+
+            const offsetX = (compositeCanvas.width - imageWidth) / 2;
+            const offsetY = (compositeCanvas.height - imageHeight) / 2;
+            const sourceImage = new Image();
+            sourceImage.src = image.base64;
+            await new Promise<void>((resolve, reject) => {
+              sourceImage.onload = () => resolve();
+              sourceImage.onerror = () => reject(new Error('No se pudo preparar la fotografía para Excel.'));
+            });
+            compositeContext.drawImage(sourceImage, offsetX, offsetY, imageWidth, imageHeight);
+            const compositeBlob = await new Promise<Blob>((resolve, reject) => {
+              compositeCanvas.toBlob(
+                blob => blob ? resolve(blob) : reject(new Error('No se pudo preparar la fotografía centrada.')),
+                'image/jpeg',
+                EXCEL_JPEG_QUALITY,
+              );
+            });
+            compositeCanvas.width = 1;
+            compositeCanvas.height = 1;
+            sourceImage.src = '';
+
+            const compositeBase64 = await blobToDataUrl(compositeBlob);
             const imageId = workbook.addImage({
-              base64: image.base64,
-              extension: image.extension,
+              base64: compositeBase64,
+              extension: 'jpeg',
             });
 
-            // Do not use fractional br anchors here. Excel interprets those
-            // column/row fractions differently depending on the workbook/viewer,
-            // which caused some NAPS photos to collapse into very thin strips.
-            // Use a centered fractional top-left and explicit pixel dimensions.
-            const offsetX = (PHOTO_CELL_WIDTH_PX - imageWidth) / 2;
-            const offsetY = (PHOTO_CELL_HEIGHT_PX - imageHeight) / 2;
-            const colOffset = offsetX / PHOTO_CELL_WIDTH_PX;
-            const rowOffset = offsetY / PHOTO_CELL_HEIGHT_PX;
-
+            // El lienzo completo ocupa exactamente el recuadro de la fotografía.
             sheet.addImage(imageId, {
-              tl: {
-                col: col - 1 + colOffset,
-                row: blockRow - 1 + rowOffset,
-              },
+              tl: { col: col - 1, row: blockRow - 1 },
               ext: {
-                width: imageWidth,
-                height: imageHeight,
+                width: Math.round(PHOTO_CELL_WIDTH_PX),
+                height: Math.round(PHOTO_CELL_HEIGHT_PX),
               },
               editAs: 'oneCell',
             });
