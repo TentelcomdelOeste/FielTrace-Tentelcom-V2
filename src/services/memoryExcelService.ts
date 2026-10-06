@@ -152,12 +152,16 @@ async function addEvidenceSheet(
 
   // Keep the three photo columns visually separated instead of letting
   // adjacent images touch each other.
-  const PHOTO_GAP_PX = 8;
-  const PHOTO_PADDING_PX = 5;
-  const PHOTO_CELL_WIDTH_PX = 27 * 7;
+  // Excel column widths are expressed in character units, not pixels.
+  // For the 27-character photo columns we use the standard 96-DPI approximation
+  // (7 px per character + 5 px of Excel padding) so the image can be centered
+  // with the same visual margin on both left/right and top/bottom.
+  const PHOTO_CELL_WIDTH_PX = 27 * 7 + 5;
   const PHOTO_CELL_HEIGHT_PX = 125 * (96 / 72);
-  const PHOTO_BOX_WIDTH_PX = PHOTO_CELL_WIDTH_PX - PHOTO_GAP_PX - PHOTO_PADDING_PX * 2;
-  const PHOTO_BOX_HEIGHT_PX = PHOTO_CELL_HEIGHT_PX - PHOTO_PADDING_PX * 2;
+  const PHOTO_SIDE_MARGIN_PX = 12;
+  const PHOTO_VERTICAL_MARGIN_PX = 8;
+  const PHOTO_BOX_WIDTH_PX = PHOTO_CELL_WIDTH_PX - PHOTO_SIDE_MARGIN_PX * 2;
+  const PHOTO_BOX_HEIGHT_PX = PHOTO_CELL_HEIGHT_PX - PHOTO_VERTICAL_MARGIN_PX * 2;
 
   const groups = new Map<string, MemoryEvidence[]>();
   evidences
@@ -257,25 +261,24 @@ async function addEvidenceSheet(
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
-            // Use pixel extents rather than stretching from top-left to bottom-right.
-            // This preserves the original aspect ratio and leaves a small visual gap
-            // between neighboring photos.
+            // Anchor both corners inside the photo cell. This is more reliable
+            // than a pixel-only ext anchor when the Excel column width is customized.
+            // The image keeps its native aspect ratio and gets equal margins.
             const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
-            const boxWidthRatio = PHOTO_CELL_WIDTH_PX > 0
-              ? imageWidth / PHOTO_CELL_WIDTH_PX
-              : 0.9;
-            const boxHeightRatio = PHOTO_CELL_HEIGHT_PX > 0
-              ? imageHeight / PHOTO_CELL_HEIGHT_PX
-              : 0.9;
-            const offsetX = (1 - boxWidthRatio) / 2;
-            const offsetY = (1 - boxHeightRatio) / 2;
+            const widthRatio = imageWidth / PHOTO_CELL_WIDTH_PX;
+            const heightRatio = imageHeight / PHOTO_CELL_HEIGHT_PX;
+            const offsetX = (1 - widthRatio) / 2;
+            const offsetY = (1 - heightRatio) / 2;
 
             sheet.addImage(imageId, {
               tl: {
-                col: col - 1 + Math.max(0.02, offsetX),
-                row: blockRow - 1 + Math.max(0.02, offsetY),
+                col: col - 1 + offsetX,
+                row: blockRow - 1 + offsetY,
               },
-              ext: { width: imageWidth, height: imageHeight },
+              br: {
+                col: col - 1 + offsetX + widthRatio,
+                row: blockRow - 1 + offsetY + heightRatio,
+              },
               editAs: 'oneCell',
             });
           } catch (error) {
