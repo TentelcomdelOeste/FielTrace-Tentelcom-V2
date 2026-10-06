@@ -227,6 +227,10 @@ export default function App() {
   const [showCloudProjects, setShowCloudProjects] = useState(false);
   const [cloudProjectsLoading, setCloudProjectsLoading] = useState(false);
   const [cloudImportingUuid, setCloudImportingUuid] = useState<string | null>(null);
+  const [memoryProjects, setMemoryProjects] = useState<any[]>([]);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memorySelectedProject, setMemorySelectedProject] = useState<any | null>(null);
+  const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -318,7 +322,7 @@ export default function App() {
   } | null>(null);
   const [showMejoraCaptureModal, setShowMejoraCaptureModal] = useState(false);
   const [mejoraPromptMode, setMejoraPromptMode] = useState<'type' | 'side' | null>(null);
-  const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary'>('home');
+  const [currentStep, setCurrentStep] = useState<'home' | 'history' | 'setup' | 'camera' | 'summary' | 'memory'>('home');
   const [cameraPermissionTick, setCameraPermissionTick] = useState(0);
   const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
   const [webCameraError, setWebCameraError] = useState<string | null>(null);
@@ -929,7 +933,7 @@ export default function App() {
       if (foundProject) {
         setSelectedProject(foundProject);
         if (storedStep) {
-          setCurrentStep(storedStep as 'home' | 'history' | 'setup' | 'camera' | 'summary');
+          setCurrentStep(storedStep as 'home' | 'history' | 'setup' | 'camera' | 'summary' | 'memory');
         }
       }
     }
@@ -1035,6 +1039,95 @@ export default function App() {
       setCloudProjectsLoading(false);
     }
   };
+
+  const loadMemoryDashboard = async () => {
+    setCurrentStep('memory');
+    setMemoryLoading(true);
+    setMemorySelectedProject(null);
+    try {
+      const remoteProjects = await firebaseService.getCloudProjects();
+      const summaries = await Promise.all(remoteProjects.map(async (project: any) => {
+        const uuid = String(project.uuid || project.id);
+        try {
+          const remoteEvidences = await firebaseService.getCloudProjectEvidences(uuid);
+          return { ...project, _evidences: remoteEvidences };
+        } catch (error) {
+          console.error('[Memory Dashboard] Error cargando evidencias:', uuid, error);
+          return { ...project, _evidences: [] };
+        }
+      }));
+      setMemoryProjects(summaries);
+    } catch (error) {
+      console.error('[Memory Dashboard] Error:', error);
+      alert('No se pudieron cargar los proyectos de Firebase.');
+      setCurrentStep('home');
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const memoryCategorySummary = (project: any, category: string) => {
+    const evidences = (project?._evidences || []).filter((ev: any) => ev.category === category);
+    const groups = new Map<string, any[]>();
+
+    evidences.forEach((ev: any) => {
+      let key = ev.uuid || String(evidences.indexOf(ev));
+      if (category === 'NAPS') key = ev.napId || key;
+      if (category === 'MUFA') key = ev.mufaId || key;
+      if (category === 'PUNTAS_FIBRA') key = ev.fiberPairId || key;
+      if (category === 'RESERVA') key = ev.reserveId || key;
+      if (category === 'ACEROS') key = ev.aceroId || key;
+      if (category === 'DESECHOS') key = ev.desechoId || key;
+      if (category === 'ALTAS') key = ev.altaId || key;
+      if (category === 'MEJORAS') key = ev.mejoraId || key;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(ev);
+    });
+
+    const required = category === 'NAPS' || category === 'MUFA' ? 9
+      : category === 'PUNTAS_FIBRA' ? 2
+      : category === 'RESERVA' ? 3
+      : category === 'ACEROS' || category === 'DESECHOS' || category === 'ALTAS' || category === 'MEJORAS' ? 2
+      : 1;
+
+    const groupList = Array.from(groups.entries()).map(([id, items]) => ({
+      id,
+      items,
+      number: Number(
+        items[0]?.napNumber ?? items[0]?.mufaNumber ?? items[0]?.fiberPairNumber ??
+        items[0]?.reserveNumber ?? items[0]?.aceroNumber ?? items[0]?.desechoNumber ??
+        items[0]?.altaNumber ?? items[0]?.mejoraNumber ?? 0
+      ),
+      name: items[0]?.napName || items[0]?.mufaName || items[0]?.categoryLabel || '',
+      count: items.length,
+      required
+    })).sort((a, b) => a.number - b.number);
+
+    const captured = evidences.length;
+    const requiredTotal = groupList.length * required;
+    const complete = groupList.filter(group => group.count >= required).length;
+    return {
+      category,
+      groups: groupList,
+      groupCount: groupList.length,
+      complete,
+      captured,
+      requiredTotal,
+      missing: Math.max(0, requiredTotal - captured),
+      completeAll: groupList.length > 0 && complete === groupList.length
+    };
+  };
+
+  const memoryCategories = [
+    { id: 'NAPS', label: 'NAPS', required: 9 },
+    { id: 'MUFA', label: 'MUFA', required: 9 },
+    { id: 'PUNTAS_FIBRA', label: 'PUNTAS DE FIBRA', required: 2 },
+    { id: 'RESERVA', label: 'RESERVAS', required: 3 },
+    { id: 'ACEROS', label: 'ACEROS', required: 2 },
+    { id: 'DESECHOS', label: 'DESECHOS', required: 2 },
+    { id: 'ALTAS', label: 'ALTAS', required: 2 },
+    { id: 'MEJORAS', label: 'MEJORAS', required: 2 }
+  ];
 
   const importAndOpenCloudProject = async (cloudProject: any) => {
     const uuid = String(cloudProject.uuid || cloudProject.id);
@@ -2789,6 +2882,21 @@ export default function App() {
                    <LayoutGrid className="absolute -right-8 -bottom-8 w-40 h-40 opacity-5" />
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => { void loadMemoryDashboard(); }}
+                  className="w-full p-5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform"
+                >
+                  <div className="flex items-center gap-3 text-left">
+                    <FileSpreadsheet className="w-6 h-6" />
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-widest">Memoria Fotográfica</p>
+                      <p className="text-[9px] font-bold text-white/70 uppercase">Revisar proyectos y fotografías en Firebase</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative">
                     <Search className="w-4 h-4 text-gray-400" />
@@ -2937,6 +3045,139 @@ export default function App() {
                     );
                   })}
                 </div>
+              </motion.div>
+            )}
+
+            {/* MEMORY DASHBOARD VIEW */}
+            {currentStep === 'memory' && (
+              <motion.div
+                key="memory"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6 pt-4"
+              >
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0">
+                    <ArrowLeft className="w-6 h-6 text-gray-950" />
+                  </button>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950">Memoria Fotográfica</h2>
+                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">Proyectos almacenados en Firebase</p>
+                  </div>
+                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <RefreshCcw className={`w-4 h-4 ${memoryLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {!memorySelectedProject ? (
+                  <>
+                    <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl focus-within:border-blue-300">
+                      <Search className="w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="BUSCAR PROYECTO..."
+                        value={memoryProjectSearch}
+                        onChange={(e) => setMemoryProjectSearch(e.target.value)}
+                        className="bg-transparent flex-1 outline-none text-xs font-black uppercase tracking-tighter"
+                      />
+                    </div>
+
+                    {memoryLoading ? (
+                      <div className="py-16 text-center">
+                        <RefreshCcw className="w-7 h-7 mx-auto text-blue-500 animate-spin" />
+                        <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-gray-400">Cargando proyectos y evidencias...</p>
+                      </div>
+                    ) : memoryProjects.filter((p: any) => {
+                      const term = memoryProjectSearch.toLowerCase();
+                      return String(p.name || '').toLowerCase().includes(term) ||
+                        String(p.client || '').toLowerCase().includes(term);
+                    }).length === 0 ? (
+                      <div className="py-16 text-center bg-gray-50 rounded-[2rem] border border-gray-100">
+                        <FileSpreadsheet className="w-10 h-10 mx-auto text-gray-300" />
+                        <p className="mt-3 text-xs font-black uppercase text-gray-500">No hay proyectos disponibles</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {memoryProjects.filter((p: any) => {
+                          const term = memoryProjectSearch.toLowerCase();
+                          return String(p.name || '').toLowerCase().includes(term) ||
+                            String(p.client || '').toLowerCase().includes(term);
+                        }).map((project: any) => {
+                          const total = (project._evidences || []).length;
+                          return (
+                            <button key={String(project.uuid || project.id)} type="button" onClick={() => setMemorySelectedProject(project)}
+                              className="w-full p-5 bg-white border border-gray-100 rounded-[2rem] shadow-sm flex items-center justify-between text-left active:scale-[0.99]">
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-black uppercase truncate">{project.name || 'PROYECTO SIN NOMBRE'}</p>
+                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest truncate">{project.client || 'SIN CLIENTE'}</p>
+                                <p className="mt-2 text-[9px] font-black text-blue-600 uppercase">{total} fotografías registradas</p>
+                              </div>
+                              <ChevronRight className="w-5 h-5 text-gray-300 shrink-0" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-5">
+                    <button type="button" onClick={() => setMemorySelectedProject(null)} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
+                      <ChevronLeft className="w-4 h-4" /> Volver a proyectos
+                    </button>
+
+                    <div className="bg-gray-900 text-white rounded-[2rem] p-6">
+                      <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
+                      <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
+                      <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
+                      <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {memoryCategories.map((category) => {
+                        const summary = memoryCategorySummary(memorySelectedProject, category.id);
+                        const status = summary.groupCount === 0 ? 'SIN REGISTROS' : summary.completeAll ? 'COMPLETO' : `FALTAN ${summary.missing}`;
+                        return (
+                          <div key={category.id} className="bg-white border border-gray-100 rounded-[1.75rem] p-5 shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-black uppercase">{category.label}</p>
+                                <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">
+                                  {summary.groupCount} SET{summary.groupCount === 1 ? '' : 'S'} · {summary.captured}/{summary.requiredTotal || 0} FOTOS
+                                </p>
+                              </div>
+                              <span className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase ${summary.completeAll ? 'bg-green-50 text-green-600' : summary.groupCount ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-400'}`}>
+                                {status}
+                              </span>
+                            </div>
+
+                            {summary.groups.length > 0 && (
+                              <div className="mt-4 space-y-2">
+                                {summary.groups.map((group: any) => (
+                                  <div key={group.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
+                                    <div className="min-w-0">
+                                      <p className="text-[9px] font-black uppercase truncate">
+                                        {category.id === 'NAPS' ? `NAP ${String(group.number).padStart(2, '0')}` :
+                                         category.id === 'MUFA' ? `MUFA ${String(group.number).padStart(2, '0')}` :
+                                         category.id === 'PUNTAS_FIBRA' ? `PUNTA ${String(group.number).padStart(2, '0')}` :
+                                         category.id === 'RESERVA' ? `RESERVA ${String(group.number).padStart(2, '0')}` :
+                                         category.id.slice(0, -1)}
+                                      </p>
+                                      {group.name && <p className="text-[8px] text-gray-400 uppercase truncate">{group.name}</p>}
+                                    </div>
+                                    <span className={`text-[9px] font-black shrink-0 ${group.count >= group.required ? 'text-green-600' : 'text-amber-600'}`}>
+                                      {group.count}/{group.required}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
