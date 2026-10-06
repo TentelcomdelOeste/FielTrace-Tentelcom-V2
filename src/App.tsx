@@ -2422,7 +2422,9 @@ export default function App() {
       };
 
       // Procesamiento asíncrono atómico
+      let napAsyncProcessingStarted = false;
       (async () => {
+        napAsyncProcessingStarted = true;
         try {
           // 1. Generar overlay utilizando el objeto unificado
           const finalImage = await cameraService.drawOverlay(rawImage, evidenceObject);
@@ -2544,6 +2546,10 @@ export default function App() {
           }
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
+        } finally {
+          if (isNapCapture) {
+            napCaptureInFlightRef.current = false;
+          }
         }
       })();
 
@@ -2552,10 +2558,9 @@ export default function App() {
       capturingRef.current = false;
     } finally {
       capturingRef.current = false;
-      // En NAPS el ref específico se libera únicamente después del
-      // procesamiento exitoso; si ocurre un error se libera aquí para poder
-      // reintentar la misma foto sin abrir una ranura adicional.
-      if (isNapCapture && napCaptureInFlightRef.current) {
+      // Si la captura física falla antes de iniciar el procesamiento
+      // asíncrono, liberar el bloqueo para permitir reintentar.
+      if (isNapCapture && !napAsyncProcessingStarted) {
         napCaptureInFlightRef.current = false;
       }
       // Re-armar el flash en background (no bloquea)
