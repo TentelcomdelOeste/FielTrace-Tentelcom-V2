@@ -346,6 +346,15 @@ async function addEvidenceSheet(
     styleHeader(groupCell, '3D5A80');
     row += 1;
 
+    // ALTAS siempre se presenta en orden semántico: panorámica primero y metraje después,
+    // aunque el orden de guardado en Firebase sea diferente.
+    if (category.id === 'ALTAS') {
+      group.items.sort((a, b) => {
+        const rank = (ev: MemoryEvidence) => ev.altaSide === 'panoramic' ? 0 : ev.altaSide === 'meterage' ? 1 : 2;
+        return rank(a) - rank(b);
+      });
+    }
+
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
     for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3).height = 125;
@@ -438,13 +447,21 @@ async function addEvidenceSheet(
       }
 
       const desc = sheet.getCell(blockRow + 1, col);
-      desc.value = ev
-        ? (category.id === 'NAPS'
-          ? getNapsPhotoTitle(ev, index)
-          : getDescription(ev, index, category.label))
-        : (category.id === 'NAPS'
-          ? getNapsPhotoTitle({ napName: group.name } as MemoryEvidence, index)
-          : ('FALTA FOTO ' + (index + 1) + '/' + category.required));
+      if (category.id === 'ALTAS') {
+        desc.value = ev
+          ? (ev.altaSide === 'meterage'
+            ? 'Metraje: ' + clean(ev.altaMeterage)
+            : 'Panorámica')
+          : (index === 0 ? 'Panorámica' : 'Metraje:');
+      } else {
+        desc.value = ev
+          ? (category.id === 'NAPS'
+            ? getNapsPhotoTitle(ev, index)
+            : getDescription(ev, index, category.label))
+          : (category.id === 'NAPS'
+            ? getNapsPhotoTitle({ napName: group.name } as MemoryEvidence, index)
+            : ('FALTA FOTO ' + (index + 1) + '/' + category.required));
+      }
       styleBody(desc);
       desc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       if (ev && category.id === 'NAPS') {
