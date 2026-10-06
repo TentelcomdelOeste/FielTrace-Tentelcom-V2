@@ -77,6 +77,27 @@ const normalizeMemoryCategory = (category: unknown) => {
     : value;
 };
 
+const NAPS_PHOTO_TITLES = [
+  'FUSIÓN REALIZADA',
+  'RESERVA DE HILOS',
+  'ETIQUETAS INTERNAS',
+  'ETIQUETA ORIGEN',
+  'ETIQUETA EXTREMO',
+  'RESERVA DE BUFFER',
+  'DETALLADO',
+  'PUNTA INICIO',
+  'PUNTA FINAL',
+] as const;
+
+const getNapsPhotoTitle = (ev: MemoryEvidence, index: number) => {
+  const slot = Number(ev.napPhotoNumber ?? ev.photoNumber ?? index + 1);
+  const title = NAPS_PHOTO_TITLES[slot - 1] || ('FOTO ' + slot);
+  const napName = String(ev.napName || '').trim();
+  return napName
+    ? title + ' NAP ' + napName
+    : title + ' NAP';
+};
+
 const getDescription = (ev: MemoryEvidence, index: number, category: string) => {
   const explicit =
     ev.photoDescription ||
@@ -423,9 +444,16 @@ async function addEvidenceSheet(
       }
 
       const desc = sheet.getCell(blockRow + 1, col);
-      desc.value = ev ? getDescription(ev, index, category.label) : `FALTA FOTO ${index + 1}/${category.required}`;
+      desc.value = ev
+        ? (category.id === 'NAPS'
+          ? getNapsPhotoTitle(ev, index)
+          : getDescription(ev, index, category.label))
+        : ('FALTA FOTO ' + (index + 1) + '/' + category.required);
       styleBody(desc);
       desc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      if (ev && category.id === 'NAPS') {
+        desc.font = { name: 'Arial', size: 8, bold: true, color: { argb: '102033' } };
+      }
     }
 
     row = imageRowStart + imageRows * 3 + 1;
