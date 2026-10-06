@@ -4732,10 +4732,10 @@ export default function App() {
                 <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Número de carrete</label>
                 <input
                   type="text"
-                  inputMode="numeric"
+                  inputMode="text"
                   autoFocus={fiberCaptureDraft.side === 'initial'}
                   value={fiberCaptureDraft.reelNumber}
-                  onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value } : prev)}
+                  onChange={(e) => setFiberCaptureDraft(prev => prev ? { ...prev, reelNumber: e.target.value.toUpperCase() } : prev)}
                   readOnly={fiberCaptureDraft.side === 'final'}
                   placeholder="Ej. 00125"
                   className={`w-full rounded-2xl border-2 px-4 py-3 text-lg font-black text-gray-950 outline-none ${fiberCaptureDraft.side === 'final' ? 'bg-gray-100 border-gray-200' : 'bg-white border-gray-200 focus:border-blue-600'}`}
@@ -5024,9 +5024,9 @@ export default function App() {
                           <p className="text-[9px] font-black uppercase text-gray-500">Número de carrete <span className="text-gray-400">(opcional)</span></p>
                           <input
                             type="text"
-                            inputMode="numeric"
+                            inputMode="text"
                             value={altaReelDraft}
-                            onChange={(e) => setAltaReelDraft(e.target.value)}
+                            onChange={(e) => setAltaReelDraft(e.target.value.toUpperCase())}
                             placeholder="Ej. 123456"
                             className="w-full mt-1.5 px-4 py-3 rounded-xl border border-gray-200 text-sm font-black outline-none focus:border-blue-500"
                           />
@@ -5867,11 +5867,11 @@ export default function App() {
                     <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Número de carrete</label>
                     <input
                       type="text"
-                      inputMode="numeric"
+                      inputMode="text"
                       autoFocus={!reserveCaptureDraft.reelNumber}
                       value={reserveCaptureDraft.reelNumber}
                       onChange={(e) => {
-                        const value = e.target.value;
+                        const value = e.target.value.toUpperCase();
                         setReserveCaptureDraft(prev => {
                           if (!prev) return prev;
                           try {
