@@ -1074,7 +1074,14 @@ export default function App() {
   };
 
   const memoryCategorySummary = (project: any, category: string) => {
-    const evidences = (project?._evidences || []).filter((ev: any) => ev.category === category);
+    const evidences = (project?._evidences || []).filter((ev: any) => {
+      const evCategory = String(ev.category || '').toUpperCase();
+      const normalizedCategory =
+        evCategory === 'PUNTAS_FIBRA_INICIAL' || evCategory === 'PUNTAS_FIBRA_FINAL'
+          ? 'PUNTAS_FIBRA'
+          : evCategory;
+      return normalizedCategory === category;
+    });
     const groups = new Map<string, any[]>();
 
     evidences.forEach((ev: any) => {
