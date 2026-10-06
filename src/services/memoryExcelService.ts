@@ -346,12 +346,6 @@ async function addEvidenceSheet(
     styleHeader(groupCell, '3D5A80');
     row += 1;
 
-    sheet.mergeCells(row, 2, row, 4);
-    const status = sheet.getCell(row, 2);
-    status.value = `${group.items.length}/${category.required} FOTOS · ${group.items.length >= category.required ? 'COMPLETO' : `FALTAN ${category.required - group.items.length}`}`;
-    status.font = { name: 'Arial', size: 8, bold: true, color: { argb: group.items.length >= category.required ? '188038' : 'B7791F' } };
-    row += 1;
-
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
     for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3).height = 125;
@@ -448,7 +442,9 @@ async function addEvidenceSheet(
         ? (category.id === 'NAPS'
           ? getNapsPhotoTitle(ev, index)
           : getDescription(ev, index, category.label))
-        : ('FALTA FOTO ' + (index + 1) + '/' + category.required);
+        : (category.id === 'NAPS'
+          ? getNapsPhotoTitle({ napName: group.name } as MemoryEvidence, index)
+          : ('FALTA FOTO ' + (index + 1) + '/' + category.required));
       styleBody(desc);
       desc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       if (ev && category.id === 'NAPS') {
