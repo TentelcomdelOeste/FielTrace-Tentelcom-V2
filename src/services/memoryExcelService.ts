@@ -232,6 +232,9 @@ async function addEvidenceSheet(
     { width: 3 },
   ];
 
+  // Dimensions used only for positioning the photo inside the Excel cell.
+// ExcelJS anchors are fractional column/row units, so we keep the image size
+// proportional and use a centered top-left anchor plus a pixel extents box.
   const PHOTO_CELL_WIDTH_PX = 27 * 7 + 5;
   const PHOTO_CELL_HEIGHT_PX = 125 * (96 / 72);
   const PHOTO_SIDE_MARGIN_PX = 12;
@@ -350,19 +353,23 @@ async function addEvidenceSheet(
               extension: image.extension,
             });
 
-            const widthRatio = imageWidth / PHOTO_CELL_WIDTH_PX;
-            const heightRatio = imageHeight / PHOTO_CELL_HEIGHT_PX;
-            const offsetX = (1 - widthRatio) / 2;
-            const offsetY = (1 - heightRatio) / 2;
+            // Do not use fractional br anchors here. Excel interprets those
+            // column/row fractions differently depending on the workbook/viewer,
+            // which caused some NAPS photos to collapse into very thin strips.
+            // Use a centered fractional top-left and explicit pixel dimensions.
+            const offsetX = (PHOTO_CELL_WIDTH_PX - imageWidth) / 2;
+            const offsetY = (PHOTO_CELL_HEIGHT_PX - imageHeight) / 2;
+            const colOffset = offsetX / PHOTO_CELL_WIDTH_PX;
+            const rowOffset = offsetY / PHOTO_CELL_HEIGHT_PX;
 
             sheet.addImage(imageId, {
               tl: {
-                col: col - 1 + offsetX,
-                row: blockRow - 1 + offsetY,
+                col: col - 1 + colOffset,
+                row: blockRow - 1 + rowOffset,
               },
-              br: {
-                col: col - 1 + offsetX + widthRatio,
-                row: blockRow - 1 + offsetY + heightRatio,
+              ext: {
+                width: imageWidth,
+                height: imageHeight,
               },
               editAs: 'oneCell',
             });
