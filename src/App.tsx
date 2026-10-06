@@ -497,7 +497,9 @@ export default function App() {
           stopExistingStream();
 
           // Mantener el flujo web sencillo y compatible con Brave/Chrome Android.
-          // Las restricciones "ideal" no deben impedir que el preview entregue frames.          let stream: MediaStream;
+          // Mantener el flujo web sencillo y compatible con Brave/Chrome Android.
+          // Las restricciones "ideal" no deben impedir que el preview entregue frames.
+          let stream: MediaStream;
           try {
             stream = await navigator.mediaDevices.getUserMedia({
               video: {
