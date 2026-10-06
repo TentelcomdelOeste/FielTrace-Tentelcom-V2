@@ -178,7 +178,9 @@ async function imageToBase64(
 
   const context = canvas.getContext('2d', { alpha: false });
   if (!context) {
-    bitmap.close();
+    if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) {
+      source.close();
+    }
     throw new Error('El navegador no pudo crear el procesador de imágenes.');
   }
 
