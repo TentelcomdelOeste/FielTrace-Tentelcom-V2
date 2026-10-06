@@ -214,6 +214,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
 import { firebaseService } from './services/firebaseService';
 import { exportService } from './services/exportService';
+import { generateMemoryExcel } from './services/memoryExcelService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
 import { shareService } from './services/shareService';
@@ -233,6 +234,7 @@ export default function App() {
   const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
   const [memorySelectedCategory, setMemorySelectedCategory] = useState<string | null>(null);
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
+  const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -1118,6 +1120,19 @@ export default function App() {
       missing: Math.max(0, requiredTotal - captured),
       completeAll: groupList.length > 0 && complete === groupList.length
     };
+  };
+
+  const handleGenerateMemoryExcel = async () => {
+    if (!memorySelectedProject || memoryExcelLoading) return;
+    setMemoryExcelLoading(true);
+    try {
+      await generateMemoryExcel(memorySelectedProject, memorySelectedProject._evidences || []);
+    } catch (error: any) {
+      console.error('[Memory Excel] Error generando:', error);
+      alert(error?.message || 'No se pudo generar el Excel de memoria fotográfica.');
+    } finally {
+      setMemoryExcelLoading(false);
+    }
   };
 
   const memoryCategories = [
@@ -3141,6 +3156,18 @@ export default function App() {
                           <p className="text-[9px] font-black uppercase text-blue-700">Seleccione una sección</p>
                           <p className="text-[8px] text-blue-500 font-bold uppercase mt-1">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => { void handleGenerateMemoryExcel(); }}
+                          disabled={memoryExcelLoading}
+                          className="w-full bg-blue-600 text-white rounded-2xl px-5 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]"
+                        >
+                          <FileSpreadsheet className={"w-5 h-5 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            {memoryExcelLoading ? 'GENERANDO EXCEL...' : 'GENERAR EXCEL DE MEMORIA'}
+                          </span>
+                        </button>
 
                         <div className="space-y-3">
                           {memoryCategories.map((category) => {
