@@ -6985,3 +6985,630 @@ export default function App() {
                                 </div>
                               </button>
                             ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('DESECHOS');
+                                  setDesechoCaptureDraft({
+                                    desechoId,
+                                    desechoNumber,
+                                    side: missingSide
+                                  });
+                                  setDesechoMeterageDraft('');
+                                  if (missingSide === 'photo2') {
+                                    setDesechoPromptMode('meterage');
+                                    setShowDesechoCaptureModal(true);
+                                  } else {
+                                    setDesechoPromptMode(null);
+                                    setCurrentStep('camera');
+                                  }
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'MEJORAS' ? (() => {
+                    const mejoraPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MEJORAS' && ev.mejoraId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.mejoraNumber || 0) - Number(b.mejoraNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { before: 1, after: 2 };
+                        return (sideOrder[a.mejoraSide || ''] || 99) - (sideOrder[b.mejoraSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      mejoraPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.mejoraId || `legacy-mejora-${ev.mejoraNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    const getMejoraLabel = (type: string) =>
+                      type === 'SUBIDA DE BANDAS' ? 'SUBIDA DE BANDA'
+                      : type === 'PODAS' ? 'PODA'
+                      : type === 'SUBIDA DE RETENIDAS' ? 'SUBIDA DE RETENIDA'
+                      : type;
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const mejoraNumber = Number(group[0]?.mejoraNumber || groupIndex + 1);
+                      const mejoraId = group[0]?.mejoraId || '';
+                      const mejoraType = group[0]?.mejoraType || 'MEJORA';
+                      const hasBefore = group.some(ev => ev.mejoraSide === 'before');
+                      const hasAfter = group.some(ev => ev.mejoraSide === 'after');
+                      const missingSide: 'before' | 'after' | null =
+                        !hasBefore ? 'before' : !hasAfter ? 'after' : null;
+
+                      return (
+                        <div key={mejoraId || `mejora-group-${mejoraNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                {getMejoraLabel(mejoraType)} {String(mejoraNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'before' ? 'ANTES' : 'DESPUÉS')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {getMejoraLabel(ev.mejoraType || mejoraType)} · {ev.mejoraSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('MEJORAS');
+                                  setMejoraCaptureDraft({
+                                    mejoraId,
+                                    mejoraNumber,
+                                    mejoraType,
+                                    side: missingSide
+                                  });
+                                  setCurrentStep('camera');
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'RESERVA' ? (() => {
+                    const reservationPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'RESERVA' && ev.reserveId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.reserveNumber || 0) - Number(b.reserveNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { initial: 1, final: 2, roll: 3 };
+                        return (sideOrder[a.reserveSide || ''] || 99) - (sideOrder[b.reserveSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      reservationPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.reserveId || `legacy-${ev.reserveNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const reserveNumber = Number(group[0]?.reserveNumber || groupIndex + 1);
+                      const reserveId = group[0]?.reserveId || '';
+                      const hasInitial = group.some(ev => ev.reserveSide === 'initial');
+                      const hasFinal = group.some(ev => ev.reserveSide === 'final');
+                      const hasRoll = group.some(ev => ev.reserveSide === 'roll');
+                      const missingSide: 'initial' | 'final' | 'roll' | null =
+                        !hasInitial ? 'initial' : !hasFinal ? 'final' : !hasRoll ? 'roll' : null;
+
+                      return (
+                        <div key={reserveId || `reserve-group-${reserveNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">RESERVA {String(reserveNumber).padStart(2, '0')}</p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/3 FOTOS · FALTA ' + (missingSide === 'initial' ? 'INICIAL' : missingSide === 'final' ? 'FINAL' : 'ROLLO')
+                                  : '3/3 FOTOS · GRUPO COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.reserveSide === 'initial' ? 'PUNTA INICIAL' : ev.reserveSide === 'final' ? 'PUNTA FINAL' : 'ROLLO DETALLADO'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('RESERVA');
+
+                                  if (missingSide === 'initial') {
+                                    setReserveCaptureDraft({
+                                      side: 'initial',
+                                      reserveId,
+                                      reserveNumber,
+                                      reelNumber: '',
+                                      fiberCount: '', metraje: '',
+                                    });
+                                  } else {
+                                    const inheritedReel = getReserveReelNumber(reserveId, reserveNumber);
+                                    const inheritedFiberCount = getReserveFiberCount(reserveId, reserveNumber);
+                                    if (!inheritedReel || !inheritedFiberCount) {
+                                      alert('La PUNTA INICIAL de esta reserva no tiene registrado el número de carrete y/o la cantidad de fibras.');
+                                      setShowStorageEvidenceViewer(true);
+                                      setStorageEvidenceCategory('RESERVA');
+                                      return;
+                                    }
+                                    setReserveCaptureDraft({
+                                      side: missingSide,
+                                      reserveId,
+                                      reserveNumber,
+                                      reelNumber: inheritedReel,
+                                      fiberCount: inheritedFiberCount, metraje: '',
+});
+                                  }
+
+                                  setShowReserveCaptureModal(true);
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'initial' ? 'INICIAL' : missingSide === 'final' ? 'FINAL' : 'ROLLO'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'PUNTAS_FIBRA' ? (() => {
+                    const fiberPhotos = evidences
+                      .filter((ev: any) =>
+                        !!ev.photoUrl &&
+                        (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') &&
+                        ev.fiberPairId
+                      )
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { initial: 1, final: 2 };
+                        return (sideOrder[a.fiberSide || ''] || 99) - (sideOrder[b.fiberSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      fiberPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.fiberPairId || `legacy-fiber-${ev.fiberPairNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const pairNumber = Number(group[0]?.fiberPairNumber || groupIndex + 1);
+                      const pairId = group[0]?.fiberPairId || '';
+                      const hasInitial = group.some(ev => ev.fiberSide === 'initial' || ev.category === 'PUNTAS_FIBRA_INICIAL');
+                      const hasFinal = group.some(ev => ev.fiberSide === 'final' || ev.category === 'PUNTAS_FIBRA_FINAL');
+                      const missingSide: 'initial' | 'final' | null = !hasInitial ? 'initial' : !hasFinal ? 'final' : null;
+
+                      return (
+                        <div key={pairId || `fiber-group-${pairNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">PUNTA {String(pairNumber).padStart(2, '0')}</p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'initial' ? 'INICIAL' : 'FINAL')
+                                  : '2/2 FOTOS · PAREJA COMPLETA'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">{ev.fiberSide === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}</p>
+                                  <p className="text-[8px] font-black text-blue-600 mt-1">{ev.fiberMeterage ?? '-'} M</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('PUNTAS_FIBRA');
+
+                                  if (missingSide === 'initial') {
+                                    setFiberCaptureDraft({
+                                      side: 'initial',
+                                      pairId,
+                                      pairNumber,
+                                      metraje: '',
+                                      reelNumber: '',
+                                      fiberCount: ''
+                                    });
+                                  } else {
+                                    const initial = group.find(ev => ev.fiberSide === 'initial' || ev.category === 'PUNTAS_FIBRA_INICIAL');
+                                    if (!initial) {
+                                      alert('No se encontró la PUNTA INICIAL para completar esta pareja.');
+                                      setShowStorageEvidenceViewer(true);
+                                      setStorageEvidenceCategory('PUNTAS_FIBRA');
+                                      return;
+                                    }
+                                    setFiberCaptureDraft({
+                                      side: 'final',
+                                      pairId,
+                                      pairNumber,
+                                      metraje: '',
+                                      reelNumber: initial.fiberReelNumber || '',
+                                      fiberCount: String(initial.fiberCount || '')
+                                    });
+                                  }
+
+                                  setShowFiberCaptureModal(true);
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'initial' ? 'INICIAL' : 'FINAL'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : (
+                    evidences
+                      .filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
+                      .map((ev: any, index: number) => (
+                        <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                          <div className="aspect-[4/5] bg-black overflow-hidden">
+                            <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                          </div>
+                          <div className="p-2.5">
+                            <p className="text-[9px] font-black uppercase text-gray-900 truncate">{ev.categoryLabel || 'Otros'}</p>
+                            {ev.fiberPairId && (
+                              <p className="text-[8px] font-black uppercase text-blue-600 mt-1">PUNTA {String(ev.fiberPairNumber || '').padStart(2, '0')} · {ev.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {ev.fiberMeterage ?? '-'} M</p>
+                            )}
+                            <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                          </div>
+                        </button>
+                      ))
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {viewingEvidence && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[190] bg-black/70 backdrop-blur-sm flex flex-col">
+            <div className="flex items-center justify-between px-4 py-4 bg-white border-b">
+              <h2 className="text-sm font-black uppercase tracking-tight">Detalle del registro</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (viewingEvidence?.id != null) setConfirmDelete({ type: 'evidence', id: viewingEvidence.id });
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[10px] font-black uppercase"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Eliminar
+                </button>
+                <button type="button" onClick={() => setViewingEvidence(null)} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cerrar</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 bg-gray-50 space-y-3">
+              <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-2.5 shadow-sm">
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Proyecto</p>
+                <p className="text-sm font-black text-gray-950 uppercase">{viewingEvidence.projectName || '-'}</p>
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Fecha / Hora</p>
+                <p className="text-sm font-mono text-gray-800">{viewingEvidence.fecha} {viewingEvidence.hora || ''}</p>
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">GPS</p>
+                <p className="text-sm font-mono text-green-700">{viewingEvidence.gpsLabel || (viewingEvidence.latitude ? `${viewingEvidence.latitude}, ${viewingEvidence.longitude}` : 'SIN GPS')}</p>
+                {viewingEvidence.ubicacion && (<><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Ubicacion</p><p className="text-sm text-gray-700 uppercase">{viewingEvidence.ubicacion}</p></>)}
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Tecnico</p>
+                <p className="text-sm font-bold text-gray-900 uppercase">{viewingEvidence.baseFields?.tecnico || '-'}</p>
+                {(viewingEvidence.customFields || []).filter((f: any) => f.active !== false).map((f: any, i: number) => (
+                  <div key={i}><p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">{f.name || 'Campo'}</p><p className="text-sm text-gray-800 uppercase">{f.value || '-'}</p></div>
+                ))}
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Referencia foto</p>
+                <p className="text-[11px] font-mono text-gray-400 break-all">{viewingEvidence.photoPath || viewingEvidence.uuid || '-'}</p>
+                {viewingEvidence.fiberPairId && (
+                  <>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Punta de fibra</p>
+                    <p className="text-sm font-black text-blue-700 uppercase">
+                      PUNTA {String(viewingEvidence.fiberPairNumber || '').padStart(2, '0')} · {viewingEvidence.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {viewingEvidence.fiberMeterage ?? '-'} m
+                    </p>
+                    {viewingEvidence.fiberReelNumber && (
+                      <p className="text-[11px] font-black text-gray-700 uppercase mt-1">CARRETE: {viewingEvidence.fiberReelNumber}</p>
+                    )}
+                  </>
+                )}
+                {viewingEvidence.reserveReelNumber && (
+                  <>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Carrete</p>
+                    <p className="text-sm font-black text-gray-700 uppercase">{viewingEvidence.reserveReelNumber}</p>
+                  </>
+                )}
+                {viewingEvidence.categoryLabel && (
+                  <>
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest pt-2">Tipo de evidencia</p>
+                    <p className="text-sm font-black text-blue-700 uppercase">{viewingEvidence.categoryLabel}</p>
+                  </>
+                )}
+              </div>
+              <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
+                {viewingEvidence.photoUrl ? (
+                  <img src={viewingEvidence.photoUrl} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" />
+                ) : (
+                  <div className="p-8 text-center text-white/60">
+                    <CameraIcon className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Fotografía todavía no disponible en Storage</p>
+                  </div>
+                )}
+              </div>
+              <p className="text-center text-[10px] text-gray-400 pt-2">
+                {viewingEvidence.photoUrl ? 'Esta es la fotografía que utilizará la memoria de Excel.' : 'La fotografía aún está pendiente de subir a Firebase Storage.'}
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+
+
+        {confirmDeleteGalleryStep === 1 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[210] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
+              <h3 className="text-base font-black uppercase tracking-tight text-gray-950">
+                {selectedGalleryUris.length === 1 ? '¿Eliminar foto?' : `¿Eliminar ${selectedGalleryUris.length} fotos?`}
+              </h3>
+              <p className="text-sm text-gray-600">
+                Se eliminarán del álbum Field Trace del dispositivo.
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setConfirmDeleteGalleryStep(0)} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button type="button" onClick={() => setConfirmDeleteGalleryStep(2)} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Continuar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {confirmDeleteGalleryStep === 2 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[211] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border-2 border-red-200">
+              <h3 className="text-base font-black uppercase tracking-tight text-red-700">Confirmación final</h3>
+              <p className="text-sm text-gray-600">
+                Esta acción <span className="font-bold text-red-600">no se puede deshacer</span>.
+                {selectedGalleryUris.length === 1
+                  ? ' ¿Eliminar definitivamente esta foto?'
+                  : ` ¿Eliminar definitivamente ${selectedGalleryUris.length} fotos?`}
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setConfirmDeleteGalleryStep(0)} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button type="button" onClick={() => { void executeDeleteGallery(); }} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Sí, eliminar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {confirmDeleteProjectsStep === 1 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
+              <h3 className="text-base font-black uppercase tracking-tight text-gray-950">
+                {pendingDeleteProjectIds.length === 1 ? '¿Eliminar proyecto?' : `¿Eliminar ${pendingDeleteProjectIds.length} proyectos?`}
+              </h3>
+              <p className="text-sm text-gray-600">
+                Se borrarán el proyecto y todos sus registros. Las fotos del álbum Field Trace no se eliminan automáticamente.
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => { setConfirmDeleteProjectsStep(0); setPendingDeleteProjectIds([]); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button type="button" onClick={() => setConfirmDeleteProjectsStep(2)} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Continuar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {confirmDeleteProjectsStep === 2 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[201] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border-2 border-red-200">
+              <h3 className="text-base font-black uppercase tracking-tight text-red-700">Confirmación final</h3>
+              <p className="text-sm text-gray-600">
+                Esta acción <span className="font-bold text-red-600">no se puede deshacer</span>.
+                {pendingDeleteProjectIds.length === 1
+                  ? ' ¿Eliminar definitivamente este proyecto?'
+                  : ` ¿Eliminar definitivamente ${pendingDeleteProjectIds.length} proyectos?`}
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => { setConfirmDeleteProjectsStep(0); setPendingDeleteProjectIds([]); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button type="button" onClick={() => { void executeDeleteProjects(); }} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Sí, eliminar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {confirmClearAllStep === 1 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
+              <h3 className="text-base font-black uppercase tracking-tight text-gray-950">¿Vaciar todos los registros?</h3>
+              <p className="text-sm text-gray-600">
+                Se eliminarán <span className="font-bold text-gray-900">{evidences.length}</span> registro(s) de este proyecto. Las fotos del álbum Field Trace no se borran automáticamente.
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setConfirmClearAllStep(0)} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button type="button" onClick={() => setConfirmClearAllStep(2)} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Continuar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {confirmClearAllStep === 2 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[201] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border-2 border-red-200">
+              <h3 className="text-base font-black uppercase tracking-tight text-red-700">Confirmación final</h3>
+              <p className="text-sm text-gray-600">
+                Esta acción <span className="font-bold text-red-600">no se puede deshacer</span>. ¿Eliminar definitivamente todos los registros del proyecto?
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setConfirmClearAllStep(0)} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (selectedProject?.id != null) {
+                        if ((storageService as any).deleteAllEvidencesByProject) {
+                          await (storageService as any).deleteAllEvidencesByProject(selectedProject.id);
+                        } else {
+                          for (const ev of evidences) {
+                            if (ev.id != null) await storageService.deleteEvidence(ev.id);
+                          }
+                        }
+                        setEvidences([]);
+                      }
+                    } catch (e) {
+                      console.error('[ClearAll] failed', e);
+                    } finally {
+                      setConfirmClearAllStep(0);
+                    }
+                  }}
+                  className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider"
+                >
+                  Sí, eliminar todo
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {editingEvidence && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[190] bg-black/70 backdrop-blur-sm flex flex-col">
+            <div className="flex items-center justify-between px-4 py-4 bg-white border-b">
+              <h2 className="text-sm font-black uppercase tracking-tight">Editar registro</h2>
+              <button type="button" onClick={() => setEditingEvidence(null)} className="text-xs font-bold uppercase text-gray-500 px-3 py-2">Cancelar</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 bg-gray-50 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3"><p className="text-[11px] text-amber-800 font-medium">Si editas esta informacion, no coincidira con el texto impreso en la fotografia.</p></div>
+              <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Tecnico</label>
+                <input type="text" value={editingEvidence.baseFields?.tecnico || ''} onChange={(e) => setEditingEvidence({ ...editingEvidence, baseFields: { ...(editingEvidence.baseFields || {}), tecnico: e.target.value.toUpperCase() } })} className="w-full p-3.5 bg-white border border-gray-100 rounded-2xl text-sm font-bold outline-none" />
+              </div>
+              {(editingEvidence.customFields || []).map((f: any, idx: number) => (
+                <div key={idx} className="space-y-3 bg-white border border-gray-100 rounded-2xl p-3.5">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Descripción</label>
+                    <input
+                      type="text"
+                      value={f.name || ''}
+                      onChange={(e) => {
+                        const fields = [...(editingEvidence.customFields || [])];
+                        fields[idx] = { ...fields[idx], name: e.target.value };
+                        setEditingEvidence({ ...editingEvidence, customFields: fields });
+                      }}
+                      className="w-full p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold outline-none focus:border-blue-400"
+                      placeholder="Nombre del campo"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Cantidad / Valor</label>
+                    <input
+                      type="text"
+                      value={f.value || ''}
+                      onChange={(e) => {
+                        const fields = [...(editingEvidence.customFields || [])];
+                        fields[idx] = { ...fields[idx], value: e.target.value };
+                        setEditingEvidence({ ...editingEvidence, customFields: fields });
+                      }}
+                      className="w-full p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold outline-none focus:border-blue-400"
+                      placeholder="Valor"
+                    />
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={() => { setPendingEditSave(editingEvidence); setEditConfirmOpen(true); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-black uppercase">Guardar cambios</button>
+            </div>
+          </motion.div>
+        )}
+        {editConfirmOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[210] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm shadow-2xl text-center">
+              <h3 className="text-lg font-black uppercase mb-3">Confirmar edicion</h3>
+              <p className="text-sm text-gray-500 mb-8">Si editas esta informacion, no coincidira con el texto impreso en la fotografia. ¿Continuar?</p>
+              <div className="flex gap-4">
+                <button onClick={() => { setEditConfirmOpen(false); setPendingEditSave(null); }} className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl text-sm font-bold uppercase">Cancelar</button>
+                <button onClick={async () => { if (pendingEditSave?.id != null) { try { await storageService.updateEvidence(pendingEditSave.id, { baseFields: pendingEditSave.baseFields, customFields: pendingEditSave.customFields }); if (selectedProject?.id) { const evs = await storageService.getEvidencesByProject(selectedProject.id); setEvidences(evs); } } catch (e) { console.error(e); } } setEditConfirmOpen(false); setPendingEditSave(null); setEditingEvidence(null); }} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl text-sm font-bold uppercase">Continuar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+      </AnimatePresence>
+    </div>
+  );
+}
