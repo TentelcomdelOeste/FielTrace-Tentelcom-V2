@@ -124,14 +124,15 @@ async function imageToBase64(
 
   const sourceBlob = await response.blob();
 
-  let bitmap: ImageBitmap | null = null;
-  let objectUrl = '';
+  let source: CanvasImageSource | null = null;
   let sourceWidth = 0;
   let sourceHeight = 0;
+  let objectUrl = '';
 
   try {
     if (typeof createImageBitmap !== 'undefined') {
-      bitmap = await createImageBitmap(sourceBlob);
+      const bitmap = await createImageBitmap(sourceBlob);
+      source = bitmap;
       sourceWidth = bitmap.width;
       sourceHeight = bitmap.height;
     } else if (typeof document !== 'undefined') {
@@ -142,15 +143,15 @@ async function imageToBase64(
         image.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
         image.src = objectUrl;
       });
+      source = imageElement;
       sourceWidth = imageElement.naturalWidth;
       sourceHeight = imageElement.naturalHeight;
-      bitmap = await createImageBitmap(imageElement);
     }
   } finally {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
   }
 
-  if (!bitmap || !sourceWidth || !sourceHeight) {
+  if (!source || !sourceWidth || !sourceHeight) {
     throw new Error('El navegador no pudo procesar la fotografía.');
   }
 
@@ -174,8 +175,10 @@ async function imageToBase64(
 
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  context.drawImage(source, 0, 0, width, height);
+  if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) {
+    source.close();
+  }
 
   const optimizedBlob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
