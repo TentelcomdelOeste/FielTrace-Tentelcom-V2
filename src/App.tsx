@@ -258,6 +258,14 @@ export default function App() {
     remainingPhotos: number;
   } | null>(null);
   const [showNapCaptureModal, setShowNapCaptureModal] = useState(false);
+  const [mufaCaptureDraft, setMufaCaptureDraft] = useState<{
+    mufaId: string;
+    mufaNumber: number;
+    mufaName: string;
+    photoNumber: number;
+    remainingPhotos: number;
+  } | null>(null);
+  const [showMufaCaptureModal, setShowMufaCaptureModal] = useState(false);
   const [altaCaptureDraft, setAltaCaptureDraft] = useState<{
     altaId: string;
     altaNumber: number;
@@ -497,8 +505,7 @@ export default function App() {
                 facingMode: cameraFacing === 'rear' ? { ideal: 'environment' } : { ideal: 'user' },
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
-              },
-              audio: false
+              },              audio: false
             });
           } catch (firstError: any) {
             const name = String(firstError?.name || '');
@@ -997,8 +1004,7 @@ export default function App() {
     let id;
     if (editingProject.id) {
       await storageService.updateProject(editingProject.id, normalizedProject);
-      id = editingProject.id;
-    } else {
+      id = editingProject.id;    } else {
       id = await storageService.createProject(normalizedProject);
     }
     
@@ -1140,6 +1146,56 @@ export default function App() {
         const napId = crypto.randomUUID ? crypto.randomUUID() : `nap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         setNapCaptureDraft({ napId, napNumber, napName: '', photoNumber: 1, remainingPhotos: 9 });
         setShowNapCaptureModal(true);
+      }
+      return;
+    }
+
+    if (category === 'MUFA') {
+      setFiberCaptureDraft(null);
+      setReserveCaptureDraft(null);
+
+      const mufaGroups = Array.from(new Set(
+        evidences.filter(ev => ev.category === 'MUFA' && ev.mufaId).map(ev => ev.mufaId as string)
+      ))
+        .map(mufaId => {
+          const group = evidences.filter(ev => ev.category === 'MUFA' && ev.mufaId === mufaId);
+          const first = group[0];
+          return {
+            mufaId,
+            mufaNumber: Number(first?.mufaNumber || 0),
+            mufaName: first?.mufaName || '',
+            count: group.length
+          };
+        })
+        .filter(group => group.count < 9)
+        .sort((a, b) => a.mufaNumber - b.mufaNumber);
+
+      if (mufaGroups.length > 0) {
+        const nap = mufaGroups[0];
+        const draft = {
+          mufaId: nap.mufaId,
+          mufaNumber: nap.mufaNumber,
+          mufaName: nap.mufaName,
+          photoNumber: nap.count + 1,
+          remainingPhotos: 9 - nap.count
+        };
+        setMufaCaptureDraft(draft);
+
+        // Si el MUFA ya tiene nombre guardado, no volvemos a pedirlo.
+        // Al pulsar TOMAR FOTO se entra directamente a la cámara.
+        if (nap.mufaName.trim()) {
+          setShowMufaCaptureModal(false);
+          setCurrentStep('camera');
+        } else {
+          setShowMufaCaptureModal(true);
+        }
+      } else {
+        const usedNumbers = evidences.filter(ev => ev.category === 'MUFA' && ev.mufaNumber != null)
+          .map(ev => Number(ev.mufaNumber)).filter(Number.isFinite);
+        const mufaNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
+        const mufaId = crypto.randomUUID ? crypto.randomUUID() : `mufa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        setMufaCaptureDraft({ mufaId, mufaNumber, mufaName: '', photoNumber: 1, remainingPhotos: 9 });
+        setShowMufaCaptureModal(true);
       }
       return;
     }
@@ -1497,8 +1553,7 @@ export default function App() {
     }
 
     setEvidenceCategory('PUNTAS_FIBRA');
-    setShowFiberPairSelector(false);
-    setShowFiberCaptureModal(true);
+    setShowFiberPairSelector(false);    setShowFiberCaptureModal(true);
   };
 
   const getReserveReelNumber = (reserveId: string, reserveNumber?: number) => {
@@ -1997,8 +2052,7 @@ export default function App() {
       const { gps: stateGps, locationData, isLive, diagnostic } = locationService.getCurrentState();
       const locationOff = diagnostic?.status === 'location_disabled' || diagnostic?.locationServicesEnabled === false;
       const activeGps = locationOff ? null : stateGps;
-      const hasGps = !!(activeGps && activeGps.lat != null && activeGps.lon != null);
-      const isActualLive = !!(hasGps && (activeGps!.source === 'live' || isLive));
+      const hasGps = !!(activeGps && activeGps.lat != null && activeGps.lon != null);      const isActualLive = !!(hasGps && (activeGps!.source === 'live' || isLive));
       const gpsLabel = locationOff
         ? 'SIN GPS (GPS DESACTIVADO)'
         : hasGps
@@ -2128,6 +2182,10 @@ export default function App() {
         napNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.napNumber : undefined,
         napName: selectedEvidenceCategory.id === 'NAPS' ? (napCaptureDraft?.napName || '').trim() : undefined,
         napPhotoNumber: selectedEvidenceCategory.id === 'NAPS' ? napCaptureDraft?.photoNumber : undefined,
+        mufaId: selectedEvidenceCategory.id === 'MUFA' ? (mufaCaptureDraft?.mufaId || '') : undefined,
+        mufaNumber: selectedEvidenceCategory.id === 'MUFA' ? mufaCaptureDraft?.mufaNumber : undefined,
+        mufaName: selectedEvidenceCategory.id === 'MUFA' ? (mufaCaptureDraft?.mufaName || '').trim() : undefined,
+        mufaPhotoNumber: selectedEvidenceCategory.id === 'MUFA' ? mufaCaptureDraft?.photoNumber : undefined,
         photo: {
           fileName,
           createdAt: capturedAt
@@ -2252,6 +2310,23 @@ export default function App() {
               setCurrentStep('history');
             } else {
               setNapCaptureDraft(prev => prev ? {
+                ...prev,
+                photoNumber: prev.photoNumber + 1,
+                remainingPhotos: remainingAfterCapture
+              } : prev);
+            }
+          } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
+            // El límite debe calcularse sobre las fotos que FALTABAN al iniciar,
+            // no sobre el número absoluto de la foto. Ej.: si ya había 4/9,
+            // solo deben tomarse 5 y después cerrar automáticamente la cámara.
+            const remainingAfterCapture = mufaCaptureDraft.remainingPhotos - 1;
+
+            if (remainingAfterCapture <= 0) {
+              setMufaCaptureDraft(null);
+              setShowMufaCaptureModal(false);
+              setCurrentStep('history');
+            } else {
+              setMufaCaptureDraft(prev => prev ? {
                 ...prev,
                 photoNumber: prev.photoNumber + 1,
                 remainingPhotos: remainingAfterCapture
@@ -2497,8 +2572,7 @@ export default function App() {
         altaPendingLabels: pendingAltaLabels,
         reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
         fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
-      };
-    }
+      };    }
 
     if (category.id === 'ACEROS') {
       const aceroIds = Array.from(new Set(categoryEvidences.map(ev => ev.aceroId).filter(Boolean))) as string[];
@@ -2599,6 +2673,27 @@ export default function App() {
         napCount: napGroups.length,
         napCompletedCount: completedNaps,
         pendingNapLabels,
+        reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
+        fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
+      };
+    }
+    if (category.id === 'MUFA') {
+      const mufaIds = Array.from(new Set(categoryEvidences.map(ev => ev.mufaId).filter(Boolean))) as string[];
+      const mufaGroups = mufaIds.map(mufaId => {
+        const group = categoryEvidences.filter(ev => ev.mufaId === mufaId);
+        const first = group[0];
+        return { mufaNumber: Number(first?.mufaNumber || 0), mufaName: first?.mufaName || '', count: group.length };
+      }).sort((a, b) => a.mufaNumber - b.mufaNumber);
+      const completedMufas = mufaGroups.filter(nap => nap.count >= 9).length;
+      const pendingMufaLabels = mufaGroups.filter(nap => nap.count < 9)
+        .map(nap => 'MUFA ' + String(nap.mufaNumber).padStart(2, '0') + ' · ' + (nap.mufaName || 'SIN NOMBRE') + ': ' + nap.count + '/9 FOTOS');
+      return {
+        ...category,
+        count: categoryEvidences.length,
+        completed: mufaGroups.length > 0 && mufaGroups.every(nap => nap.count >= 9),
+        mufaCount: mufaGroups.length,
+        mufaCompletedCount: completedMufas,
+        pendingMufaLabels,
         reserveCompletedCount: 0, reserveCount: 0, reservePendingCount: 0, pendingReserveLabels: [],
         fiberPairCount: 0, fiberCompleteCount: 0, fiberPendingCount: 0, fiberPendingLabels: [], fiberRole: null,
       };
@@ -2960,6 +3055,12 @@ export default function App() {
                                           ? '✓ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.count + ' FOTOS'
                                           : '⚠ ' + category.napCompletedCount + '/' + category.napCount + ' NAPS COMPLETOS · ' + category.pendingNapLabels.join(' · '))
                                       : 'PENDIENTE · 0 FOTOS')
+                                : category.id === 'MUFA'
+                                  ? (category.mufaCount
+                                      ? (category.completed
+                                          ? '✓ ' + category.mufaCompletedCount + '/' + category.mufaCount + ' MUFAS COMPLETAS · ' + category.count + ' FOTOS'
+                                          : '⚠ ' + category.mufaCompletedCount + '/' + category.mufaCount + ' MUFAS COMPLETAS · ' + category.pendingMufaLabels.join(' · '))
+                                      : 'PENDIENTE · 0 FOTOS')
                                 : category.id === 'MEJORAS'
                                   ? (category.mejoraCount
                                       ? (category.completed
@@ -2997,8 +3098,7 @@ export default function App() {
                             className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all ${
                               category.completed
                                 ? 'bg-white border border-green-200 text-green-700'
-                                : 'bg-blue-600 text-white shadow-sm'
-                            }`}
+                                : 'bg-blue-600 text-white shadow-sm'                            }`}
                           >
                             {category.completed ? 'Agregar' : 'Tomar foto'}
                           </button>
@@ -3497,8 +3597,7 @@ export default function App() {
                                </div>
                                <input 
                                  type="range"
-                                 disabled={!unlockedSettings.logoOpacity}
-                                 min="0"
+                                 disabled={!unlockedSettings.logoOpacity}                                 min="0"
                                  max="100"
                                  step="1"
                                  value={editingProject.logoOpacity ?? 80}
@@ -3937,6 +4036,19 @@ export default function App() {
                    </>
                  )}
  
+                 {evidenceCategory === 'MUFA' && mufaCaptureDraft && (
+                   <>
+                     <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                       FOTO {mufaCaptureDraft.photoNumber}/9
+                     </p>
+                     {mufaCaptureDraft.napName?.trim() && (
+                       <p className="line-clamp-4 break-words whitespace-pre-wrap">
+                         MUFA: {mufaCaptureDraft.napName.toUpperCase()}
+                       </p>
+                     )}
+                   </>
+                 )}
+ 
                  {evidenceCategory === 'RESERVA' && reserveCaptureDraft && (
                    <>
                      {reserveCaptureDraft.side === 'roll' ? (
@@ -3997,8 +4109,7 @@ export default function App() {
                 title={cameraFacing === 'rear' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}
                 aria-label={cameraFacing === 'rear' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}
               >
-                <RefreshCcw className="w-5 h-5" />
-              </button>
+                <RefreshCcw className="w-5 h-5" />              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -4497,8 +4608,7 @@ export default function App() {
                   ? '¿Eliminar esta evidencia definitivamente? Se borrará la fotografía de Firebase Storage, su registro y la referencia local. Esta acción no se puede deshacer.'
                   : '¿Estás seguro de que deseas eliminar este proyecto y toda su historia?'}
               </p>
-              <div className="flex gap-4">
-                <button 
+              <div className="flex gap-4">                <button 
                   onClick={() => setConfirmDelete(null)}
                   className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl text-sm font-bold uppercase tracking-widest active:scale-95 transition-all"
                 >
@@ -4714,6 +4824,41 @@ export default function App() {
                 {napCaptureDraft.photoNumber === 1 ? 'GUARDAR NOMBRE Y ABRIR CÁMARA' : 'ABRIR CÁMARA'}
               </button>
               <button type="button" onClick={() => { setShowNapCaptureModal(false); setNapCaptureDraft(null); }}
+                className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showMufaCaptureModal && mufaCaptureDraft && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[221] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5">
+            <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Evidencia MUFA</p>
+                <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
+                  MUFA {String(mufaCaptureDraft.napNumber).padStart(2, '0')} · FOTO {mufaCaptureDraft.photoNumber}/9
+                </h3>
+                <p className="text-xs text-gray-500 mt-2">
+                  Ingrese el nombre del MUFA una sola vez. Las 9 fotografías quedarán agrupadas bajo el mismo MUFA.
+                </p>
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase text-gray-500 mb-2">Nombre del MUFA</label>
+                <textarea
+                  value={mufaCaptureDraft.napName}
+                  onChange={e => setMufaCaptureDraft(prev => prev ? { ...prev, napName: e.target.value } : prev)}
+                  placeholder="Ej. GT069/072"
+                  readOnly={mufaCaptureDraft.photoNumber > 1}
+                  rows={2}
+                  className="w-full min-h-[92px] px-4 py-4 rounded-2xl border-2 border-blue-500 text-lg font-black uppercase tracking-tight outline-none resize-none overflow-y-auto whitespace-pre-wrap break-words read-only:bg-gray-100 read-only:text-gray-500"
+                />
+                {mufaCaptureDraft.photoNumber > 1 && <p className="text-[9px] font-black uppercase text-green-600 mt-2">✓ Nombre heredado para las 9 fotos</p>}
+              </div>
+              <button type="button" disabled={!mufaCaptureDraft.napName.trim()}
+                onClick={() => { setEvidenceCategory('MUFA'); setShowMufaCaptureModal(false); setCurrentStep('camera'); }}
+                className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase disabled:opacity-40">
+                {mufaCaptureDraft.photoNumber === 1 ? 'GUARDAR NOMBRE Y ABRIR CÁMARA' : 'ABRIR CÁMARA'}
+              </button>
+              <button type="button" onClick={() => { setShowMufaCaptureModal(false); setMufaCaptureDraft(null); }}
                 className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
             </motion.div>
           </motion.div>
@@ -4997,8 +5142,7 @@ export default function App() {
                 <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setAceroCaptureDraft(prev => prev ? { ...prev, side: 'photo1' } : prev);
+                    onClick={() => {                      setAceroCaptureDraft(prev => prev ? { ...prev, side: 'photo1' } : prev);
                       setAceroPromptMode(null);
                       setShowAceroCaptureModal(false);
                       setCurrentStep('camera');
@@ -5497,8 +5641,7 @@ export default function App() {
                     setDesechoCaptureDraft({
                       desechoId: choice.desechoId,
                       desechoNumber: choice.desechoNumber,
-                      side: choice.missingSide
-                    });
+                      side: choice.missingSide                    });
                     setDesechoMeterageDraft('');
                     if (choice.missingSide === 'photo2') {
                       setDesechoPromptMode('meterage');
@@ -5997,8 +6140,7 @@ export default function App() {
         {showStorageEvidenceViewer && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[185] bg-black/80 backdrop-blur-sm flex flex-col">
             <div className="flex items-center justify-between px-4 py-4 bg-white border-b border-gray-100">
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-tight text-gray-950">
+              <div>                <h2 className="text-sm font-black uppercase tracking-tight text-gray-950">
                   {storageEvidenceCategory
                     ? EVIDENCE_CATEGORIES.find(c => c.id === storageEvidenceCategory)?.label || 'Evidencias'
                     : 'Evidencias para Excel'}
@@ -6024,7 +6166,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className={
-                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS' || storageEvidenceCategory === 'DESECHOS' || storageEvidenceCategory === 'MEJORAS'
+                  storageEvidenceCategory === 'RESERVA' || storageEvidenceCategory === 'NAPS' || storageEvidenceCategory === 'MUFA' || storageEvidenceCategory === 'ALTAS' || storageEvidenceCategory === 'PUNTAS_FIBRA' || storageEvidenceCategory === 'ACEROS' || storageEvidenceCategory === 'DESECHOS' || storageEvidenceCategory === 'MEJORAS'
                     ? "space-y-5 pb-8"
                     : "grid grid-cols-2 gap-3 pb-8"
                 }>
@@ -6497,8 +6639,484 @@ export default function App() {
                                 className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
                               >
                                 <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  storageEvidenceCategory === 'MUFA' ? (() => {
+                    const mufaPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA' && ev.mufaId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.mufaNumber || 0) - Number(b.mufaNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        return Number(a.mufaPhotoNumber || 0) - Number(b.mufaPhotoNumber || 0);
+                      });
+
+                    const groups = Array.from(
+                      mufaPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.mufaId || `legacy-nap-${ev.mufaNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const mufaNumber = Number(group[0]?.mufaNumber || groupIndex + 1);
+                      const mufaName = group[0]?.mufaName || 'SIN NOMBRE';
+
+                      return (
+                        <div key={group[0]?.mufaId || `mufa-group-${mufaNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                MUFA {String(mufaNumber).padStart(2, '0')} · {mufaName}
+                              </p>
+                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
+                                {group.length}/9 FOTOS · GRUPO INDEPENDIENTE
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {Array.from({ length: 9 }, (_, slotIndex) => {
+                              const photoNumber = slotIndex + 1;
+                              const ev = group.find((item: any) => Number(item.mufaPhotoNumber) === photoNumber);
+
+                              if (ev) {
+                                return (
+                                  <button
+                                    key={ev.id || ev.uuid || `nap-photo-${photoNumber}`}
+                                    type="button"
+                                    onClick={() => setViewingEvidence(ev)}
+                                    className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
+                                  >
+                                    <div className="aspect-[4/5] bg-black overflow-hidden">
+                                      <img
+                                        src={ev.photoUrl}
+                                        alt={ev.mufaName || 'MUFA'}
+                                        className="w-full h-full object-cover"
+                                        loading="lazy"
+                                      />
+                                    </div>
+                                    <div className="p-2.5">
+                                      <p className="text-[9px] font-black uppercase text-gray-900">
+                                        FOTO {photoNumber}/9
+                                      </p>
+                                      <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                        {ev.fecha} {ev.hora || ''}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  key={`nap-missing-${photoNumber}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const mufaId = group[0]?.mufaId || '';
+                                    const mufaNumber = Number(group[0]?.mufaNumber || groupIndex + 1);
+                                    const mufaName = group[0]?.mufaName || '';
+                                    setViewingEvidence(null);
+                                    setShowStorageEvidenceViewer(false);
+                                    setStorageEvidenceCategory(null);
+                                    setEvidenceCategory('MUFA');
+                                    // Captura puntual: al volver de la cámara se regresa
+                                    // al visor después de completar únicamente esta foto.
+                                    setNapCaptureDraft({
+                                      mufaId,
+                                      mufaNumber,
+                                      mufaName,
+                                      photoNumber,
+                                      remainingPhotos: 1
+                                    });
+                                    setShowNapCaptureModal(false);
+                                    setCurrentStep('camera');
+                                  }}
+                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                                >
+                                  <CameraIcon className="w-8 h-8" />
+                                  <span className="text-[9px] font-black uppercase text-center px-2">
+                                    TOMAR FOTO<br />FOTO {photoNumber}/9
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'ALTAS' ? (() => {
+                    const altaPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ALTAS' && ev.altaId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.altaNumber || 0) - Number(b.altaNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { panoramic: 1, meterage: 2 };
+                        return (sideOrder[a.altaSide || ''] || 99) - (sideOrder[b.altaSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      altaPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.altaId || `legacy-alta-${ev.altaNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const altaNumber = Number(group[0]?.altaNumber || groupIndex + 1);
+                      const altaType = group[0]?.altaType || 'ALTA';
+                      const altaId = group[0]?.altaId || '';
+                      const hasPanoramic = group.some(ev => ev.altaSide === 'panoramic');
+                      const hasMeterage = group.some(ev => ev.altaSide === 'meterage');
+                      const missingSide: 'panoramic' | 'meterage' | null =
+                        !hasPanoramic ? 'panoramic' : !hasMeterage ? 'meterage' : null;
+
+                      return (
+                        <div key={altaId || `alta-group-${altaNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                ALTA {String(altaNumber).padStart(2, '0')}
+                              </p>
+                              <p className="text-[8px] font-bold uppercase text-gray-500 mt-1">{altaType}</p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button
+                                key={ev.id || ev.uuid || index}
+                                type="button"
+                                onClick={() => setViewingEvidence(ev)}
+                                className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
+                              >
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.altaSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('ALTAS');
+                                  setAltaMeterageDraft('');
+                                  setAltaReelDraft('');
+                                  setAltaFiberCountDraft('');
+                                  setAltaCaptureDraft({
+                                    altaId,
+                                    altaNumber,
+                                    altaType,
+                                    side: missingSide
+                                  });
+
+                                  // Al completar desde VER FOTOS, la foto faltante
+                                  // debe conservar exactamente su lado. No reutilizar
+                                  // el estado anterior del modal (por ejemplo METRAJE).
+                                  if (missingSide === 'panoramic') {
+                                    setAltaPromptMode(null);
+                                    setShowAltaCaptureModal(false);
+                                    setCurrentStep('camera');
+                                  } else {
+                                    setAltaPromptMode('meterage');
+                                    setShowAltaCaptureModal(true);
+                                  }
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
                                 <span className="text-[9px] font-black uppercase text-center px-2">
-                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                  TOMAR FOTO<br />{missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'ACEROS' ? (() => {
+                    const aceroPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ACEROS' && ev.aceroId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.aceroNumber || 0) - Number(b.aceroNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { photo1: 1, photo2: 2 };
+                        return (sideOrder[a.aceroSide || ''] || 99) - (sideOrder[b.aceroSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      aceroPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.aceroId || `legacy-acero-${ev.aceroNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const aceroNumber = Number(group[0]?.aceroNumber || groupIndex + 1);
+                      const aceroId = group[0]?.aceroId || '';
+                      const hasPhoto1 = group.some(ev => ev.aceroSide === 'photo1');
+                      const hasPhoto2 = group.some(ev => ev.aceroSide === 'photo2');
+                      const missingSide: 'photo1' | 'photo2' | null =
+                        !hasPhoto1 ? 'photo1' : !hasPhoto2 ? 'photo2' : null;
+
+                      return (
+                        <div key={aceroId || `acero-group-${aceroNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                ACERO {String(aceroNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'photo1' ? 'FOTO 1' : 'FOTO 2')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.aceroSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('ACEROS');
+                                  setAceroCaptureDraft({
+                                    aceroId,
+                                    aceroNumber,
+                                    side: missingSide
+                                  });
+                                  setCurrentStep('camera');
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'DESECHOS' ? (() => {
+                    const desechoPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'DESECHOS' && ev.desechoId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.desechoNumber || 0) - Number(b.desechoNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { photo1: 1, photo2: 2 };
+                        return (sideOrder[a.desechoSide || ''] || 99) - (sideOrder[b.desechoSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      desechoPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.desechoId || `legacy-desecho-${ev.desechoNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const desechoNumber = Number(group[0]?.desechoNumber || groupIndex + 1);
+                      const desechoId = group[0]?.desechoId || '';
+                      const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');
+                      const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
+                      const missingSide: 'photo1' | 'photo2' | null =
+                        !hasPhoto1 ? 'photo1' : !hasPhoto2 ? 'photo2' : null;
+
+                      return (
+                        <div key={desechoId || `desecho-group-${desechoNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                DESECHO {String(desechoNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {ev.desechoSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('DESECHOS');
+                                  setDesechoCaptureDraft({
+                                    desechoId,
+                                    desechoNumber,
+                                    side: missingSide
+                                  });
+                                  setDesechoMeterageDraft('');
+                                  if (missingSide === 'photo2') {
+                                    setDesechoPromptMode('meterage');
+                                    setShowDesechoCaptureModal(true);
+                                  } else {
+                                    setDesechoPromptMode(null);
+                                    setCurrentStep('camera');
+                                  }
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">
+                                  TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : storageEvidenceCategory === 'MEJORAS' ? (() => {
+                    const mejoraPhotos = evidences
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MEJORAS' && ev.mejoraId)
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.mejoraNumber || 0) - Number(b.mejoraNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { before: 1, after: 2 };
+                        return (sideOrder[a.mejoraSide || ''] || 99) - (sideOrder[b.mejoraSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      mejoraPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.mejoraId || `legacy-mejora-${ev.mejoraNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    const getMejoraLabel = (type: string) =>
+                      type === 'SUBIDA DE BANDAS' ? 'SUBIDA DE BANDA'
+                      : type === 'PODAS' ? 'PODA'
+                      : type === 'SUBIDA DE RETENIDAS' ? 'SUBIDA DE RETENIDA'
+                      : type;
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const mejoraNumber = Number(group[0]?.mejoraNumber || groupIndex + 1);
+                      const mejoraId = group[0]?.mejoraId || '';
+                      const mejoraType = group[0]?.mejoraType || 'MEJORA';
+                      const hasBefore = group.some(ev => ev.mejoraSide === 'before');
+                      const hasAfter = group.some(ev => ev.mejoraSide === 'after');
+                      const missingSide: 'before' | 'after' | null =
+                        !hasBefore ? 'before' : !hasAfter ? 'after' : null;
+
+                      return (
+                        <div key={mejoraId || `mejora-group-${mejoraNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                {getMejoraLabel(mejoraType)} {String(mejoraNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'before' ? 'ANTES' : 'DESPUÉS')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {group.map((ev: any, index: number) => (
+                              <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
+                                <div className="aspect-[4/5] bg-black overflow-hidden">
+                                  <img src={ev.photoUrl} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="p-2.5">
+                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                    {getMejoraLabel(ev.mejoraType || mejoraType)} · {ev.mejoraSide === 'before' ? 'ANTES' : 'DESPUÉS'}
+                                  </p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                </div>
+                              </button>
+                            ))}
+
+                            {missingSide && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewingEvidence(null);
+                                  setShowStorageEvidenceViewer(false);
+                                  setStorageEvidenceCategory(null);
+                                  setEvidenceCategory('MEJORAS');
+                                  setMejoraCaptureDraft({
+                                    mejoraId,
+                                    mejoraNumber,
+                                    mejoraType,
+                                    side: missingSide
+                                  });
+                                  setCurrentStep('camera');
+                                }}
+                                className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                              >
+                                <CameraIcon className="w-8 h-8" />
+                                <span className="text-[9px] font-black uppercase text-center px-2">                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
                                 </span>
                               </button>
                             )}
@@ -6998,11 +7616,3 @@ export default function App() {
                 <button onClick={() => { setEditConfirmOpen(false); setPendingEditSave(null); }} className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl text-sm font-bold uppercase">Cancelar</button>
                 <button onClick={async () => { if (pendingEditSave?.id != null) { try { await storageService.updateEvidence(pendingEditSave.id, { baseFields: pendingEditSave.baseFields, customFields: pendingEditSave.customFields }); if (selectedProject?.id) { const evs = await storageService.getEvidencesByProject(selectedProject.id); setEvidences(evs); } } catch (e) { console.error(e); } } setEditConfirmOpen(false); setPendingEditSave(null); setEditingEvidence(null); }} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl text-sm font-bold uppercase">Continuar</button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-
-      </AnimatePresence>
-    </div>
-  );
-}
