@@ -94,9 +94,10 @@ const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
 // Esto evita mantener en memoria los archivos originales gigantes y reduce
 // drásticamente el peso final del XLSX sin modificar las fotos originales
 // almacenadas en Firebase.
-const EXCEL_MAX_IMAGE_WIDTH = 1400;
-const EXCEL_MAX_IMAGE_HEIGHT = 1050;
-const EXCEL_JPEG_QUALITY = 0.72;
+const EXCEL_MAX_IMAGE_WIDTH = 2000;
+const EXCEL_MAX_IMAGE_HEIGHT = 1500;
+const EXCEL_JPEG_QUALITY = 0.90;
+const EXCEL_COMPOSITE_JPEG_QUALITY = 0.92;
 
 const blobToDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -386,7 +387,7 @@ async function addEvidenceSheet(
               compositeCanvas.toBlob(
                 blob => blob ? resolve(blob) : reject(new Error('No se pudo preparar la fotografía centrada.')),
                 'image/jpeg',
-                EXCEL_JPEG_QUALITY,
+                EXCEL_COMPOSITE_JPEG_QUALITY,
               );
             });
             compositeCanvas.width = 1;
