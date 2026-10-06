@@ -4,10 +4,58 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const STORAGE_PROXY_PATH = '/.netlify/functions/storage-image';
+const ALLOWED_STORAGE_HOSTS = new Set(['firebasestorage.googleapis.com', 'storage.googleapis.com']);
+
+function storageImageProxy() {
+  return {
+    name: 'fieldtrace-storage-image-proxy',
+    configureServer(server: any) {
+      server.middlewares.use(STORAGE_PROXY_PATH, async (req: any, res: any, next: any) => {
+        if (req.method !== 'GET') return next();
+        try {
+          const requestUrl = new URL(req.url || '/', 'http://localhost');
+          const target = requestUrl.searchParams.get('url');
+          if (!target) {
+            res.statusCode = 400;
+            res.end('Missing image URL');
+            return;
+          }
+
+          const targetUrl = new URL(target);
+          if (targetUrl.protocol !== 'https:' || !ALLOWED_STORAGE_HOSTS.has(targetUrl.hostname)) {
+            res.statusCode = 400;
+            res.end('Unsupported image host');
+            return;
+          }
+
+          const upstream = await fetch(targetUrl);
+          if (!upstream.ok) {
+            res.statusCode = upstream.status;
+            res.end('Unable to fetch image');
+            return;
+          }
+
+          const bytes = Buffer.from(await upstream.arrayBuffer());
+          res.statusCode = 200;
+          res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=300');
+          res.end(bytes);
+        } catch (error) {
+          console.error('[StorageImageProxy] Error:', error);
+          res.statusCode = 502;
+          res.end('Storage image proxy error');
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
     plugins: [
+      storageImageProxy(),
       react(), 
       tailwindcss(),
       VitePWA({
