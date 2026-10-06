@@ -78,8 +78,23 @@ const getDescription = (ev: MemoryEvidence, index: number, category: string) => 
   return String(explicit || `${category} · FOTO ${index + 1}`).trim();
 };
 
+const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
+
 async function imageToBase64(url: string): Promise<{ base64: string; extension: 'jpeg' | 'png' }> {
-  const response = await fetch(url, { mode: 'cors' });
+  const proxyUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+
+  let response: Response;
+  try {
+    response = await fetch(proxyUrl);
+  } catch {
+    response = await fetch(url, { mode: 'cors' });
+  }
+
+  if (!response.ok && proxyUrl !== url) {
+    response = await fetch(url, { mode: 'cors' });
+  }
   if (!response.ok) throw new Error(`No se pudo descargar la fotografía (${response.status})`);
   const blob = await response.blob();
   const extension = blob.type.includes('png') ? 'png' : 'jpeg';
@@ -196,7 +211,11 @@ async function addEvidenceSheet(
     for (let index = 0; index < category.required; index++) {
       const col = 2 + (index % 3);
       const blockRow = imageRowStart + Math.floor(index / 3) * 3;
-      const ev = group.items[index];
+      const ev = category.id === 'NAPS'
+        ? group.items.find(item => Number(item.napPhotoNumber) === index + 1) || group.items[index]
+        : category.id === 'MUFA'
+          ? group.items.find(item => Number(item.mufaPhotoNumber) === index + 1) || group.items[index]
+          : group.items[index];
       const imageCell = sheet.getCell(blockRow, col);
       imageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F5F7' } };
       imageCell.border = { top: { style: 'thin', color: { argb: 'D9DEE5' } }, left: { style: 'thin', color: { argb: 'D9DEE5' } }, bottom: { style: 'thin', color: { argb: 'D9DEE5' } }, right: { style: 'thin', color: { argb: 'D9DEE5' } } };
