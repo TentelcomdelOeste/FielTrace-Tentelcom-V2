@@ -1826,6 +1826,46 @@ export default function App() {
     setShowReserveCaptureModal(true);
   };
 
+  const handleModalFieldKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter') return;
+
+    const target = event.target as HTMLElement | null;
+    const modal = target?.closest('.fixed.inset-0') as HTMLElement | null;
+    if (!modal) return;
+
+    const field = target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    const isField =
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLSelectElement ||
+      field instanceof HTMLTextAreaElement;
+    if (!isField || field.disabled) return;
+
+    // Enter advances only through editable form fields. Read-only values
+    // (for example inherited reel/fiber data) are skipped automatically.
+    const fields = Array.from(
+      modal.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+        'input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])'
+      )
+    ).filter(el => {
+      const style = window.getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+
+    const currentIndex = fields.indexOf(field);
+    if (currentIndex < 0) return;
+
+    const nextField = fields[currentIndex + 1];
+    if (!nextField) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    nextField.focus();
+
+    if (nextField instanceof HTMLInputElement) {
+      nextField.select();
+    }
+  };
+
   const confirmFiberCapture = () => {
     if (!fiberCaptureDraft) return;
     const parsedMeterage = Number(fiberCaptureDraft.metraje.replace(',', '.'));
@@ -2856,7 +2896,10 @@ export default function App() {
     );
 
   return (
-    <div className={`min-h-screen ${currentStep === 'camera' ? 'bg-transparent' : 'bg-white'} flex flex-col font-sans`}>
+    <div
+      onKeyDown={handleModalFieldKeyDown}
+      className={`min-h-screen ${currentStep === 'camera' ? 'bg-transparent' : 'bg-white'} flex flex-col font-sans`}
+    >
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
         {/* Content Area */}
