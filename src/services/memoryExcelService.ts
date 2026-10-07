@@ -376,10 +376,9 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
 };
 
 const getFiberGroupEvidence = (items: MemoryEvidence[]) => {
-  const sorted = [...items].sort((a, b) =>
-    Number(a.photoNumber ?? a.fiberSide === 'initial' ? 1 : a.fiberSide === 'final' ? 2 : 99) -
-    Number(b.photoNumber ?? b.fiberSide === 'initial' ? 1 : b.fiberSide === 'final' ? 2 : 99)
-  );
+  const rank = (ev: MemoryEvidence) =>
+    ev.fiberSide === 'initial' ? 1 : ev.fiberSide === 'final' ? 2 : Number(ev.photoNumber) || 99;
+  const sorted = [...items].sort((a, b) => rank(a) - rank(b));
   return {
     initial: sorted.find(ev => ev.fiberSide === 'initial') || sorted[0],
     final: sorted.find(ev => ev.fiberSide === 'final') || sorted[1],
@@ -461,8 +460,15 @@ const addFiberTipsSheet = async (
     labelCell.font = { name: 'Arial', size: 9, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
+    const dataIndex = DATA_SHEET_LABELS.indexOf(label as typeof DATA_SHEET_LABELS[number]);
+    const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
     const valueCell = sheet.getCell(valueCellRef);
-    valueCell.value = value;
+    // Fórmula interna: si el usuario modifica la hoja Datos, estas líneas
+    // se actualizan automáticamente en Excel sin volver a generar el archivo.
+    valueCell.value = {
+      formula: 'Datos!C' + dataRow,
+      result: value,
+    };
     valueCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
