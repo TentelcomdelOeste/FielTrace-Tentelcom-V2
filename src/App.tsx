@@ -878,17 +878,43 @@ export default function App() {
   }, [refreshSyncSummary]);
 
   const loadData = async () => {
-    const allProjects = await storageService.getAllProjects();
-    // Sort by createdAt descending (newest first)
-    const sortedProjects = [...allProjects].sort((a, b) => {
-      const dateA = new Date(a.createdAt).getTime();
-      const dateB = new Date(b.createdAt).getTime();
+    // Firebase es la fuente compartida entre dispositivos. IndexedDB/LocalDB
+    // se mantiene como caché local para trabajar offline.
+    let localProjects = await storageService.getAllProjects();
+
+    if (navigator.onLine) {
+      try {
+        const remoteProjects = await firebaseService.getCloudProjects();
+
+        // Importa/actualiza los proyectos remotos en la base local.
+        // Se conserva el UUID de Firebase para que todos los dispositivos
+        // trabajen sobre el mismo proyecto.
+        for (const remoteProject of remoteProjects) {
+          try {
+            await storageService.importCloudProject(remoteProject);
+          } catch (error) {
+            console.warn('[Projects] No se pudo importar proyecto de Firebase:', remoteProject?.uuid || remoteProject?.id, error);
+          }
+        }
+
+        localProjects = await storageService.getAllProjects();
+      } catch (error) {
+        // Si Firebase no está disponible, seguimos trabajando con el caché local.
+        console.warn('[Projects] Firebase no disponible; usando proyectos locales:', error);
+      }
+    }
+
+    const sortedProjects = [...localProjects].sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return dateB - dateA;
     });
+
     setProjects(sortedProjects);
-    
+
     if (sortedProjects.length === 0) {
-      // Primera instalación: solo un proyecto DEMO con 2 registros de ejemplo (sin datos reales del usuario)
+      // Primera instalación: crear DEMO solo cuando no existen proyectos
+      // ni localmente ni en Firebase.
       const demoId = await storageService.createProject({
         name: "PROYECTO DEMO",
         client: "CLIENTE EJEMPLO",
@@ -948,11 +974,11 @@ export default function App() {
         timestamp: now.getTime(),
       } as any, "");
 
-      loadData();
+      await storageService.syncAllLocalData();
+      await loadData();
       return;
     }
 
-    // Restore from session storage if available
     const storedStep = sessionStorage.getItem('activeStep');
     const storedProjectId = sessionStorage.getItem('activeProjectId');
 
@@ -966,7 +992,6 @@ export default function App() {
       }
     }
   };
-
   // Keep sessionStorage in sync
   useEffect(() => {
     sessionStorage.setItem('activeStep', currentStep);
