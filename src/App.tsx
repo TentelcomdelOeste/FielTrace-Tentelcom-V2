@@ -3660,7 +3660,7 @@ export default function App() {
                               }}
                               className="px-3 py-2 rounded-xl bg-blue-600 text-white shadow-sm text-[8px] font-black uppercase tracking-wide active:scale-95 transition-all"
                             >
-                              Ver fotos
+                              {category.id === 'NAPS' ? 'Ver fotos / subir faltantes' : 'Ver fotos'}
                             </button>
                           )}
                           <button
