@@ -997,8 +997,7 @@ export default function App() {
     sessionStorage.setItem('activeStep', currentStep);
     if (selectedProject?.id) {
        sessionStorage.setItem('activeProjectId', String(selectedProject.id));
-    } else {       sessionStorage.removeItem('activeProjectId');    }
-  }, [currentStep, selectedProject]);
+    } else {       sessionStorage.removeItem('activeProjectId');    }  }, [currentStep, selectedProject]);
 
   const handleCreateProject = () => {
     setEditingProject({
@@ -1997,7 +1996,6 @@ export default function App() {
     const currentIndex = fields.indexOf(field);
     if (currentIndex < 0) return;
     const nextField = fields[currentIndex + 1];    if (!nextField) return;
-
     event.preventDefault();
     event.stopPropagation();
     nextField.focus();
@@ -2997,8 +2995,7 @@ export default function App() {
         const desechoNumber = Number(first?.desechoNumber || 0);
         const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');        const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
         return { desechoId, desechoNumber, hasPhoto1, hasPhoto2, count: group.length, complete: hasPhoto1 && hasPhoto2 };
-      }).sort((a, b) => a.desechoNumber - b.desechoNumber);
-      const completedDesechos = desechoGroups.filter(item => item.complete).length;
+      }).sort((a, b) => a.desechoNumber - b.desechoNumber);      const completedDesechos = desechoGroups.filter(item => item.complete).length;
       const pendingDesechoLabels = desechoGroups.filter(item => !item.complete).map(item => {
         const missing = !item.hasPhoto1 ? 'PANORÁMICA' : 'METRAJE';
         return `DESECHO ${String(item.desechoNumber).padStart(2, '0')}: FALTA ${missing}`;
@@ -3998,7 +3995,6 @@ export default function App() {
                     })()}
                   </div>
                 </div>
-
                 <div className="bg-gray-950 rounded-[2.5rem] p-8 text-white relative overflow-hidden">
                    <p className="text-[10px] font-black uppercase opacity-40 mb-1 tracking-widest">Estado del Proyecto</p>
                    <h3 className="text-xl font-bold leading-tight mb-6">{evidences.length > 0 ? 'Recolección de datos en curso' : 'Esperando primera captura'}</h3>
@@ -4997,8 +4993,7 @@ export default function App() {
                   </>
                 ) : (
                   <button
-                    type="button"
-                    onClick={clearGallerySelection}
+                    type="button"                    onClick={clearGallerySelection}
                     className="text-[10px] font-black uppercase text-white/70 px-2 py-2"
                   >
                     Cancelar
@@ -5997,8 +5992,7 @@ export default function App() {
                       : `acero_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
                     setAceroCaptureDraft({
-                      aceroId,
-                      aceroNumber,
+                      aceroId,                      aceroNumber,
                       side: 'photo1'
                     });
                     setAceroMeterageDraft('');
@@ -6894,13 +6888,13 @@ export default function App() {
                               <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
                                 NAP {String(napNumber).padStart(2, '0')} · {napName}
                               </p>
-                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
+                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                 {group.length}/9 FOTOS · GRUPO INDEPENDIENTE
                               </p>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {Array.from({ length: 9 }, (_, slotIndex) => {
                               const photoNumber = slotIndex + 1;
                               const ev = group.find((item: any) => Number(item.napPhotoNumber) === photoNumber);
@@ -6921,14 +6915,14 @@ export default function App() {
                                         loading="lazy"
                                       />
                                     </div>
-                                    <div className="p-2.5">
-                                      <p className="text-[9px] font-black uppercase text-gray-900">
+                                    <div className="p-2.5 lg:p-2">
+                                      <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                         {getNapsPhotoTitle(photoNumber)}
                                       </p>
-                                      <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
+                                      <p className="text-[8px] font-bold uppercase text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                         NAP{(ev.napName || napName) ? ` · ${String(ev.napName || napName).toUpperCase()}` : ''}
                                       </p>
-                                      <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                      <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                         {ev.fecha} {ev.hora || ''}
                                       </p>
                                     </div>
@@ -6939,7 +6933,7 @@ export default function App() {
                               return (
                                 <div
                                   key={`nap-missing-${photoNumber}`}
-                                  className="min-h-[240px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 p-3"
+                                  className="min-h-[240px] lg:min-h-[170px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 p-3"
                                 >
                                   <CameraIcon className="w-8 h-8" />
                                   <span className="text-[9px] font-black uppercase text-center px-2">
@@ -6997,8 +6991,7 @@ export default function App() {
                         const key = ev.altaId || `legacy-alta-${ev.altaNumber || ev.id || ev.uuid}`;
                         if (!map.has(key)) map.set(key, []);
                         map.get(key)!.push(ev);
-                        return map;
-                      }, new Map<string, any[]>()).values()
+                        return map;                      }, new Map<string, any[]>()).values()
                     );
 
                     return groups.map((group: any[], groupIndex: number) => {
@@ -7026,7 +7019,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {group.map((ev: any, index: number) => (
                               <button
                                 key={ev.id || ev.uuid || index}
@@ -7037,11 +7030,11 @@ export default function App() {
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
                                   <img src={ev.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
-                                <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                <div className="p-2.5 lg:p-2">
+                                  <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                     {ev.altaSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
                                   </p>
-                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
@@ -7130,17 +7123,17 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
                                   <img src={ev.photoUrl} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
-                                <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                <div className="p-2.5 lg:p-2">
+                                  <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                     {ev.aceroSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                   </p>
-                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
@@ -7213,17 +7206,17 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
                                   <img src={ev.photoUrl} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
-                                <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                <div className="p-2.5 lg:p-2">
+                                  <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                     {ev.desechoSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                   </p>
-                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
@@ -7311,17 +7304,17 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
                                   <img src={ev.photoUrl} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
-                                <div className="p-2.5">
-                                  <p className="text-[9px] font-black uppercase text-gray-900">
+                                <div className="p-2.5 lg:p-2">
+                                  <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                     {getMejoraLabel(ev.mejoraType || mejoraType)} · {ev.mejoraSide === 'before' ? 'ANTES' : 'DESPUÉS'}
                                   </p>
-                                  <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                                  <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">{ev.fecha} {ev.hora || ''}</p>
                                 </div>
                               </button>
                             ))}
@@ -7406,14 +7399,14 @@ export default function App() {
                                   loading="lazy"
                                 />
                               </div>
-                              <div className="p-2.5">
-                                <p className="text-[9px] font-black uppercase text-gray-900">
+                              <div className="p-2.5 lg:p-2">
+                                <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                   {side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
                                 </p>
                                 <p className="text-[8px] font-bold text-gray-500 mt-1">
                                   {ev.fiberMeterage != null ? `METRAJE: ${ev.fiberMeterage} M` : 'METRAJE NO REGISTRADO'}
                                 </p>
-                                <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                   {ev.fecha} {ev.hora || ''}
                                 </p>
                               </div>
@@ -7465,7 +7458,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {renderPhoto(initial, 'initial')}
                             {renderPhoto(final, 'final')}
                           </div>
@@ -7501,13 +7494,13 @@ export default function App() {
                               <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
                                 MUFA {String(mufaNumber).padStart(2, '0')} · {mufaName}
                               </p>
-                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
+                              <p className="text-[8px] font-bold uppercase text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                 {group.length}/9 FOTOS · GRUPO INDEPENDIENTE
                               </p>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {Array.from({ length: 9 }, (_, slotIndex) => {
                               const photoNumber = slotIndex + 1;
                               const ev = group.find((item: any) => Number(item.mufaPhotoNumber) === photoNumber);
@@ -7528,11 +7521,11 @@ export default function App() {
                                         loading="lazy"
                                       />
                                     </div>
-                                    <div className="p-2.5">
-                                      <p className="text-[9px] font-black uppercase text-gray-900">
+                                    <div className="p-2.5 lg:p-2">
+                                      <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
                                         FOTO {photoNumber}/9
                                       </p>
-                                      <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                      <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                         {ev.fecha} {ev.hora || ''}
                                       </p>
                                     </div>
@@ -7585,12 +7578,12 @@ export default function App() {
                           <div className="aspect-[4/5] bg-black overflow-hidden">
                             <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                           </div>
-                          <div className="p-2.5">
-                            <p className="text-[9px] font-black uppercase text-gray-900 truncate">{ev.categoryLabel || 'Otros'}</p>
+                          <div className="p-2.5 lg:p-2">
+                            <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight truncate">{ev.categoryLabel || 'Otros'}</p>
                             {ev.fiberPairId && (
                               <p className="text-[8px] font-black uppercase text-blue-600 mt-1">PUNTA {String(ev.fiberPairNumber || '').padStart(2, '0')} · {ev.fiberSide === 'initial' ? 'INICIAL' : 'FINAL'} · {ev.fiberMeterage ?? '-'} M</p>
                             )}
-                            <p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p>
+                            <p className="text-[8px] font-bold text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">{ev.fecha} {ev.hora || ''}</p>
                           </div>
                         </button>
                       ))
