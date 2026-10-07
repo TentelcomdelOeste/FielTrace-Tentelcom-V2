@@ -447,6 +447,23 @@ const addFiberTipsSheet = async (
   sheet.getCell('J1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
 
+  // Bordes del tramo izquierdo del encabezado, según la plantilla:
+  // B1 y B2 forman el lateral izquierdo; B2:C2 forman el borde inferior
+  // del espacio en blanco que precede al bloque D:H.
+  sheet.getCell('B1').border = {
+    ...sheet.getCell('B1').border,
+    left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('B2').border = {
+    ...sheet.getCell('B2').border,
+    left: { style: 'thin', color: { argb: '222222' } },
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C2').border = {
+    ...sheet.getCell('C2').border,
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+
   // Marco superior de referencia: D:H (título) + I:J (código/revisión).
   for (let col = 4; col <= 10; col++) {
     sheet.getCell(1, col).border = {
