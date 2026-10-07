@@ -354,6 +354,9 @@ export default function App() {
   // NAPS se procesa de forma secuencial para impedir una décima captura
   // mientras la evidencia anterior todavía está guardándose.
   const napCaptureInFlightRef = useRef(false);
+  // MEJORAS: bloqueo lógico de un solo disparo por lado (ANTES/DESPUÉS).
+  // Impide duplicados por doble toque mientras la evidencia se procesa.
+  const mejoraCaptureInFlightRef = useRef(false);
   const [unlockedSettings, setUnlockedSettings] = useState<Record<string, boolean>>({});
   const [lastImage, setLastImage] = useState<string | null>(null);
   const [showLastImage, setShowLastImage] = useState(false);
@@ -2249,6 +2252,32 @@ export default function App() {
     // Además se bloquea una segunda captura mientras la anterior termina de
     // guardarse, evitando que un doble toque produzca FOTO 10/9.
     const isNapCapture = evidenceCategory === 'NAPS' && !!napCaptureDraft;
+    const isMejoraCapture = evidenceCategory === 'MEJORAS' && !!mejoraCaptureDraft;
+
+    if (isMejoraCapture) {
+      if (mejoraCaptureInFlightRef.current) return;
+
+      const { mejoraId, side } = mejoraCaptureDraft!;
+      const alreadyCaptured = evidences.some(
+        ev =>
+          ev.category === 'MEJORAS' &&
+          ev.mejoraId === mejoraId &&
+          ev.mejoraSide === side &&
+          !!ev.photoUrl
+      );
+
+      if (alreadyCaptured) {
+        setMejoraCaptureDraft(null);
+        setShowMejoraCaptureModal(false);
+        setMejoraPromptMode(null);
+        setCurrentStep('history');
+        return;
+      }
+
+      mejoraCaptureInFlightRef.current = true;
+      setIsProcessing(true);
+    }
+
     if (isNapCapture) {
       if (napCaptureInFlightRef.current) return;
 
@@ -2311,8 +2340,11 @@ export default function App() {
       }
       if (!rawImage) throw new Error('No se pudo capturar la imagen con la cámara');
 
-      // Liberar anti doble-tap al instante (botón ya disponible para siguiente foto)
-      capturingRef.current = false;
+      // MEJORAS mantiene el bloqueo hasta terminar el procesamiento y cerrar
+      // la cámara. Las demás categorías conservan el comportamiento existente.
+      if (!isMejoraCapture) {
+        capturingRef.current = false;
+      }
 
       // Re-armar flash en background (no bloquea siguiente disparo)
       if (flashMode === 'on') {
@@ -2505,8 +2537,10 @@ export default function App() {
 
       // Procesamiento asíncrono atómico
       let napAsyncProcessingStarted = false;
+      let mejoraAsyncProcessingStarted = false;
       (async () => {
         napAsyncProcessingStarted = true;
+        if (isMejoraCapture) mejoraAsyncProcessingStarted = true;
         try {
           // 1. Generar overlay utilizando el objeto unificado
           const finalImage = await cameraService.drawOverlay(rawImage, evidenceObject);
@@ -2632,6 +2666,10 @@ export default function App() {
           if (isNapCapture) {
             napCaptureInFlightRef.current = false;
           }
+          if (isMejoraCapture) {
+            mejoraCaptureInFlightRef.current = false;
+            setIsProcessing(false);
+          }
         }
       })();
 
@@ -2640,7 +2678,13 @@ export default function App() {
       capturingRef.current = false;
     } finally {
       capturingRef.current = false;
-      // Si la captura física falla antes de iniciar el procesamiento
+      // Si una captura de MEJORAS falla antes de iniciar el procesamiento
+      // asíncrono, liberar el bloqueo para permitir reintentar.
+      if (isMejoraCapture && !mejoraAsyncProcessingStarted) {
+        mejoraCaptureInFlightRef.current = false;
+        setIsProcessing(false);
+      }
+      // Si la captura física de NAPS falla antes de iniciar el procesamiento
       // asíncrono, liberar el bloqueo para permitir reintentar.
       if (isNapCapture && !napAsyncProcessingStarted) {
         napCaptureInFlightRef.current = false;
@@ -4784,7 +4828,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={captureBatchPhoto}
-                disabled={!evidenceCategory || isRecordingVideo || videoProcessing}
+                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
                 className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
                 title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
                 aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
