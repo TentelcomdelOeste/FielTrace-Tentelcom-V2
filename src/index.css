@@ -97,3 +97,14 @@ html.native-camera-active, html.native-camera-active body, html.native-camera-ac
 body {
   background-color: #000000;
 }
+
+/*
+ * Ajuste exclusivo para escritorio.
+ * No se aplica en teléfonos/tablets y no afecta la pantalla de cámara.
+ */
+@media (min-width: 1024px) and (pointer: fine) {
+  .app-shell:not(.camera-active) {
+    zoom: 0.88;
+  }
+}
+
