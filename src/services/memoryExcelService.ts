@@ -470,7 +470,12 @@ const addFiberTipsSheet = async (
   identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
   identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
 
-e = item.label;
+  for (const item of topRows) {
+    sheet.mergeCells(item.labelRange);
+    sheet.mergeCells(item.valueRange);
+
+    const labelCell = sheet.getCell(item.labelRange.split(':')[0]);
+    labelCell.value = item.label;
     labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
