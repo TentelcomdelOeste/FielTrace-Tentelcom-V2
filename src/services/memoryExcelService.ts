@@ -428,7 +428,7 @@ const addFiberTipsSheet = async (
 
   sheet.getRow(3).height = 8;
 
-  sheet.mergeCells('B5:J5');
+  sheet.mergeCells('B5:D5');
   const section = sheet.getCell('B5');
   section.value = 'DATOS DE LA OBRA:';
   section.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
