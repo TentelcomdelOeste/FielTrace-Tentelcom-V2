@@ -436,35 +436,62 @@ const addFiberTipsSheet = async (
   section.alignment = { vertical: 'middle', horizontal: 'left' };
   sheet.getRow(5).height = 24;
 
-  // Datos superiores compactos, sin columnas separadoras.
-  const topRows: Array<[string, string, string, string]> = [
-    ['B6', 'País/Div:', 'C6', data('País/Div:')],
-    ['E6', 'Área/Cd:', 'F6', data('Área/Cd:')],
-    ['B7', 'Nom. Proy.:', 'C7', data('Nom. Proy.:')],
-    ['E7', 'Producto:', 'F7', data('Producto:')],
-    ['B8', 'Nombre del Supervisor/Insp.:', 'C8', data('Nombre del Supervisor/Insp.:')],
-    ['E8', 'Fecha Inicio:', 'F8', data('Fecha Inicio:')],
-    ['B9', 'Nombre del Contratista:', 'C9', data('Nombre del Contratista:')],
-    ['E9', 'Fecha Fin:', 'F9', data('Fecha Fin:')],
-    ['E10', 'Identificación (OB; DTTO; ID; OT; SISA):', 'J10', data('Identificación (OB; DTTO; ID; OT; SISA):')],
+  // Encabezado de datos de obra con la misma distribución visual de la plantilla:
+  // B:D = datos de la izquierda, E:G = datos centrales, H:J/K:M = datos de la derecha.
+  // Los espacios de valor permanecen vinculados a la pestaña "Datos"; no se
+  // rellenan manualmente aquí.
+  const topRows: Array<{
+    labelRange: string;
+    label: string;
+    valueRange: string;
+    dataLabel: typeof DATA_SHEET_LABELS[number];
+  }> = [
+    { labelRange: 'B7:B7', label: 'País/Div:', valueRange: 'C7:D7', dataLabel: 'País/Div:' },
+    { labelRange: 'E7:E7', label: 'Área/Cd:', valueRange: 'F7:G7', dataLabel: 'Área/Cd:' },
+    { labelRange: 'H7:H7', label: 'Nom. Proy.:', valueRange: 'I7:J7', dataLabel: 'Nom. Proy.:' },
+    { labelRange: 'K7:K7', label: 'Producto:', valueRange: 'L7:M7', dataLabel: 'Producto:' },
+
+    { labelRange: 'B8:B8', label: 'Nombre del Supervisor/Insp.:', valueRange: 'C8:G8', dataLabel: 'Nombre del Supervisor/Insp.:' },
+    { labelRange: 'K8:K8', label: 'Fecha Inicio:', valueRange: 'L8:M8', dataLabel: 'Fecha Inicio:' },
+
+    { labelRange: 'B9:B9', label: 'Nombre del Contratista:', valueRange: 'C9:G9', dataLabel: 'Nombre del Contratista:' },
+    { labelRange: 'K9:K9', label: 'Fecha Fin:', valueRange: 'L9:M9', dataLabel: 'Fecha Fin:' },
   ];
 
-  for (const [labelCellRef, label, valueCellRef, value] of topRows) {
-    const labelCell = sheet.getCell(labelCellRef);
-    labelCell.value = label;
+  // La identificación ocupa su propia línea superior, como en la plantilla.
+  sheet.mergeCells('H6:I6');
+  const identificationLabel = sheet.getCell('H6');
+  identificationLabel.value = 'Identificación (OB; DTTO; ID; OT; SISA):';
+  identificationLabel.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
+  identificationLabel.alignment = { vertical: 'middle', horizontal: 'right' };
+
+  sheet.mergeCells('J6:M6');
+  const identificationValue = sheet.getCell('J6');
+  identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:)') };
+  identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
+  identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
+  identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
+
+  for (const item of topRows) {
+    sheet.mergeCells(item.labelRange);
+    sheet.mergeCells(item.valueRange);
+
+    const labelCell = sheet.getCell(item.labelRange.split(':')[0]);
+    labelCell.value = item.label;
     labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-    const dataIndex = DATA_SHEET_LABELS.indexOf(label as typeof DATA_SHEET_LABELS[number]);
+    const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
     const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
-    const valueCell = sheet.getCell(valueCellRef);
-    valueCell.value = { formula: 'Datos!C' + dataRow, result: value };
+    const valueCell = sheet.getCell(item.valueRange.split(':')[0]);
+    valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
   }
 
-  for (let r = 6; r <= 10; r++) sheet.getRow(r).height = 21;
+  for (let r = 6; r <= 9; r++) sheet.getRow(r).height = 21;
+  sheet.getRow(10).height = 8;
 
   const groups = new Map<string, MemoryEvidence[]>();
   evidences
