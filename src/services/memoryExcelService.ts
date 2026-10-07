@@ -446,28 +446,31 @@ const addFiberTipsSheet = async (
     valueRange: string;
     dataLabel: typeof DATA_SHEET_LABELS[number];
   }> = [
-    { labelRange: 'B7:B7', label: 'País/Div:', valueRange: 'C7:D7', dataLabel: 'País/Div:' },
-    { labelRange: 'E7:E7', label: 'Área/Cd:', valueRange: 'F7:G7', dataLabel: 'Área/Cd:' },
-    { labelRange: 'H7:H7', label: 'Nom. Proy.:', valueRange: 'I7:J7', dataLabel: 'Nom. Proy.:' },
+    // Bloque izquierdo: etiquetas A:B y valores D:E.
+    { labelRange: 'A7:B7', label: 'País/Div:', valueRange: 'D7:E7', dataLabel: 'País/Div:' },
+    { labelRange: 'A8:B8', label: 'Nombre del Supervisor/Insp.:', valueRange: 'D8:E8', dataLabel: 'Nombre del Supervisor/Insp.:' },
+    { labelRange: 'A9:B9', label: 'Nombre del Contratista:', valueRange: 'D9:E9', dataLabel: 'Nombre del Contratista:' },
+
+    // Bloque derecho: la etiqueta que estaba en E pasa a G y el valor ocupa H:I.
+    { labelRange: 'G7:G7', label: 'Área/Cd:', valueRange: 'H7:I7', dataLabel: 'Área/Cd:' },
+    { labelRange: 'G8:G8', label: 'Fecha Inicio:', valueRange: 'H8:I8', dataLabel: 'Fecha Inicio:' },
+    { labelRange: 'G9:G9', label: 'Fecha Fin:', valueRange: 'H9:I9', dataLabel: 'Fecha Fin:' },
+
+    // Datos que completan el encabezado del proyecto.
+    { labelRange: 'G10:G10', label: 'Nom. Proy.:', valueRange: 'H10:I10', dataLabel: 'Nom. Proy.:' },
     { labelRange: 'K7:K7', label: 'Producto:', valueRange: 'L7:M7', dataLabel: 'Producto:' },
-
-    { labelRange: 'B8:B8', label: 'Nombre del Supervisor/Insp.:', valueRange: 'C8:G8', dataLabel: 'Nombre del Supervisor/Insp.:' },
-    { labelRange: 'K8:K8', label: 'Fecha Inicio:', valueRange: 'L8:M8', dataLabel: 'Fecha Inicio:' },
-
-    { labelRange: 'B9:B9', label: 'Nombre del Contratista:', valueRange: 'C9:G9', dataLabel: 'Nombre del Contratista:' },
-    { labelRange: 'K9:K9', label: 'Fecha Fin:', valueRange: 'L9:M9', dataLabel: 'Fecha Fin:' },
   ];
 
   // La identificación ocupa su propia línea superior, como en la plantilla.
-  sheet.mergeCells('H6:I6');
-  const identificationLabel = sheet.getCell('H6');
+  sheet.mergeCells('G6:I6');
+  const identificationLabel = sheet.getCell('G6');
   identificationLabel.value = 'Identificación (OB; DTTO; ID; OT; SISA):';
   identificationLabel.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
   identificationLabel.alignment = { vertical: 'middle', horizontal: 'right' };
 
   sheet.mergeCells('J6:M6');
   const identificationValue = sheet.getCell('J6');
-  identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:)') };
+  identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
   identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
   identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
   identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
