@@ -264,7 +264,51 @@ const DATA_SHEET_LABELS = [
   'Identificación (OB; DTTO; ID; OT; SISA):',
 ] as const;
 
-const addDataSheet = (workbook: ExcelJS.Workbook) => {
+const normalizeKey = (value: unknown) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+const getCustomProjectValue = (project: any, aliases: string[]) => {
+  const fields = Array.isArray(project?.customFields) ? project.customFields : [];
+  const wanted = aliases.map(normalizeKey);
+  const field = fields.find((item: any) => wanted.includes(normalizeKey(item?.name)));
+  return field?.value ?? '';
+};
+
+const getProjectDataValue = (project: any, key: typeof DATA_SHEET_LABELS[number]) => {
+  const aliases: Record<string, string[]> = {
+    'País/Div:': ['pais', 'paisdiv', 'paisdivision', 'country'],
+    'Área/Cd:': ['area', 'areacd', 'areaciudad', 'canton', 'distrito', 'area/cd'],
+    'Nom. Proy.:': ['nomproy', 'nombreproyecto', 'proyecto', 'projectname'],
+    'Producto:': ['producto', 'product', 'tipo'],
+    'Nombre del Supervisor/Insp.:': ['supervisor', 'inspectorsupervisor', 'inspector', 'nombre del supervisor', 'nombre del inspector'],
+    'Nombre del Contratista:': ['contratista', 'cliente', 'contractor'],
+    'Fecha Inicio:': ['fechainicio', 'inicio', 'startdate', 'fecha de inicio'],
+    'Fecha Fin:': ['fechafin', 'fin', 'enddate', 'fecha de fin'],
+    'Identificación (OB; DTTO; ID; OT; SISA):': ['identificacion', 'identificacionobdtt oidotsisa', 'ob', 'dtto', 'id', 'ot', 'sisa'],
+  };
+
+  const custom = getCustomProjectValue(project, aliases[key] || [key]);
+  if (String(custom).trim()) return String(custom).trim();
+
+  switch (key) {
+    case 'Nom. Proy.':
+      return String(project?.name ?? '').trim();
+    case 'Producto:':
+      return String(project?.type ?? '').trim();
+    case 'Nombre del Supervisor/Insp.:':
+      return String(project?.techName ?? '').trim();
+    case 'Nombre del Contratista:':
+      return String(project?.client ?? '').trim();
+    default:
+      return '';
+  }
+};
+
+const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   const sheet = workbook.addWorksheet('Datos');
   sheet.views = [{ showGridLines: false }];
 
@@ -274,7 +318,6 @@ const addDataSheet = (workbook: ExcelJS.Workbook) => {
     { width: 72 },
   ];
 
-  // Encabezado idéntico a la plantilla de referencia.
   sheet.mergeCells('B1:C1');
   const title = sheet.getCell('B1');
   title.value = 'MEMORIA FOTOGRÁFICA — ESPH';
@@ -306,14 +349,13 @@ const addDataSheet = (workbook: ExcelJS.Workbook) => {
     const row = 6 + index;
     const labelCell = sheet.getCell(row, 2);
     const valueCell = sheet.getCell(row, 3);
+    const value = getProjectDataValue(project, label);
 
     labelCell.value = label;
     labelCell.font = { name: 'Arial', size: 11, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-    // Los valores de la columna C quedan deliberadamente vacíos.
-    // Se poblarán posteriormente con la información específica del sitio/proyecto.
-    valueCell.value = '';
+    valueCell.value = value;
     valueCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
     valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EEF3F7' } };
@@ -321,7 +363,6 @@ const addDataSheet = (workbook: ExcelJS.Workbook) => {
     sheet.getRow(row).height = row === 14 ? 34 : 27;
   });
 
-  // Mantener visible la estructura de la plantilla hasta el último campo.
   for (let row = 6; row <= 14; row++) {
     sheet.getCell(row, 2).border = {
       bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
@@ -332,6 +373,250 @@ const addDataSheet = (workbook: ExcelJS.Workbook) => {
   }
 
   return sheet;
+};
+
+const getFiberGroupEvidence = (items: MemoryEvidence[]) => {
+  const sorted = [...items].sort((a, b) =>
+    Number(a.photoNumber ?? a.fiberSide === 'initial' ? 1 : a.fiberSide === 'final' ? 2 : 99) -
+    Number(b.photoNumber ?? b.fiberSide === 'initial' ? 1 : b.fiberSide === 'final' ? 2 : 99)
+  );
+  return {
+    initial: sorted.find(ev => ev.fiberSide === 'initial') || sorted[0],
+    final: sorted.find(ev => ev.fiberSide === 'final') || sorted[1],
+  };
+};
+
+const addFiberTipsSheet = async (
+  workbook: ExcelJS.Workbook,
+  project: any,
+  evidences: MemoryEvidence[],
+) => {
+  const sheet = workbook.addWorksheet('PUNTAS DE FIBRA');
+  sheet.views = [{ showGridLines: false }];
+  sheet.columns = [
+    { width: 3 },
+    { width: 25 }, { width: 25 }, { width: 25 },
+    { width: 25 }, { width: 25 }, { width: 25 },
+    { width: 25 }, { width: 25 }, { width: 25 },
+    { width: 3 },
+  ];
+
+  const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
+
+  // Encabezado siguiendo la plantilla de la captura.
+  sheet.mergeCells('B1:J1');
+  const title = sheet.getCell('B1');
+  title.value = 'MEMORIA FOTOGRÁFICA';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  title.font = { name: 'Arial', size: 18, color: { argb: 'FFFFFF' } };
+  title.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(1).height = 30;
+
+  sheet.mergeCells('B2:J2');
+  const product = sheet.getCell('B2');
+  product.value = data('Producto:') || 'Redes FO';
+  product.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  product.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
+  product.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(2).height = 30;
+
+  sheet.mergeCells('K1:L1');
+  const form = sheet.getCell('K1');
+  form.value = 'FR-PE-15';
+  form.font = { name: 'Arial', size: 12, bold: true };
+  form.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.mergeCells('K2:L2');
+  const rev = sheet.getCell('K2');
+  rev.value = 'REV. 02';
+  rev.font = { name: 'Arial', size: 12, bold: true };
+  rev.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.getRow(3).height = 8;
+
+  sheet.mergeCells('B5:J5');
+  const section = sheet.getCell('B5');
+  section.value = 'DATOS DE LA OBRA:';
+  section.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  section.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFF' } };
+  section.alignment = { vertical: 'middle', horizontal: 'left' };
+  sheet.getRow(5).height = 24;
+
+  // Los mismos datos de la primera hoja, pero presentados como líneas de la plantilla.
+  const topRows: Array<[string, string, string, string]> = [
+    ['B6', 'País/Div:', 'D6', data('País/Div:')],
+    ['F6', 'Área/Cd:', 'H6', data('Área/Cd:')],
+    ['B7', 'Nom. Proy.:', 'D7', data('Nom. Proy.:')],
+    ['F7', 'Producto:', 'H7', data('Producto:')],
+    ['B8', 'Nombre del Supervisor/Insp.:', 'D8', data('Nombre del Supervisor/Insp.:')],
+    ['F8', 'Fecha Inicio:', 'H8', data('Fecha Inicio:')],
+    ['B9', 'Nombre del Contratista:', 'D9', data('Nombre del Contratista:')],
+    ['F9', 'Fecha Fin:', 'H9', data('Fecha Fin:')],
+    ['F10', 'Identificación (OB; DTTO; ID; OT; SISA):', 'J10', data('Identificación (OB; DTTO; ID; OT; SISA):')],
+  ];
+
+  for (const [labelCellRef, label, valueCellRef, value] of topRows) {
+    const labelCell = sheet.getCell(labelCellRef);
+    labelCell.value = label;
+    labelCell.font = { name: 'Arial', size: 9, color: { argb: '222222' } };
+    labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    const valueCell = sheet.getCell(valueCellRef);
+    valueCell.value = value;
+    valueCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: '111111' } };
+    valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
+  }
+
+  for (let r = 6; r <= 10; r++) sheet.getRow(r).height = 21;
+
+  const groups = new Map<string, MemoryEvidence[]>();
+  evidences
+    .filter(ev => normalizeMemoryCategory(ev.category) === 'PUNTAS_FIBRA')
+    .forEach(ev => {
+      const id = getGroupId(ev, 'PUNTAS_FIBRA');
+      const list = groups.get(id) || [];
+      list.push(ev);
+      groups.set(id, list);
+    });
+
+  const orderedGroups = Array.from(groups.entries())
+    .map(([id, items]) => ({ id, items, number: getGroupNumber(items[0], 'PUNTAS_FIBRA') }))
+    .sort((a, b) => a.number - b.number || a.id.localeCompare(b.id));
+
+  let row = 12;
+
+  if (orderedGroups.length === 0) {
+    sheet.mergeCells(row, 2, row + 1, 10);
+    const empty = sheet.getCell(row, 2);
+    empty.value = 'NO HAY FOTOGRAFÍAS DE PUNTAS DE FIBRA REGISTRADAS.';
+    empty.alignment = { vertical: 'middle', horizontal: 'center' };
+    empty.font = { name: 'Arial', size: 10, bold: true, color: { argb: '6B7280' } };
+    return;
+  }
+
+  for (const group of orderedGroups) {
+    const pair = getFiberGroupEvidence(group.items);
+    const first = pair.initial || {};
+    const fiberCount = first.fiberCount != null && String(first.fiberCount).trim() !== ''
+      ? String(first.fiberCount) + ' hilos'
+      : '';
+    const reel = first.fiberReelNumber ?? '';
+    const route = getCustomProjectValue(project, ['ruta', 'route']) || getProjectDataValue(project, 'Área/Cd:');
+
+    // Tres recuadros: datos de fibra + punta inicial + punta final.
+    const boxTop = row;
+    const boxBottom = row + 7;
+
+    // Recuadro 1: RUTA / TIPO DE FIBRA / # CARRETE.
+    sheet.mergeCells(boxTop, 2, boxBottom, 4);
+    const meta = sheet.getCell(boxTop, 2);
+    meta.value = '';
+    meta.border = {
+      top: { style: 'medium', color: { argb: '222222' } },
+      left: { style: 'medium', color: { argb: '222222' } },
+      bottom: { style: 'medium', color: { argb: '222222' } },
+      right: { style: 'medium', color: { argb: '222222' } },
+    };
+
+    const metaRows: Array<[number, string, string]> = [
+      [boxTop + 2, 'RUTA', String(route || '')],
+      [boxTop + 4, 'TIPO DE FIBRA', fiberCount],
+      [boxTop + 6, '# CARRETE', String(reel)],
+    ];
+    for (const [r, label, value] of metaRows) {
+      const labelCell = sheet.getCell(r, 3);
+      labelCell.value = label;
+      labelCell.font = { name: 'Arial', size: 10, bold: true };
+      labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      const valueCell = sheet.getCell(r, 4);
+      valueCell.value = value;
+      valueCell.font = { name: 'Arial', size: 10, bold: true };
+      valueCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      valueCell.border = {
+        top: { style: 'thin', color: { argb: '222222' } },
+        left: { style: 'thin', color: { argb: '222222' } },
+        bottom: { style: 'thin', color: { argb: '222222' } },
+        right: { style: 'thin', color: { argb: '222222' } },
+      };
+    }
+
+    const photoCells = [
+      { ev: pair.initial, startCol: 5, label: 'PUNTA INICIO' },
+      { ev: pair.final, startCol: 8, label: 'PUNTA FINAL' },
+    ];
+
+    for (const item of photoCells) {
+      const { ev, startCol, label } = item;
+      sheet.mergeCells(boxTop, startCol, boxBottom - 1, startCol + 2);
+      const imageCell = sheet.getCell(boxTop, startCol);
+      imageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F5F7' } };
+      imageCell.border = {
+        top: { style: 'medium', color: { argb: '222222' } },
+        left: { style: 'medium', color: { argb: '222222' } },
+        bottom: { style: 'thin', color: { argb: '222222' } },
+        right: { style: 'medium', color: { argb: '222222' } },
+      };
+      imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      if (ev) {
+        const url = getPhotoUrl(ev);
+        if (url) {
+          try {
+            const image = await imageToBase64(url);
+            const cellWidthEmu = [startCol, startCol + 1, startCol + 2]
+              .reduce((sum, col) => sum + ((sheet.getColumn(col).width || EXCEL_DEFAULT_COL_WIDTH) / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU, 0);
+            const rowHeightEmu = Array.from({ length: boxBottom - boxTop }, (_, i) =>
+              ((sheet.getRow(boxTop + i).height || EXCEL_DEFAULT_ROW_HEIGHT_PT) / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
+            ).reduce((a, b) => a + b, 0);
+            const maxW = cellWidthEmu / EMU_PER_PIXEL - 16;
+            const maxH = rowHeightEmu / EMU_PER_PIXEL - 16;
+            const scale = Math.min(maxW / image.width, maxH / image.height);
+            const imageWidth = Math.max(1, Math.round(image.width * scale));
+            const imageHeight = Math.max(1, Math.round(image.height * scale));
+            const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
+
+            const offsetX = Math.max(0, Math.floor((cellWidthEmu - imageWidth * EMU_PER_PIXEL) / 2));
+            const offsetY = Math.max(0, Math.floor((rowHeightEmu - imageHeight * EMU_PER_PIXEL) / 2));
+
+            sheet.addImage(imageId, {
+              tl: {
+                col: startCol - 1,
+                row: boxTop - 1,
+                nativeCol: startCol - 1,
+                nativeColOff: offsetX,
+                nativeRow: boxTop - 1,
+                nativeRowOff: offsetY,
+              },
+              ext: { width: imageWidth, height: imageHeight },
+            } as any);
+          } catch {
+            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+          }
+        } else {
+          imageCell.value = 'SIN FOTO';
+        }
+      } else {
+        imageCell.value = 'FALTA FOTO';
+      }
+
+      sheet.mergeCells(boxBottom, startCol, boxBottom, startCol + 2);
+      const caption = sheet.getCell(boxBottom, startCol);
+      caption.value = label;
+      caption.font = { name: 'Arial', size: 10, bold: true };
+      caption.alignment = { vertical: 'middle', horizontal: 'center' };
+      caption.border = {
+        left: { style: 'medium', color: { argb: '222222' } },
+        bottom: { style: 'medium', color: { argb: '222222' } },
+        right: { style: 'medium', color: { argb: '222222' } },
+      };
+    }
+
+    for (let r = boxTop; r <= boxBottom; r++) sheet.getRow(r).height = r === boxBottom ? 24 : 34;
+
+    row = boxBottom + 3;
+  }
 };
 
 async function addEvidenceSheet(
@@ -594,9 +879,13 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   // La hoja Datos debe ser siempre la primera pestaña del Excel.
   // Los valores variables de la columna C se dejan vacíos hasta integrar
   // los datos específicos del proyecto/sitio.
-  addDataSheet(workbook);
+  addDataSheet(workbook, project);
 
   for (const category of CATEGORY_CONFIG) {
+    if (category.id === 'PUNTAS_FIBRA') {
+      await addFiberTipsSheet(workbook, project, evidences);
+      continue;
+    }
     await addEvidenceSheet(workbook, category, project, evidences);
   }
 
