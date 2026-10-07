@@ -414,7 +414,7 @@ const addFiberTipsSheet = async (
   const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
 
   sheet.mergeCells('D1:H1');
-  const title = sheet.getCell('B1');
+  const title = sheet.getCell('D1');
   title.value = 'MEMORIA FOTOGRÁFICA';
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   title.font = { name: 'Arial', size: 18, color: { argb: 'FFFFFF' } };
@@ -542,6 +542,26 @@ const addFiberTipsSheet = async (
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
   }
+
+  // Bordes específicos de la plantilla: parte superior de I5:J5 y
+  // laterales derechos de J5, J7 y J8.
+  sheet.getCell('I5').border = {
+    ...sheet.getCell('I5').border,
+    top: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('J5').border = {
+    ...sheet.getCell('J5').border,
+    top: { style: 'thin', color: { argb: '222222' } },
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('J7').border = {
+    ...sheet.getCell('J7').border,
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('J8').border = {
+    ...sheet.getCell('J8').border,
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
 
   for (let r = 5; r <= 8; r++) sheet.getRow(r).height = 21;
   sheet.getRow(9).height = 8;
