@@ -997,8 +997,7 @@ export default function App() {
     sessionStorage.setItem('activeStep', currentStep);
     if (selectedProject?.id) {
        sessionStorage.setItem('activeProjectId', String(selectedProject.id));
-    } else {       sessionStorage.removeItem('activeProjectId');
-    }
+    } else {       sessionStorage.removeItem('activeProjectId');    }
   }, [currentStep, selectedProject]);
 
   const handleCreateProject = () => {
@@ -1997,8 +1996,7 @@ export default function App() {
 
     const currentIndex = fields.indexOf(field);
     if (currentIndex < 0) return;
-    const nextField = fields[currentIndex + 1];
-    if (!nextField) return;
+    const nextField = fields[currentIndex + 1];    if (!nextField) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -2997,8 +2995,7 @@ export default function App() {
       const desechoGroups = desechoIds.map(desechoId => {
         const group = categoryEvidences.filter(ev => ev.desechoId === desechoId);        const first = group[0];
         const desechoNumber = Number(first?.desechoNumber || 0);
-        const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');
-        const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
+        const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');        const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
         return { desechoId, desechoNumber, hasPhoto1, hasPhoto2, count: group.length, complete: hasPhoto1 && hasPhoto2 };
       }).sort((a, b) => a.desechoNumber - b.desechoNumber);
       const completedDesechos = desechoGroups.filter(item => item.complete).length;
@@ -3549,13 +3546,13 @@ export default function App() {
                                                 Sin foto
                                               </div>
                                             )}
-                                            <div className="absolute inset-x-0 bottom-0 bg-black/65 text-white px-2 py-1.5">
-                                              <p className="text-[7px] font-black uppercase truncate">
+                                            <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white px-2 py-1.5 lg:px-2.5 lg:py-2">
+                                              <p className="text-[7px] font-black uppercase truncate lg:text-[9px] lg:leading-tight">
                                                 {category.id === 'NAPS'
                                                   ? getNapsPhotoTitle(Number(ev.napPhotoNumber || photoIndex + 1))
                                                   : 'FOTO ' + (photoIndex + 1) + '/' + group.required}
                                               </p>
-                                              <p className="text-[7px] text-white/70 truncate">
+                                              <p className="text-[7px] text-white/80 truncate lg:text-[8px] lg:leading-tight lg:mt-0.5">
                                                 {category.id === 'NAPS'
                                                   ? 'NAP' + (group.name ? ' · ' + String(group.name).toUpperCase() : '')
                                                   : (ev.categoryLabel || ev.category || category.label)}
@@ -3997,8 +3994,7 @@ export default function App() {
                           <div className="flex items-center gap-2">                            <span className="text-lg font-black text-gray-950 tracking-tighter">{total}</span>
                             <ArrowUpRight className="w-4 h-4 text-gray-200 group-hover:text-green-500 transition-colors" />
                           </div>
-                        </div>
-                      ));
+                        </div>                      ));
                     })()}
                   </div>
                 </div>
@@ -4997,8 +4993,7 @@ export default function App() {
                       }}
                       className="text-[10px] font-black uppercase text-white/50 px-2 py-2"
                     >
-                      Galeria
-                    </button>
+                      Galeria                    </button>
                   </>
                 ) : (
                   <button
@@ -5997,8 +5992,7 @@ export default function App() {
                       .filter(ev => ev.category === 'ACEROS' && ev.aceroNumber != null)
                       .map(ev => Number(ev.aceroNumber))
                       .filter(Number.isFinite);
-                    const aceroNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-                    const aceroId = crypto.randomUUID
+                    const aceroNumber = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;                    const aceroId = crypto.randomUUID
                       ? crypto.randomUUID()
                       : `acero_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -6998,7 +6992,6 @@ export default function App() {
                         const sideOrder: Record<string, number> = { panoramic: 1, meterage: 2 };
                         return (sideOrder[a.altaSide || ''] || 99) - (sideOrder[b.altaSide || ''] || 99);
                       });
-
                     const groups = Array.from(
                       altaPhotos.reduce((map: Map<string, any[]>, ev: any) => {
                         const key = ev.altaId || `legacy-alta-${ev.altaNumber || ev.id || ev.uuid}`;
