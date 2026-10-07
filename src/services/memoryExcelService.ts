@@ -1079,6 +1079,110 @@ async function addEvidenceSheet(
       });
     }
 
+    // RESERVAS usa exactamente la misma estructura visual del libro
+    // PUNTAS DE FIBRA: tres paneles de igual tamaño, sin el bloque de metadatos.
+    // Orden: PUNTA INICIO, PUNTA FINAL y ROLLO DETALLADO.
+    if (category.id === 'RESERVA') {
+      const boxTop = row;
+      const boxBottom = row + 7;
+      const reservePhotoCells = [
+        { ev: group.items.find(item => item.reserveSide === 'initial'), startCol: 2, label: 'PUNTA INICIO' },
+        { ev: group.items.find(item => item.reserveSide === 'final'), startCol: 5, label: 'PUNTA FINAL' },
+        { ev: group.items.find(item => item.reserveSide === 'roll'), startCol: 8, label: 'ROLLO DETALLADO' },
+      ];
+
+      for (const item of reservePhotoCells) {
+        const { ev, startCol, label } = item;
+        sheet.mergeCells(boxTop, startCol, boxBottom - 1, startCol + 2);
+
+        const imageCell = sheet.getCell(boxTop, startCol);
+        imageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F5F7' } };
+        imageCell.border = {
+          top: { style: 'medium', color: { argb: '222222' } },
+          left: { style: 'medium', color: { argb: '222222' } },
+          bottom: { style: 'thin', color: { argb: '222222' } },
+          right: { style: 'medium', color: { argb: '222222' } },
+        };
+        imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        if (ev) {
+          const url = getPhotoUrl(ev);
+          if (url) {
+            try {
+              const image = await imageToBase64(url);
+              const photoBoxWidthPx = 600;
+              const photoBoxHeightPx = 450;
+              const scale = Math.min(
+                photoBoxWidthPx / image.width,
+                photoBoxHeightPx / image.height,
+              );
+              const imageWidth = Math.max(1, Math.round(image.width * scale));
+              const imageHeight = Math.max(1, Math.round(image.height * scale));
+              const imageId = workbook.addImage({
+                base64: image.base64,
+                extension: image.extension,
+              });
+
+              const totalCellWidthEmu = [startCol, startCol + 1, startCol + 2].reduce((sum, currentCol) => {
+                const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
+                return sum + Math.floor((width / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU);
+              }, 0);
+              const totalCellHeightEmu = Array.from(
+                { length: boxBottom - boxTop },
+                (_, i) => {
+                  const heightPt = sheet.getRow(boxTop + i).height || EXCEL_DEFAULT_ROW_HEIGHT_PT;
+                  return Math.floor(
+                    (heightPt / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
+                  );
+                },
+              ).reduce((sum, value) => sum + value, 0);
+
+              const imageWidthEmu = Math.round(imageWidth * EMU_PER_PIXEL);
+              const imageHeightEmu = Math.round(imageHeight * EMU_PER_PIXEL);
+              const offsetXEmu = Math.max(0, Math.floor((totalCellWidthEmu - imageWidthEmu) / 2));
+              const offsetYEmu = Math.max(0, Math.floor((totalCellHeightEmu - imageHeightEmu) / 2));
+
+              sheet.addImage(imageId, {
+                tl: {
+                  col: startCol - 1,
+                  row: boxTop - 1,
+                  nativeCol: startCol - 1,
+                  nativeColOff: offsetXEmu,
+                  nativeRow: boxTop - 1,
+                  nativeRowOff: offsetYEmu,
+                },
+                ext: { width: imageWidth, height: imageHeight },
+              } as any);
+            } catch {
+              imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            }
+          } else {
+            imageCell.value = 'SIN FOTO';
+          }
+        } else {
+          imageCell.value = 'FALTA FOTO';
+        }
+
+        sheet.mergeCells(boxBottom, startCol, boxBottom, startCol + 2);
+        const caption = sheet.getCell(boxBottom, startCol);
+        caption.value = label;
+        caption.font = { name: 'Arial', size: 10, bold: true };
+        caption.alignment = { vertical: 'middle', horizontal: 'center' };
+        caption.border = {
+          left: { style: 'medium', color: { argb: '222222' } },
+          bottom: { style: 'medium', color: { argb: '222222' } },
+          right: { style: 'medium', color: { argb: '222222' } },
+        };
+      }
+
+      for (let r = boxTop; r <= boxBottom; r++) {
+        sheet.getRow(r).height = r === boxBottom ? 24 : 50;
+      }
+
+      row = boxBottom + 3;
+      continue;
+    }
+
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
     const reservationLayout = category.id === 'RESERVA';
