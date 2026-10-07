@@ -56,14 +56,14 @@ const getGroupNumber = (ev: MemoryEvidence, category: string) => {
 };
 
 const getGroupName = (ev: MemoryEvidence, category: string) =>
-  String(
+  displayUpper(
     ev.napName ||
     ev.mufaName ||
     ev.fiberPairName ||
     ev.reserveName ||
     ev.categoryLabel ||
     category
-  ).trim();
+  );
 
 const getPhotoUrl = (ev: MemoryEvidence) =>
   String(ev.photoUrl || ev.photo?.uri || '').trim();
@@ -92,8 +92,8 @@ const NAPS_PHOTO_TITLES = [
 const getNapsPhotoTitle = (ev: MemoryEvidence, index: number) => {
   const slot = Number(ev.napPhotoNumber ?? ev.photoNumber ?? index + 1);
   const title = NAPS_PHOTO_TITLES[slot - 1] || ('FOTO ' + slot);
-  const napName = String(ev.napName || '').trim();
-  return napName
+  const napName = displayUpper(ev.napName);
+  return napName !== '—'
     ? title + ' NAP ' + napName
     : title + ' NAP';
 };
@@ -317,7 +317,7 @@ async function addEvidenceSheet(
 
   sheet.mergeCells(row, 2, row, 4);
   const projectCell = sheet.getCell(row, 2);
-  projectCell.value = `PROYECTO: ${clean(project?.name)}`;
+  projectCell.value = `PROYECTO: ${displayUpper(project?.name)}`;
   styleHeader(projectCell, '1D4E89');
   row += 1;
 
