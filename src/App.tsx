@@ -997,8 +997,7 @@ export default function App() {
     sessionStorage.setItem('activeStep', currentStep);
     if (selectedProject?.id) {
        sessionStorage.setItem('activeProjectId', String(selectedProject.id));
-    } else {
-       sessionStorage.removeItem('activeProjectId');
+    } else {       sessionStorage.removeItem('activeProjectId');
     }
   }, [currentStep, selectedProject]);
 
@@ -1998,7 +1997,6 @@ export default function App() {
 
     const currentIndex = fields.indexOf(field);
     if (currentIndex < 0) return;
-
     const nextField = fields[currentIndex + 1];
     if (!nextField) return;
 
@@ -2997,8 +2995,7 @@ export default function App() {
     if (category.id === 'DESECHOS') {
       const desechoIds = Array.from(new Set(categoryEvidences.map(ev => ev.desechoId).filter(Boolean))) as string[];
       const desechoGroups = desechoIds.map(desechoId => {
-        const group = categoryEvidences.filter(ev => ev.desechoId === desechoId);
-        const first = group[0];
+        const group = categoryEvidences.filter(ev => ev.desechoId === desechoId);        const first = group[0];
         const desechoNumber = Number(first?.desechoNumber || 0);
         const hasPhoto1 = group.some(ev => ev.desechoSide === 'photo1');
         const hasPhoto2 = group.some(ev => ev.desechoSide === 'photo2');
@@ -3534,7 +3531,7 @@ export default function App() {
                                       </span>
                                     </div>
 
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 lg:gap-2">
                                       {group.items.map((ev: any, photoIndex: number) => {
                                         const imageUrl = ev.photoUrl || ev.photo?.uri || '';
                                         return (
@@ -3581,7 +3578,7 @@ export default function App() {
                                           .map((photoNumber) => (
                                             <div
                                               key={'missing-' + group.id + '-' + photoNumber}
-                                              className="min-h-[180px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 gap-2"
+                                              className="min-h-[180px] lg:min-h-[120px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 lg:p-2 gap-2"
                                             >
                                               <CameraIcon className="w-6 h-6 text-blue-400" />
                                               <p className="text-[8px] font-black uppercase text-blue-700">FALTA FOTO</p>
@@ -3997,8 +3994,7 @@ export default function App() {
                             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                             <span className="text-xs font-black uppercase text-gray-600 tracking-tighter">{name}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg font-black text-gray-950 tracking-tighter">{total}</span>
+                          <div className="flex items-center gap-2">                            <span className="text-lg font-black text-gray-950 tracking-tighter">{total}</span>
                             <ArrowUpRight className="w-4 h-4 text-gray-200 group-hover:text-green-500 transition-colors" />
                           </div>
                         </div>
@@ -4997,8 +4993,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        setShowGalleryGrid(false);
-                        void cameraService.openFieldTraceAlbum(true);
+                        setShowGalleryGrid(false);                        void cameraService.openFieldTraceAlbum(true);
                       }}
                       className="text-[10px] font-black uppercase text-white/50 px-2 py-2"
                     >
@@ -5997,8 +5992,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    setAceroSetChoice(null);
-                    setEvidenceCategory('ACEROS');
+                    setAceroSetChoice(null);                    setEvidenceCategory('ACEROS');
                     const usedNumbers = evidences
                       .filter(ev => ev.category === 'ACEROS' && ev.aceroNumber != null)
                       .map(ev => Number(ev.aceroNumber))
@@ -6997,8 +6991,7 @@ export default function App() {
                       );
                     });
                   })() : storageEvidenceCategory === 'ALTAS' ? (() => {
-                    const altaPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ALTAS' && ev.altaId)
+                    const altaPhotos = evidences                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ALTAS' && ev.altaId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.altaNumber || 0) - Number(b.altaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
