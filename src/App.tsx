@@ -369,6 +369,9 @@ export default function App() {
   const [showEvidenceList, setShowEvidenceList] = useState(false);
   const [showStorageEvidenceViewer, setShowStorageEvidenceViewer] = useState(false);
   const [storageEvidenceCategory, setStorageEvidenceCategory] = useState<EvidenceCategory | null>(null);
+  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<{ category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number } | null>(null);
+  const memoryUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [memoryUploadLoading, setMemoryUploadLoading] = useState(false);
   const [showQuickConfig, setShowQuickConfig] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'project' | 'field' | 'evidence', id?: number, index?: number } | null>(null);
   const [confirmClearAllStep, setConfirmClearAllStep] = useState<0 | 1 | 2>(0);
@@ -1059,6 +1062,63 @@ export default function App() {
       alert('No se pudieron cargar los proyectos compartidos desde Firebase.');
     } finally {
       setCloudProjectsLoading(false);
+    }
+  };
+
+  const uploadMissingMemoryPhoto = (slot: { category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number }) => {
+    setPendingMemoryUpload(slot);
+    memoryUploadInputRef.current?.click();
+  };
+
+  const handleMemoryUploadFile = async (file: File | undefined) => {
+    const slot = pendingMemoryUpload;
+    if (!file || !slot || !file.type.startsWith('image/')) {
+      if (file) alert('Selecciona una fotografía válida.');
+      return;
+    }
+    setMemoryUploadLoading(true);
+    try {
+      const project = memorySelectedProject;
+      const projectUuid = String(project?.uuid || project?.id || '');
+      if (!projectUuid) throw new Error('No se encontró el identificador del proyecto.');
+
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+      const now = new Date();
+      const remote = await firebaseService.uploadEvidencePhoto(file, projectUuid, uuid, file.name);
+
+      const evidence = {
+        id: null, uuid, projectId: project?.id ?? null, projectUuid, projectName: project?.name || '',
+        photoPath: file.name, photoStoragePath: remote.storagePath, photoUrl: remote.downloadUrl,
+        category: slot.category, categoryLabel: 'NAPS',
+        capturedAt: now.toISOString(), fecha: now.toLocaleDateString('es-ES'),
+        hora: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now(), latitude: 0, longitude: 0, gpsAccuracy: null, ubicacion: '',
+        baseFields: { posteId: '', tecnico: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '' },
+        tecnico: '', posteId: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '',
+        customFields: [], sharedWhatsApp: false, locked: false,
+        napId: slot.napId, napNumber: slot.napNumber, napName: slot.napName, napPhotoNumber: slot.photoNumber,
+        createdAt: now.toISOString(), updatedAt: now.toISOString(), syncStatus: 'synced', retryCount: 0, schemaVersion: 3
+      };
+
+      if (!(await firebaseService.syncEvidenceToCloud(evidence))) {
+        throw new Error('La fotografía se subió a Storage, pero no se pudo guardar su registro en Firestore.');
+      }
+
+      const append = (projectItem: any) => {
+        if (!projectItem) return projectItem;
+        const current = Array.isArray(projectItem._evidences) ? projectItem._evidences : [];
+        return { ...projectItem, _evidences: [...current.filter((ev: any) => ev.uuid !== uuid), evidence] };
+      };
+      setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? append(p) : p));
+      setMemorySelectedProject((prev: any) => append(prev));
+      setPendingMemoryUpload(null);
+      if (memoryUploadInputRef.current) memoryUploadInputRef.current.value = '';
+      alert('Fotografía subida correctamente y asociada a la posición seleccionada.');
+    } catch (error: any) {
+      console.error('[Memory Upload] Error:', error);
+      alert(error?.message || 'No se pudo subir la fotografía.');
+    } finally {
+      setMemoryUploadLoading(false);
     }
   };
 
@@ -2998,6 +3058,8 @@ export default function App() {
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto px-6 py-8 no-scrollbar">
+          <input ref={memoryUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleMemoryUploadFile(e.target.files?.[0])} />
+
           <AnimatePresence mode="wait">
             {/* HOME VIEW */}
             {currentStep === 'home' && (
@@ -6746,36 +6808,47 @@ export default function App() {
                               }
 
                               return (
-                                <button
+                                <div
                                   key={`nap-missing-${photoNumber}`}
-                                  type="button"
-                                  onClick={() => {
-                                    const napId = group[0]?.napId || '';
-                                    const napNumber = Number(group[0]?.napNumber || groupIndex + 1);
-                                    const napName = group[0]?.napName || '';
-                                    setViewingEvidence(null);
-                                    setShowStorageEvidenceViewer(false);
-                                    setStorageEvidenceCategory(null);
-                                    setEvidenceCategory('NAPS');
-                                    // Captura puntual: al volver de la cámara se regresa
-                                    // al visor después de completar únicamente esta foto.
-                                    setNapCaptureDraft({
-                                      napId,
-                                      napNumber,
-                                      napName,
-                                      photoNumber,
-                                      remainingPhotos: 1
-                                    });
-                                    setShowNapCaptureModal(false);
-                                    setCurrentStep('camera');
-                                  }}
-                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 p-3"
                                 >
                                   <CameraIcon className="w-8 h-8" />
                                   <span className="text-[9px] font-black uppercase text-center px-2">
-                                    TOMAR FOTO<br />{getNapsPhotoTitle(photoNumber)} NAP
+                                    FALTA<br />{getNapsPhotoTitle(photoNumber)} NAP
                                   </span>
-                                </button>
+                                  <button
+                                    type="button"
+                                    disabled={memoryUploadLoading}
+                                    onClick={() => uploadMissingMemoryPhoto({
+                                      category: 'NAPS',
+                                      napId: group[0]?.napId || '',
+                                      napNumber: Number(group[0]?.napNumber || groupIndex + 1),
+                                      napName: group[0]?.napName || '',
+                                      photoNumber
+                                    })}
+                                    className="w-full px-2 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
+                                  >
+                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const napId = group[0]?.napId || '';
+                                      const napNumber = Number(group[0]?.napNumber || groupIndex + 1);
+                                      const napName = group[0]?.napName || '';
+                                      setViewingEvidence(null);
+                                      setShowStorageEvidenceViewer(false);
+                                      setStorageEvidenceCategory(null);
+                                      setEvidenceCategory('NAPS');
+                                      setNapCaptureDraft({ napId, napNumber, napName, photoNumber, remainingPhotos: 1 });
+                                      setShowNapCaptureModal(false);
+                                      setCurrentStep('camera');
+                                    }}
+                                    className="w-full px-2 py-2 rounded-xl bg-blue-600 text-white text-[8px] font-black uppercase active:scale-95"
+                                  >
+                                    TOMAR FOTO
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
