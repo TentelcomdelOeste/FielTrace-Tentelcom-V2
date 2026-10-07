@@ -319,11 +319,16 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   ];
 
   sheet.mergeCells('B1:C1');
-  const title = sheet.getCell('B1');
+  const title = sheet.getCell('D1');
   title.value = 'MEMORIA FOTOGRÁFICA — ESPH';
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
   title.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFF' } };
   title.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('D1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('E1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('F1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('G1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('H1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   sheet.getRow(1).height = 42;
 
   sheet.mergeCells('B2:C2');
@@ -332,6 +337,11 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
   subtitle.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFF' } };
   subtitle.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('D2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('E2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('F2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('G2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  sheet.getCell('H2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   sheet.getRow(2).height = 34;
 
   sheet.getRow(3).height = 18;
@@ -403,7 +413,7 @@ const addFiberTipsSheet = async (
 
   const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
 
-  sheet.mergeCells('B1:H1');
+  sheet.mergeCells('D1:H1');
   const title = sheet.getCell('B1');
   title.value = 'MEMORIA FOTOGRÁFICA';
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
@@ -411,8 +421,8 @@ const addFiberTipsSheet = async (
   title.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(1).height = 30;
 
-  sheet.mergeCells('B2:H2');
-  const product = sheet.getCell('B2');
+  sheet.mergeCells('D2:H2');
+  const product = sheet.getCell('D2');
   product.value = 'Redes FO';
   product.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   product.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
@@ -437,6 +447,17 @@ const addFiberTipsSheet = async (
   sheet.getCell('J1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
 
+  // Marco superior de referencia: D:H (título) + I:J (código/revisión).
+  for (let col = 4; col <= 10; col++) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(2, col).border = {
+      ...sheet.getCell(2, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
   sheet.getRow(3).height = 8;
 
   sheet.mergeCells('B5:D5');
