@@ -579,20 +579,15 @@ const addFiberTipsSheet = async (
             const imageHeight = Math.max(1, Math.round(image.height * scale));
             const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
 
-            const offsetX = Math.max(0, Math.floor((cellWidthEmu - imageWidth * EMU_PER_PIXEL) / 2));
-            const offsetY = Math.max(0, Math.floor((rowHeightEmu - imageHeight * EMU_PER_PIXEL) / 2));
-
+            // En esta hoja no usamos offsets nativos para centrar la foto.
+            // ExcelJS puede interpretar esos offsets de forma distinta al abrir
+            // el archivo y terminar mostrando la imagen diminuta. La imagen se
+            // ancla directamente al inicio de su caja con su tamaño calculado.
             sheet.addImage(imageId, {
-              tl: {
-                col: startCol - 1,
-                row: boxTop - 1,
-                nativeCol: startCol - 1,
-                nativeColOff: offsetX,
-                nativeRow: boxTop - 1,
-                nativeRowOff: offsetY,
-              },
+              tl: { col: startCol - 1, row: boxTop - 1 },
               ext: { width: imageWidth, height: imageHeight },
-            } as any);
+              editAs: 'oneCell',
+            });
           } catch {
             imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
           }
