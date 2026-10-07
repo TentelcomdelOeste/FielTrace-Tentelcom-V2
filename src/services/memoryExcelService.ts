@@ -55,15 +55,10 @@ const getGroupNumber = (ev: MemoryEvidence, category: string) => {
   return Number(ev[key || '']) || 0;
 };
 
-const getGroupName = (ev: MemoryEvidence, category: string) =>
-  displayUpper(
-    ev.napName ||
-    ev.mufaName ||
-    ev.fiberPairName ||
-    ev.reserveName ||
-    ev.categoryLabel ||
-    category
-  );
+const getGroupName = (ev: MemoryEvidence, category: string) => {
+  const value = ev.napName || ev.mufaName || ev.fiberPairName || ev.reserveName || ev.categoryLabel || category;
+  return String(value ?? '').trim() || '—';
+};
 
 const getPhotoUrl = (ev: MemoryEvidence) =>
   String(ev.photoUrl || ev.photo?.uri || '').trim();
@@ -92,9 +87,9 @@ const NAPS_PHOTO_TITLES = [
 const getNapsPhotoTitle = (ev: MemoryEvidence, index: number) => {
   const slot = Number(ev.napPhotoNumber ?? ev.photoNumber ?? index + 1);
   const title = NAPS_PHOTO_TITLES[slot - 1] || ('FOTO ' + slot);
-  const napName = displayUpper(ev.napName);
-  return napName !== '—'
-    ? title + ' NAP ' + napName
+  const napName = String(ev.napName ?? '').trim();
+  return napName
+    ? title + ' NAP ' + napName.toUpperCase()
     : title + ' NAP';
 };
 
@@ -317,7 +312,7 @@ async function addEvidenceSheet(
 
   sheet.mergeCells(row, 2, row, 4);
   const projectCell = sheet.getCell(row, 2);
-  projectCell.value = `PROYECTO: ${displayUpper(project?.name)}`;
+  projectCell.value = `PROYECTO: ${String(project?.name ?? '').trim().toUpperCase() || 'PROYECTO'}`;
   styleHeader(projectCell, '1D4E89');
   row += 1;
 
