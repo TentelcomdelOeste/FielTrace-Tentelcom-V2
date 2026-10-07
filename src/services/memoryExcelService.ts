@@ -279,6 +279,14 @@ const getCustomProjectValue = (project: any, aliases: string[]) => {
 };
 
 const getProjectDataValue = (project: any, key: typeof DATA_SHEET_LABELS[number]) => {
+  // Valores fijos solicitados para la plantilla ESPH.
+  // Se resuelven antes de customFields para que ningún dato anterior
+  // sobrescriba estos valores por accidente.
+  if (key === 'País/Div:') return 'COSTA RICA';
+  if (key === 'Producto:') return 'REDES FO';
+  if (key === 'Nombre del Supervisor/Insp.:') return '';
+  if (key === 'Nombre del Contratista:') return 'ESPH';
+
   const aliases: Record<string, string[]> = {
     'País/Div:': ['pais', 'paisdiv', 'paisdivision', 'country'],
     'Área/Cd:': ['area', 'areacd', 'areaciudad', 'canton', 'distrito', 'areacd'],
@@ -295,16 +303,10 @@ const getProjectDataValue = (project: any, key: typeof DATA_SHEET_LABELS[number]
   if (String(custom).trim()) return String(custom).trim();
 
   switch (key) {
-    case 'País/Div:':
-      return 'COSTA RICA';
     case 'Nom. Proy.':
       return String(project?.name ?? '').trim();
-    case 'Producto:':
-      return 'REDES FO';
     case 'Nombre del Supervisor/Insp.:':
       return '';
-    case 'Nombre del Contratista:':
-      return 'ESPH';
     default:
       return '';
   }
