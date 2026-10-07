@@ -61,7 +61,17 @@ const getGroupName = (ev: MemoryEvidence, category: string) => {
 };
 
 const getPhotoUrl = (ev: MemoryEvidence) =>
-  String(ev.photoUrl || ev.photo?.uri || '').trim();
+  String(
+    ev.photoUrl ||
+    ev.photo?.uri ||
+    ev.photo?.url ||
+    ev.imageUrl ||
+    ev.image?.url ||
+    ev.storageUrl ||
+    ev.url ||
+    ev.photoPath ||
+    ''
+  ).trim();
 
 // Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
 // pero en Memoria Fotográfica representan un único set de 2 fotografías.
@@ -1028,19 +1038,21 @@ async function addEvidenceSheet(
 
   for (const group of orderedGroups) {
     const startRow = row;
-    const groupTitle = category.id === 'NAPS'
-      ? `NAP ${String(group.number).padStart(2, '0')}`
-      : category.id === 'MUFA'
-        ? `MUFA ${String(group.number).padStart(2, '0')}`
-        : `${category.label} · ${String(group.number || '').padStart(2, '0')}`;
+    if (category.id !== 'RESERVA') {
+      const groupTitle = category.id === 'NAPS'
+        ? `NAP ${String(group.number).padStart(2, '0')}`
+        : category.id === 'MUFA'
+          ? `MUFA ${String(group.number).padStart(2, '0')}`
+          : `${category.label} · ${String(group.number || '').padStart(2, '0')}`;
 
-    sheet.mergeCells(row, 2, row, 4);
-    const groupCell = sheet.getCell(row, 2);
-    groupCell.value = group.name && group.name !== category.label
-      ? `${groupTitle} · ${group.name}`
-      : groupTitle;
-    styleHeader(groupCell, '3D5A80');
-    row += 1;
+      sheet.mergeCells(row, 2, row, 4);
+      const groupCell = sheet.getCell(row, 2);
+      groupCell.value = group.name && group.name !== category.label
+        ? `${groupTitle} · ${group.name}`
+        : groupTitle;
+      styleHeader(groupCell, '3D5A80');
+      row += 1;
+    }
 
     // ALTAS siempre se presenta en orden semántico: panorámica primero y metraje después,
     // aunque el orden de guardado en Firebase sea diferente.
@@ -1069,12 +1081,13 @@ async function addEvidenceSheet(
 
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
-    for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3).height = 125;
-    for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3 + 1).height = 22;
-    for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3 + 2).height = 5;
+    const reservationLayout = category.id === 'RESERVA';
+    for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3).height = reservationLayout ? 210 : 125;
+    for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3 + 1).height = 24;
+    for (let r = 0; r < imageRows; r++) sheet.getRow(imageRowStart + r * 3 + 2).height = reservationLayout ? 8 : 5;
 
     for (let index = 0; index < category.required; index++) {
-      const col = 2 + (index % 3);
+      const col = reservationLayout ? 2 + (index * 3) : 2 + (index % 3);
       const blockRow = imageRowStart + Math.floor(index / 3) * 3;
       const ev = category.id === 'NAPS'
         ? group.items.find(item => Number(item.napPhotoNumber) === index + 1) || group.items[index]
@@ -1082,6 +1095,9 @@ async function addEvidenceSheet(
           ? group.items.find(item => Number(item.mufaPhotoNumber) === index + 1) || group.items[index]
           : group.items[index];
 
+      if (reservationLayout) {
+        sheet.mergeCells(blockRow, col, blockRow, col + 2);
+      }
       const imageCell = sheet.getCell(blockRow, col);
       imageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F5F7' } };
       imageCell.border = {
@@ -1119,10 +1135,11 @@ async function addEvidenceSheet(
             // col/row fraccionarios porque ExcelJS tiene reportes de diferencias
             // en cómo esas fracciones se traducen a offsets visuales.
             const rowHeightPt = sheet.getRow(blockRow).height || 125;
-            const columnWidthForCell = sheet.getColumn(col).width || EXCEL_DEFAULT_COL_WIDTH;
-            const cellWidthEmu = Math.floor(
-              (columnWidthForCell / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU
-            );
+            const imageColumns = reservationLayout ? [col, col + 1, col + 2] : [col];
+            const cellWidthEmu = imageColumns.reduce((sum, currentCol) => {
+              const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
+              return sum + Math.floor((width / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU);
+            }, 0);
             const cellHeightEmu = Math.floor(
               (rowHeightPt / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
             );
@@ -1158,6 +1175,9 @@ async function addEvidenceSheet(
         imageCell.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'B7791F' } };
       }
 
+      if (reservationLayout) {
+        sheet.mergeCells(blockRow + 1, col, blockRow + 1, col + 2);
+      }
       const desc = sheet.getCell(blockRow + 1, col);
       if (category.id === 'ALTAS') {
         desc.value = ev
@@ -1178,13 +1198,17 @@ async function addEvidenceSheet(
             : 'Panorámica')
           : (index === 0 ? 'Panorámica' : 'Metraje:');
       } else {
-        desc.value = ev
-          ? (category.id === 'NAPS'
-            ? getNapsPhotoTitle(ev, index)
-            : getDescription(ev, index, category.label))
-          : (category.id === 'NAPS'
-            ? getNapsPhotoTitle({ napName: group.name } as MemoryEvidence, index)
-            : ('FALTA FOTO ' + (index + 1) + '/' + category.required));
+        if (category.id === 'RESERVA') {
+          desc.value = ['PUNTA INICIO', 'PUNTA FINAL', 'ROLLO DETALLADO'][index] || `RESERVA - FOTO ${index + 1}`;
+        } else {
+          desc.value = ev
+            ? (category.id === 'NAPS'
+              ? getNapsPhotoTitle(ev, index)
+              : getDescription(ev, index, category.label))
+            : (category.id === 'NAPS'
+              ? getNapsPhotoTitle({ napName: group.name } as MemoryEvidence, index)
+              : ('FALTA FOTO ' + (index + 1) + '/' + category.required));
+        }
       }
       styleBody(desc);
       desc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
