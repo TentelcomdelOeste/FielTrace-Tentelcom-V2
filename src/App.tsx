@@ -7319,6 +7319,125 @@ export default function App() {
                         </div>
                       );
                     });
+                  })() : storageEvidenceCategory === 'PUNTAS_FIBRA' ? (() => {
+                    const fiberPhotos = evidences
+                      .filter((ev: any) =>
+                        !!ev.photoUrl &&
+                        (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') &&
+                        ev.fiberPairId
+                      )
+                      .sort((a: any, b: any) => {
+                        const numberDiff = Number(a.fiberPairNumber || 0) - Number(b.fiberPairNumber || 0);
+                        if (numberDiff !== 0) return numberDiff;
+                        const sideOrder: Record<string, number> = { initial: 1, final: 2 };
+                        return (sideOrder[a.fiberSide || ''] || 99) - (sideOrder[b.fiberSide || ''] || 99);
+                      });
+
+                    const groups = Array.from(
+                      fiberPhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                        const key = ev.fiberPairId || `legacy-fiber-${ev.fiberPairNumber || ev.id || ev.uuid}`;
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(ev);
+                        return map;
+                      }, new Map<string, any[]>()).values()
+                    );
+
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const pairNumber = Number(group[0]?.fiberPairNumber || groupIndex + 1);
+                      const pairId = group[0]?.fiberPairId || '';
+                      const initial = group.find(ev => ev.fiberSide === 'initial');
+                      const final = group.find(ev => ev.fiberSide === 'final');
+                      const missingSide: 'initial' | 'final' | null =
+                        !initial ? 'initial' : !final ? 'final' : null;
+                      const first = initial || final;
+                      const fiberCount = first?.fiberCount != null && String(first.fiberCount).trim() !== ''
+                        ? String(first.fiberCount)
+                        : '';
+                      const reelNumber = first?.fiberReelNumber || '';
+
+                      const renderPhoto = (ev: any, side: 'initial' | 'final') => {
+                        if (ev) {
+                          return (
+                            <button
+                              key={ev.id || ev.uuid || `fiber-${pairNumber}-${side}`}
+                              type="button"
+                              onClick={() => setViewingEvidence(ev)}
+                              className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
+                            >
+                              <div className="aspect-[4/5] bg-black overflow-hidden">
+                                <img
+                                  src={ev.photoUrl}
+                                  alt={side === 'initial' ? 'Punta inicial' : 'Punta final'}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                              <div className="p-2.5">
+                                <p className="text-[9px] font-black uppercase text-gray-900">
+                                  {side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
+                                </p>
+                                <p className="text-[8px] font-bold text-gray-500 mt-1">
+                                  {ev.fiberMeterage != null ? `METRAJE: ${ev.fiberMeterage} M` : 'METRAJE NO REGISTRADO'}
+                                </p>
+                                <p className="text-[8px] font-bold text-gray-400 mt-1">
+                                  {ev.fecha} {ev.hora || ''}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={`fiber-missing-${pairNumber}-${side}`}
+                            type="button"
+                            onClick={() => {
+                              setViewingEvidence(null);
+                              setShowStorageEvidenceViewer(false);
+                              setStorageEvidenceCategory(null);
+                              setEvidenceCategory('PUNTAS_FIBRA');
+                              openFiberSide(side, pairId);
+                            }}
+                            className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                          >
+                            <CameraIcon className="w-8 h-8" />
+                            <span className="text-[9px] font-black uppercase text-center px-2">
+                              TOMAR FOTO<br />{side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
+                            </span>
+                          </button>
+                        );
+                      };
+
+                      return (
+                        <div key={pairId || `fiber-group-${pairNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="flex items-center justify-between gap-3 px-1 pb-3">
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
+                                PUNTA {String(pairNumber).padStart(2, '0')}
+                              </p>
+                              <p className={"text-[8px] font-bold uppercase mt-1 " + (missingSide ? 'text-amber-600' : 'text-gray-400')}>
+                                {missingSide
+                                  ? group.length + '/2 FOTOS · FALTA ' + (missingSide === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL')
+                                  : '2/2 FOTOS · SET COMPLETO'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              {fiberCount && (
+                                <p className="text-[8px] font-black uppercase text-gray-500">{fiberCount} HILOS</p>
+                              )}
+                              {reelNumber && (
+                                <p className="text-[8px] font-black uppercase text-gray-500">CARRETE: {reelNumber}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {renderPhoto(initial, 'initial')}
+                            {renderPhoto(final, 'final')}
+                          </div>
+                        </div>
+                      );
+                    });
                   })() : storageEvidenceCategory === 'MUFA' ? (() => {
                     const mufaPhotos = evidences
                       .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA' && ev.mufaId)
