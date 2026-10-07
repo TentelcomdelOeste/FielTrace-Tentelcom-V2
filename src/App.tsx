@@ -6912,7 +6912,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {Array.from({ length: 9 }, (_, slotIndex) => {
                               const photoNumber = slotIndex + 1;
                               const ev = group.find((item: any) => Number(item.napPhotoNumber) === photoNumber);
@@ -7040,7 +7040,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button
                                 key={ev.id || ev.uuid || index}
@@ -7144,7 +7144,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
@@ -7227,7 +7227,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
@@ -7325,7 +7325,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
@@ -7479,7 +7479,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {renderPhoto(initial, 'initial')}
                             {renderPhoto(final, 'final')}
                           </div>
@@ -7521,7 +7521,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {Array.from({ length: 9 }, (_, slotIndex) => {
                               const photoNumber = slotIndex + 1;
                               const ev = group.find((item: any) => Number(item.mufaPhotoNumber) === photoNumber);
