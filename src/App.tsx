@@ -3514,25 +3514,7 @@ export default function App() {
                                                   >
                                                     {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
                                                   </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setEvidenceCategory('NAPS');
-                                                      setNapCaptureDraft({
-                                                        napId: String(group.id),
-                                                        napNumber: Number(group.number),
-                                                        napName: String(group.name || ''),
-                                                        photoNumber,
-                                                        remainingPhotos: 1
-                                                      });
-                                                      setShowNapCaptureModal(false);
-                                                      setCurrentStep('camera');
-                                                    }}
-                                                    className="w-full px-2.5 py-2 rounded-xl bg-blue-600 text-white text-[8px] font-black uppercase active:scale-95"
-                                                  >
-                                                    TOMAR FOTO
-                                                  </button>
+
                                                 </>
                                               )}
                                             </div>
