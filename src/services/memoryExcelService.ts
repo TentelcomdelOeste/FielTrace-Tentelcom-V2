@@ -281,14 +281,14 @@ const getCustomProjectValue = (project: any, aliases: string[]) => {
 const getProjectDataValue = (project: any, key: typeof DATA_SHEET_LABELS[number]) => {
   const aliases: Record<string, string[]> = {
     'País/Div:': ['pais', 'paisdiv', 'paisdivision', 'country'],
-    'Área/Cd:': ['area', 'areacd', 'areaciudad', 'canton', 'distrito', 'area/cd'],
+    'Área/Cd:': ['area', 'areacd', 'areaciudad', 'canton', 'distrito', 'areacd'],
     'Nom. Proy.:': ['nomproy', 'nombreproyecto', 'proyecto', 'projectname'],
     'Producto:': ['producto', 'product', 'tipo'],
-    'Nombre del Supervisor/Insp.:': ['supervisor', 'inspectorsupervisor', 'inspector', 'nombre del supervisor', 'nombre del inspector'],
-    'Nombre del Contratista:': ['contratista', 'cliente', 'contractor'],
-    'Fecha Inicio:': ['fechainicio', 'inicio', 'startdate', 'fecha de inicio'],
-    'Fecha Fin:': ['fechafin', 'fin', 'enddate', 'fecha de fin'],
-    'Identificación (OB; DTTO; ID; OT; SISA):': ['identificacion', 'identificacionobdtt oidotsisa', 'ob', 'dtto', 'id', 'ot', 'sisa'],
+    'Nombre del Supervisor/Insp.:': ['supervisor', 'inspectorsupervisor', 'inspector', 'nombredelsupervisorinsp', 'nombredelsupervisor', 'nombre del inspector'],
+    'Nombre del Contratista:': ['contratista', 'cliente', 'contractor', 'nombredelcontratista'],
+    'Fecha Inicio:': ['fechainicio', 'inicio', 'startdate', 'fechadeinicio'],
+    'Fecha Fin:': ['fechafin', 'fin', 'enddate', 'fechadefin'],
+    'Identificación (OB; DTTO; ID; OT; SISA):': ['identificacion', 'identificacionobdtt oidotsisa', 'identificacionobdtt oidotsisa', 'identificacionobdttoidotsisa', 'ob', 'dtto', 'id', 'ot', 'sisa'],
   };
 
   const custom = getCustomProjectValue(project, aliases[key] || [key]);
