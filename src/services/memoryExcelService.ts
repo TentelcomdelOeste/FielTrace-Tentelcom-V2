@@ -560,7 +560,6 @@ const addFiberTipsSheet = async (
       const valueCell = sheet.getCell(r, 3);
       valueCell.value = value;
       valueCell.font = { name: 'Calibri', size: 11, bold: true };
-      valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF00' } };
       valueCell.alignment = { vertical: 'middle', horizontal: 'center' };
       valueCell.border = {
         top: { style: 'thin', color: { argb: '222222' } },
