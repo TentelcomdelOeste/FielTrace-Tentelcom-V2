@@ -252,6 +252,88 @@ const styleBody = (cell: ExcelJS.Cell) => {
   cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
 };
 
+const DATA_SHEET_LABELS = [
+  'País/Div:',
+  'Área/Cd:',
+  'Nom. Proy.:',
+  'Producto:',
+  'Nombre del Supervisor/Insp.:',
+  'Nombre del Contratista:',
+  'Fecha Inicio:',
+  'Fecha Fin:',
+  'Identificación (OB; DTTO; ID; OT; SISA):',
+] as const;
+
+const addDataSheet = (workbook: ExcelJS.Workbook) => {
+  const sheet = workbook.addWorksheet('Datos');
+  sheet.views = [{ showGridLines: false }];
+
+  sheet.columns = [
+    { width: 3 },
+    { width: 48 },
+    { width: 72 },
+  ];
+
+  // Encabezado idéntico a la plantilla de referencia.
+  sheet.mergeCells('B1:C1');
+  const title = sheet.getCell('B1');
+  title.value = 'MEMORIA FOTOGRÁFICA — ESPH';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
+  title.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFF' } };
+  title.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(1).height = 42;
+
+  sheet.mergeCells('B2:C2');
+  const subtitle = sheet.getCell('B2');
+  subtitle.value = 'DATOS DEL PROYECTO  ·  FR-PE-15  REV. 02';
+  subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
+  subtitle.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFF' } };
+  subtitle.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(2).height = 34;
+
+  sheet.getRow(3).height = 18;
+
+  sheet.mergeCells('B4:C4');
+  const section = sheet.getCell('B4');
+  section.value = 'DATOS:';
+  section.font = { name: 'Arial', size: 16, bold: true, color: { argb: '000000' } };
+  section.alignment = { vertical: 'middle', horizontal: 'left' };
+  sheet.getRow(4).height = 30;
+
+  sheet.getRow(5).height = 18;
+
+  DATA_SHEET_LABELS.forEach((label, index) => {
+    const row = 6 + index;
+    const labelCell = sheet.getCell(row, 2);
+    const valueCell = sheet.getCell(row, 3);
+
+    labelCell.value = label;
+    labelCell.font = { name: 'Arial', size: 11, color: { argb: '222222' } };
+    labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    // Los valores de la columna C quedan deliberadamente vacíos.
+    // Se poblarán posteriormente con la información específica del sitio/proyecto.
+    valueCell.value = '';
+    valueCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
+    valueCell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EEF3F7' } };
+
+    sheet.getRow(row).height = row === 14 ? 34 : 27;
+  });
+
+  // Mantener visible la estructura de la plantilla hasta el último campo.
+  for (let row = 6; row <= 14; row++) {
+    sheet.getCell(row, 2).border = {
+      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
+    };
+    sheet.getCell(row, 3).border = {
+      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
+    };
+  }
+
+  return sheet;
+};
+
 async function addEvidenceSheet(
   workbook: ExcelJS.Workbook,
   category: typeof CATEGORY_CONFIG[number],
@@ -508,6 +590,11 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   workbook.creator = 'FielTrace';
   workbook.company = 'Tentelcom del Oeste S.A.';
   workbook.created = new Date();
+
+  // La hoja Datos debe ser siempre la primera pestaña del Excel.
+  // Los valores variables de la columna C se dejan vacíos hasta integrar
+  // los datos específicos del proyecto/sitio.
+  addDataSheet(workbook);
 
   for (const category of CATEGORY_CONFIG) {
     await addEvidenceSheet(workbook, category, project, evidences);
