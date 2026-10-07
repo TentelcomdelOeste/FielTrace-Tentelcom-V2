@@ -1049,9 +1049,32 @@ export default function App() {
 
   const handleSelectProject = async (p: Project) => {
     setSelectedProject(p);
-    const evs = await storageService.getEvidencesByProject(p.id!);
-    setEvidences(evs);
     setCurrentStep('history');
+
+    // Al entrar a un proyecto desde el listado principal, no debemos depender
+    // únicamente de IndexedDB/local. Las evidencias ya sincronizadas pueden
+    // existir en Firebase y ser visibles desde Memoria Fotográfica, pero no
+    // estar todavía materializadas localmente en este dispositivo.
+    // Primero mostramos lo local para no bloquear la navegación y, si existe
+    // UUID + conexión, actualizamos las evidencias desde Firestore.
+    let evs = await storageService.getEvidencesByProject(p.id!);
+    setEvidences(evs);
+
+    const projectUuid = String(p.uuid || '');
+    if (projectUuid && navigator.onLine) {
+      try {
+        const remoteEvidences = await firebaseService.getCloudProjectEvidences(projectUuid);
+        if (remoteEvidences.length > 0) {
+          const localProject = await storageService.importCloudProject(p, remoteEvidences);
+          evs = await storageService.getEvidencesByProject(localProject.id!);
+          setSelectedProject(localProject);
+          setEvidences(evs);
+        }
+      } catch (error) {
+        // La vista local sigue funcionando aunque Firebase no esté disponible.
+        console.warn('[Project Evidence] No se pudieron actualizar las evidencias desde Firebase:', error);
+      }
+    }
   };
 
   const openCloudProjects = async () => {
