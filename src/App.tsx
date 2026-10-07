@@ -6810,11 +6810,11 @@ export default function App() {
                               return (
                                 <div
                                   key={`nap-missing-${photoNumber}`}
-                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 p-3"
+                                  className="min-h-[240px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 p-3"
                                 >
                                   <CameraIcon className="w-8 h-8" />
                                   <span className="text-[9px] font-black uppercase text-center px-2">
-                                    FALTA<br />{getNapsPhotoTitle(photoNumber)} NAP
+                                    FALTA FOTO<br />{getNapsPhotoTitle(photoNumber)} NAP
                                   </span>
                                   <button
                                     type="button"
@@ -6828,7 +6828,7 @@ export default function App() {
                                     })}
                                     className="w-full px-2 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
                                   >
-                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO'}
+                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
                                   </button>
                                   <button
                                     type="button"
