@@ -396,9 +396,9 @@ const addFiberTipsSheet = async (
   // Plantilla compacta: no se reservan columnas completas como separadores.
   // B:D = datos de fibra, E:G = punta inicial, H:J = punta final.
   sheet.columns = [
-    { width: 3 }, { width: 17 }, { width: 17 }, { width: 17 },
-    { width: 17 }, { width: 17 }, { width: 17 }, { width: 17 },
-    { width: 17 }, { width: 17 }, { width: 11 },
+    { width: 3 }, { width: 15 }, { width: 15 }, { width: 15 },
+    { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 },
+    { width: 15 }, { width: 15 }, { width: 11 },
   ];
 
   const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
@@ -446,17 +446,28 @@ const addFiberTipsSheet = async (
   section.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFF' } };
   section.alignment = { vertical: 'middle', horizontal: 'left' };
   sheet.getRow(5).height = 24;
-  // Marco exterior del bloque DATOS DE LA OBRA; su contenido permanece intacto.
-  for (let r = 5; r <= 9; r++) {
-    for (let col = 2; col <= 10; col++) {
-      sheet.getCell(r, col).border = {
-        ...sheet.getCell(r, col).border,
-        top: r === 5 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.top,
-        bottom: r === 9 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.bottom,
-        left: col === 2 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.left,
-        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.right,
-      };
-    }
+  // Marco exterior completo del bloque DATOS DE LA OBRA.
+  // Se dibuja sobre las celdas perimetrales para que el borde también
+  // atraviese correctamente las zonas combinadas F5:H5 e I5:J5.
+  for (let col = 2; col <= 10; col++) {
+    sheet.getCell(5, col).border = {
+      ...sheet.getCell(5, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(9, col).border = {
+      ...sheet.getCell(9, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  for (let row = 5; row <= 9; row++) {
+    sheet.getCell(row, 2).border = {
+      ...sheet.getCell(row, 2).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(row, 10).border = {
+      ...sheet.getCell(row, 10).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
   }
 
   // Encabezado de datos de obra con la misma distribución visual de la plantilla:
