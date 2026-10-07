@@ -403,7 +403,7 @@ const addFiberTipsSheet = async (
 
   const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
 
-  sheet.mergeCells('B1:J1');
+  sheet.mergeCells('B1:H1');
   const title = sheet.getCell('B1');
   title.value = 'MEMORIA FOTOGRÁFICA';
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
@@ -411,20 +411,31 @@ const addFiberTipsSheet = async (
   title.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(1).height = 30;
 
-  sheet.mergeCells('B2:J2');
+  sheet.mergeCells('B2:H2');
   const product = sheet.getCell('B2');
-  product.value = data('Producto:') || 'Redes FO';
+  product.value = 'Redes FO';
   product.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   product.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
   product.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(2).height = 30;
 
-  sheet.getCell('K1').value = 'FR-PE-15';
-  sheet.getCell('K1').font = { name: 'Arial', size: 12, bold: true };
-  sheet.getCell('K1').alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('K2').value = 'REV. 02';
-  sheet.getCell('K2').font = { name: 'Arial', size: 12, bold: true };
-  sheet.getCell('K2').alignment = { vertical: 'middle', horizontal: 'center' };
+  // Recuadro superior derecho de la plantilla: I:J.
+  for (let r = 1; r <= 2; r++) {
+    for (let col = 9; col <= 10; col++) {
+      sheet.getCell(r, col).border = {
+        top: r === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        bottom: r === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+      };
+    }
+  }
+  sheet.getCell('I1').value = 'FR-PE-15';
+  sheet.getCell('I1').font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('J1').value = 'REV. 02';
+  sheet.getCell('J1').font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet.getRow(3).height = 8;
 
@@ -435,6 +446,18 @@ const addFiberTipsSheet = async (
   section.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFF' } };
   section.alignment = { vertical: 'middle', horizontal: 'left' };
   sheet.getRow(5).height = 24;
+  // Marco exterior del bloque DATOS DE LA OBRA; su contenido permanece intacto.
+  for (let r = 5; r <= 9; r++) {
+    for (let col = 2; col <= 10; col++) {
+      sheet.getCell(r, col).border = {
+        ...sheet.getCell(r, col).border,
+        top: r === 5 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.top,
+        bottom: r === 9 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.bottom,
+        left: col === 2 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.left,
+        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : sheet.getCell(r, col).border?.right,
+      };
+    }
+  }
 
   // Encabezado de datos de obra con la misma distribución visual de la plantilla:
   // B:D = datos de la izquierda, E:G = datos centrales, H:J/K:M = datos de la derecha.
