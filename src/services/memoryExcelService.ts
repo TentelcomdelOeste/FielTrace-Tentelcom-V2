@@ -593,8 +593,8 @@ const addFiberTipsSheet = async (
         if (url) {
           try {
             const image = await imageToBase64(url);
-            const photoBoxWidthPx = 480;
-            const photoBoxHeightPx = 355;
+            const photoBoxWidthPx = 600;
+            const photoBoxHeightPx = 450;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
             const imageWidth = Math.max(1, Math.round(image.width * scale));
             const imageHeight = Math.max(1, Math.round(image.height * scale));
