@@ -399,6 +399,186 @@ const getFiberGroupEvidence = (items: MemoryEvidence[]) => {
   };
 };
 
+const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) => {
+  // Copia visual exacta del encabezado actualmente utilizado por PUNTAS DE FIBRA.
+  sheet.columns = [
+    { width: 3 }, { width: 15 }, { width: 15 }, { width: 15 },
+    { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 },
+    { width: 15 }, { width: 15 }, { width: 11 },
+  ];
+
+  const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
+
+  sheet.mergeCells('D1:H1');
+  const title = sheet.getCell('D1');
+  title.value = 'MEMORIA FOTOGRÁFICA';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  title.font = { name: 'Arial', size: 18, color: { argb: 'FFFFFF' } };
+  title.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(1).height = 30;
+
+  sheet.mergeCells('D2:H2');
+  const product = sheet.getCell('D2');
+  product.value = 'Redes FO';
+  product.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  product.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
+  product.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(2).height = 30;
+
+  for (let r = 1; r <= 2; r++) {
+    for (let col = 9; col <= 10; col++) {
+      sheet.getCell(r, col).border = {
+        top: r === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        bottom: r === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+      };
+    }
+  }
+  sheet.getCell('I1').value = 'FR-PE-15';
+  sheet.getCell('I1').font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('J1').value = 'REV. 02';
+  sheet.getCell('J1').font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.mergeCells('I1:I2');
+  sheet.mergeCells('J1:J2');
+  sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
+
+  for (let row = 1; row <= 2; row++) {
+    sheet.getCell(row, 9).border = {
+      ...sheet.getCell(row, 9).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(row, 10).border = {
+      ...sheet.getCell(row, 10).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  sheet.getCell('B1').border = {
+    ...sheet.getCell('B1').border,
+    left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('B2').border = {
+    ...sheet.getCell('B2').border,
+    left: { style: 'thin', color: { argb: '222222' } },
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C2').border = {
+    ...sheet.getCell('C2').border,
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+
+  for (let col = 4; col <= 10; col++) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(2, col).border = {
+      ...sheet.getCell(2, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  sheet.getRow(3).height = 8;
+
+  sheet.mergeCells('B5:D5');
+  const section = sheet.getCell('B5');
+  section.value = 'DATOS DE LA OBRA:';
+  section.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  section.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFF' } };
+  section.alignment = { vertical: 'middle', horizontal: 'left' };
+  sheet.getRow(5).height = 24;
+
+  for (let col = 2; col <= 10; col++) {
+    sheet.getCell(5, col).border = {
+      ...sheet.getCell(5, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(9, col).border = {
+      ...sheet.getCell(9, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  for (let row = 5; row <= 9; row++) {
+    sheet.getCell(row, 2).border = {
+      ...sheet.getCell(row, 2).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(row, 10).border = {
+      ...sheet.getCell(row, 10).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+
+  const topRows: Array<{
+    labelRange: string;
+    label: string;
+    valueRange: string;
+    dataLabel: typeof DATA_SHEET_LABELS[number];
+  }> = [
+    { labelRange: 'B6:B6', label: 'País/Div:', valueRange: 'C6:C6', dataLabel: 'País/Div:' },
+    { labelRange: 'B7:C7', label: 'Nombre del Supervisor/Insp.:', valueRange: 'D7:E7', dataLabel: 'Nombre del Supervisor/Insp.:' },
+    { labelRange: 'B8:C8', label: 'Nombre del Contratista:', valueRange: 'D8:E8', dataLabel: 'Nombre del Contratista:' },
+    { labelRange: 'D6:D6', label: 'Área/Cd:', valueRange: 'E6:E6', dataLabel: 'Área/Cd:' },
+    { labelRange: 'F6:F6', label: 'Nom. Proy.:', valueRange: 'G6:G6', dataLabel: 'Nom. Proy.:' },
+    { labelRange: 'H6:H6', label: 'Producto:', valueRange: 'I6:I6', dataLabel: 'Producto:' },
+    { labelRange: 'H7:H7', label: 'Fecha Inicio:', valueRange: 'I7:J7', dataLabel: 'Fecha Inicio:' },
+    { labelRange: 'H8:H8', label: 'Fecha Fin:', valueRange: 'I8:J8', dataLabel: 'Fecha Fin:' },
+  ];
+
+  sheet.mergeCells('F5:H5');
+  const identificationLabel = sheet.getCell('F5');
+  identificationLabel.value = 'Identificación (OB; DTTO; ID; OT; SISA):';
+  identificationLabel.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
+  identificationLabel.alignment = { vertical: 'middle', horizontal: 'right' };
+
+  sheet.mergeCells('I5:J5');
+  const identificationValue = sheet.getCell('I5');
+  identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
+  identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
+  identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
+  identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
+
+  for (const item of topRows) {
+    sheet.mergeCells(item.labelRange);
+    sheet.mergeCells(item.valueRange);
+    const labelCell = sheet.getCell(item.labelRange.split(':')[0]);
+    labelCell.value = item.label;
+    labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
+    labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
+    const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
+    const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
+    const valueCell = sheet.getCell(item.valueRange.split(':')[0]);
+    valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
+    valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
+    valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
+  }
+
+  sheet.getCell('I5').border = {
+    ...sheet.getCell('I5').border,
+    top: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('J5').border = {
+    ...sheet.getCell('J5').border,
+    top: { style: 'thin', color: { argb: '222222' } },
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('J7').border = {
+    ...sheet.getCell('J7').border,
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('J8').border = {
+    ...sheet.getCell('J8').border,
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+
+  for (let r = 5; r <= 8; r++) sheet.getRow(r).height = 21;
+  sheet.getRow(9).height = 8;
+  sheet.getRow(10).height = 8;
+};
+
 const addFiberTipsSheet = async (
   workbook: ExcelJS.Workbook,
   project: any,
@@ -774,10 +954,16 @@ async function addEvidenceSheet(
 ) {
   const sheet = workbook.addWorksheet(category.label);
   sheet.views = [{ showGridLines: false }];
-  sheet.columns = [
-    { width: 3 }, { width: 27 }, { width: 27 }, { width: 27 },
-    { width: 3 },
-  ];
+
+  const useFiberHeader = category.id === 'RESERVA';
+  if (useFiberHeader) {
+    applyFiberStyleHeaderToSheet(sheet, project);
+  } else {
+    sheet.columns = [
+      { width: 3 }, { width: 27 }, { width: 27 }, { width: 27 },
+      { width: 3 },
+    ];
+  }
 
   // Calculamos el tamaño real de la celda en EMU, igual que ExcelJS.
   // Esto evita depender de aproximaciones de píxeles y de fracciones de columna.
@@ -815,21 +1001,22 @@ async function addEvidenceSheet(
     }))
     .sort((a, b) => a.number - b.number || a.id.localeCompare(b.id));
 
-  let row = 1;
-  sheet.mergeCells(row, 2, row, 4);
-  const title = sheet.getCell(row, 2);
-  title.value = `MEMORIA FOTOGRÁFICA — ${category.label}`;
-  styleHeader(title, '102033');
-  title.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFF' } };
-  sheet.getRow(row).height = 24;
-  row += 1;
+  let row = useFiberHeader ? 12 : 1;
+  if (!useFiberHeader) {
+    sheet.mergeCells(row, 2, row, 4);
+    const title = sheet.getCell(row, 2);
+    title.value = `MEMORIA FOTOGRÁFICA — ${category.label}`;
+    styleHeader(title, '102033');
+    title.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFF' } };
+    sheet.getRow(row).height = 24;
+    row += 1;
 
-  sheet.mergeCells(row, 2, row, 4);
-  const projectCell = sheet.getCell(row, 2);
-  projectCell.value = `PROYECTO: ${String(project?.name ?? '').trim().toUpperCase() || 'PROYECTO'}`;
-  styleHeader(projectCell, '1D4E89');
-  row += 1;
-
+    sheet.mergeCells(row, 2, row, 4);
+    const projectCell = sheet.getCell(row, 2);
+    projectCell.value = `PROYECTO: ${String(project?.name ?? '').trim().toUpperCase() || 'PROYECTO'}`;
+    styleHeader(projectCell, '1D4E89');
+    row += 1;
+  }
   if (orderedGroups.length === 0) {
     sheet.mergeCells(row, 2, row + 1, 4);
     const empty = sheet.getCell(row, 2);
