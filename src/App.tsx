@@ -3471,13 +3471,73 @@ export default function App() {
                                           </button>
                                         );
                                       })}
-                                      {Array.from({ length: Math.max(0, group.required - group.items.length) }).map((_, missingIndex) => (
-                                        <div key={'missing-' + missingIndex} className="aspect-square rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center text-center p-2">
-                                          <CameraIcon className="w-5 h-5 text-amber-300 mb-1" />
-                                          <p className="text-[7px] font-black uppercase text-amber-600">FALTA</p>
-                                          <p className="text-[7px] font-black uppercase text-amber-500">{getNapsPhotoTitle(group.items.length + missingIndex + 1)} NAP</p>
-                                        </div>
-                                      ))}
+                                      {(() => {
+                                        const slots = category.id === 'NAPS'
+                                          ? Array.from({ length: 9 }, (_, i) => i + 1)
+                                          : Array.from({ length: Math.max(0, group.required - group.items.length) }, (_, i) => group.items.length + i + 1);
+
+                                        return slots
+                                          .filter(photoNumber => !group.items.some((item: any) =>
+                                            category.id === 'NAPS'
+                                              ? Number(item.napPhotoNumber) === photoNumber
+                                              : false
+                                          ))
+                                          .map((photoNumber) => (
+                                            <div
+                                              key={'missing-' + group.id + '-' + photoNumber}
+                                              className="min-h-[180px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 gap-2"
+                                            >
+                                              <CameraIcon className="w-6 h-6 text-blue-400" />
+                                              <p className="text-[8px] font-black uppercase text-blue-700">FALTA FOTO</p>
+                                              <p className="text-[8px] font-black uppercase text-blue-600">
+                                                {category.id === 'NAPS'
+                                                  ? getNapsPhotoTitle(photoNumber) + ' NAP'
+                                                  : 'FOTO ' + photoNumber}
+                                              </p>
+
+                                              {category.id === 'NAPS' && (
+                                                <>
+                                                  <button
+                                                    type="button"
+                                                    disabled={memoryUploadLoading}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      uploadMissingMemoryPhoto({
+                                                        category: 'NAPS',
+                                                        napId: String(group.id),
+                                                        napNumber: Number(group.number),
+                                                        napName: String(group.name || ''),
+                                                        photoNumber
+                                                      });
+                                                    }}
+                                                    className="w-full px-2.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
+                                                  >
+                                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setEvidenceCategory('NAPS');
+                                                      setNapCaptureDraft({
+                                                        napId: String(group.id),
+                                                        napNumber: Number(group.number),
+                                                        napName: String(group.name || ''),
+                                                        photoNumber,
+                                                        remainingPhotos: 1
+                                                      });
+                                                      setShowNapCaptureModal(false);
+                                                      setCurrentStep('camera');
+                                                    }}
+                                                    className="w-full px-2.5 py-2 rounded-xl bg-blue-600 text-white text-[8px] font-black uppercase active:scale-95"
+                                                  >
+                                                    TOMAR FOTO
+                                                  </button>
+                                                </>
+                                              )}
+                                            </div>
+                                          ));
+                                      })()}
                                     </div>
                                   </section>
                                 ))}
