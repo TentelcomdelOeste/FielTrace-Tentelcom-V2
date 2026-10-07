@@ -295,14 +295,16 @@ const getProjectDataValue = (project: any, key: typeof DATA_SHEET_LABELS[number]
   if (String(custom).trim()) return String(custom).trim();
 
   switch (key) {
+    case 'País/Div:':
+      return 'COSTA RICA';
     case 'Nom. Proy.':
       return String(project?.name ?? '').trim();
     case 'Producto:':
-      return String(project?.type ?? '').trim();
+      return 'REDES FO';
     case 'Nombre del Supervisor/Insp.:':
-      return String(project?.techName ?? '').trim();
+      return '';
     case 'Nombre del Contratista:':
-      return String(project?.client ?? '').trim();
+      return 'ESPH';
     default:
       return '';
   }
@@ -446,7 +448,25 @@ const addFiberTipsSheet = async (
   sheet.getCell('J1').value = 'REV. 02';
   sheet.getCell('J1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
+  // En PUNTAS DE FIBRA, cada código ocupa una sola casilla vertical:
+  // I1:I2 y J1:J2.
+  sheet.mergeCells('I1:I2');
+  sheet.mergeCells('J1:J2');
+  sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('J1').alignment = { vertical: 'middle', horizontal: 'center' };
 
+
+  // Marco del bloque vertical I1:I2 y J1:J2 después de combinar las celdas.
+  for (let row = 1; row <= 2; row++) {
+    sheet.getCell(row, 9).border = {
+      ...sheet.getCell(row, 9).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(row, 10).border = {
+      ...sheet.getCell(row, 10).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
   // Bordes del tramo izquierdo del encabezado, según la plantilla:
   // B1 y B2 forman el lateral izquierdo; B2:C2 forman el borde inferior
   // del espacio en blanco que precede al bloque D:H.
