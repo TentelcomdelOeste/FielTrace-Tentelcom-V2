@@ -6839,7 +6839,10 @@ export default function App() {
                                     </div>
                                     <div className="p-2.5">
                                       <p className="text-[9px] font-black uppercase text-gray-900">
-                                        {getNapsPhotoTitle(photoNumber)} NAP{(ev.napName || napName) ? ` · ${ev.napName || napName}` : ''}
+                                        {getNapsPhotoTitle(photoNumber)}
+                                      </p>
+                                      <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
+                                        NAP{(ev.napName || napName) ? ` · ${ev.napName || napName}` : ''}
                                       </p>
                                       <p className="text-[8px] font-bold text-gray-400 mt-1">
                                         {ev.fecha} {ev.hora || ''}
