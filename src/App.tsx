@@ -3468,7 +3468,7 @@ export default function App() {
                                               </p>
                                               <p className="text-[7px] text-white/70 truncate">
                                                 {category.id === 'NAPS'
-                                                  ? 'NAP' + (group.name ? ' · ' + group.name : '')
+                                                  ? 'NAP' + (group.name ? ' · ' + String(group.name).toUpperCase() : '')
                                                   : (ev.categoryLabel || ev.category || category.label)}
                                               </p>
                                             </div>
@@ -6846,7 +6846,7 @@ export default function App() {
                                         {getNapsPhotoTitle(photoNumber)}
                                       </p>
                                       <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">
-                                        NAP{(ev.napName || napName) ? ` · ${ev.napName || napName}` : ''}
+                                        NAP{(ev.napName || napName) ? ` · ${String(ev.napName || napName).toUpperCase()}` : ''}
                                       </p>
                                       <p className="text-[8px] font-bold text-gray-400 mt-1">
                                         {ev.fecha} {ev.hora || ''}
