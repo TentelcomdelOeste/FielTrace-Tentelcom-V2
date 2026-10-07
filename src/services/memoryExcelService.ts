@@ -392,17 +392,17 @@ const addFiberTipsSheet = async (
 ) => {
   const sheet = workbook.addWorksheet('PUNTAS DE FIBRA');
   sheet.views = [{ showGridLines: false }];
+
+  // Plantilla compacta: no se reservan columnas completas como separadores.
+  // B:D = datos de fibra, E:G = punta inicial, H:J = punta final.
   sheet.columns = [
-    { width: 3 },
-    { width: 25 }, { width: 25 }, { width: 25 },
-    { width: 25 }, { width: 25 }, { width: 25 },
-    { width: 25 }, { width: 25 }, { width: 25 },
-    { width: 3 },
+    { width: 3 }, { width: 17 }, { width: 17 }, { width: 17 },
+    { width: 17 }, { width: 17 }, { width: 17 }, { width: 17 },
+    { width: 17 }, { width: 17 }, { width: 11 },
   ];
 
   const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
 
-  // Encabezado siguiendo la plantilla de la captura.
   sheet.mergeCells('B1:J1');
   const title = sheet.getCell('B1');
   title.value = 'MEMORIA FOTOGRÁFICA';
@@ -419,17 +419,12 @@ const addFiberTipsSheet = async (
   product.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(2).height = 30;
 
-  sheet.mergeCells('K1:L1');
-  const form = sheet.getCell('K1');
-  form.value = 'FR-PE-15';
-  form.font = { name: 'Arial', size: 12, bold: true };
-  form.alignment = { vertical: 'middle', horizontal: 'center' };
-
-  sheet.mergeCells('K2:L2');
-  const rev = sheet.getCell('K2');
-  rev.value = 'REV. 02';
-  rev.font = { name: 'Arial', size: 12, bold: true };
-  rev.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('K1').value = 'FR-PE-15';
+  sheet.getCell('K1').font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell('K1').alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getCell('K2').value = 'REV. 02';
+  sheet.getCell('K2').font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell('K2').alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet.getRow(3).height = 8;
 
@@ -441,34 +436,29 @@ const addFiberTipsSheet = async (
   section.alignment = { vertical: 'middle', horizontal: 'left' };
   sheet.getRow(5).height = 24;
 
-  // Los mismos datos de la primera hoja, pero presentados como líneas de la plantilla.
+  // Datos superiores compactos, sin columnas separadoras.
   const topRows: Array<[string, string, string, string]> = [
-    ['B6', 'País/Div:', 'D6', data('País/Div:')],
-    ['F6', 'Área/Cd:', 'H6', data('Área/Cd:')],
-    ['B7', 'Nom. Proy.:', 'D7', data('Nom. Proy.:')],
-    ['F7', 'Producto:', 'H7', data('Producto:')],
-    ['B8', 'Nombre del Supervisor/Insp.:', 'D8', data('Nombre del Supervisor/Insp.:')],
-    ['F8', 'Fecha Inicio:', 'H8', data('Fecha Inicio:')],
-    ['B9', 'Nombre del Contratista:', 'D9', data('Nombre del Contratista:')],
-    ['F9', 'Fecha Fin:', 'H9', data('Fecha Fin:')],
-    ['F10', 'Identificación (OB; DTTO; ID; OT; SISA):', 'J10', data('Identificación (OB; DTTO; ID; OT; SISA):')],
+    ['B6', 'País/Div:', 'C6', data('País/Div:')],
+    ['E6', 'Área/Cd:', 'F6', data('Área/Cd:')],
+    ['B7', 'Nom. Proy.:', 'C7', data('Nom. Proy.:')],
+    ['E7', 'Producto:', 'F7', data('Producto:')],
+    ['B8', 'Nombre del Supervisor/Insp.:', 'C8', data('Nombre del Supervisor/Insp.:')],
+    ['E8', 'Fecha Inicio:', 'F8', data('Fecha Inicio:')],
+    ['B9', 'Nombre del Contratista:', 'C9', data('Nombre del Contratista:')],
+    ['E9', 'Fecha Fin:', 'F9', data('Fecha Fin:')],
+    ['E10', 'Identificación (OB; DTTO; ID; OT; SISA):', 'J10', data('Identificación (OB; DTTO; ID; OT; SISA):')],
   ];
 
   for (const [labelCellRef, label, valueCellRef, value] of topRows) {
     const labelCell = sheet.getCell(labelCellRef);
     labelCell.value = label;
-    labelCell.font = { name: 'Arial', size: 9, color: { argb: '222222' } };
+    labelCell.font = { name: 'Arial', size: 8, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
     const dataIndex = DATA_SHEET_LABELS.indexOf(label as typeof DATA_SHEET_LABELS[number]);
     const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
     const valueCell = sheet.getCell(valueCellRef);
-    // Fórmula interna: si el usuario modifica la hoja Datos, estas líneas
-    // se actualizan automáticamente en Excel sin volver a generar el archivo.
-    valueCell.value = {
-      formula: 'Datos!C' + dataRow,
-      result: value,
-    };
+    valueCell.value = { formula: 'Datos!C' + dataRow, result: value };
     valueCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
@@ -503,40 +493,45 @@ const addFiberTipsSheet = async (
 
   for (const group of orderedGroups) {
     const pair = getFiberGroupEvidence(group.items);
-    const first = pair.initial || {};
+    const first = pair.initial || pair.final || {};
     const fiberCount = first.fiberCount != null && String(first.fiberCount).trim() !== ''
       ? String(first.fiberCount) + ' hilos'
       : '';
-    const reel = first.fiberReelNumber ?? '';
-    const route = getCustomProjectValue(project, ['ruta', 'route']) || getProjectDataValue(project, 'Área/Cd:');
+    const reel = String(first.fiberReelNumber ?? '').trim();
 
-    // Tres recuadros: datos de fibra + punta inicial + punta final.
+    // RUTA queda deliberadamente en blanco hasta definir de dónde debe provenir.
+    const route = '';
+
     const boxTop = row;
     const boxBottom = row + 7;
 
-    // Recuadro 1: RUTA / TIPO DE FIBRA / # CARRETE.
-    sheet.mergeCells(boxTop, 2, boxBottom, 4);
-    const meta = sheet.getCell(boxTop, 2);
-    meta.value = '';
-    meta.border = {
-      top: { style: 'medium', color: { argb: '222222' } },
-      left: { style: 'medium', color: { argb: '222222' } },
-      bottom: { style: 'medium', color: { argb: '222222' } },
-      right: { style: 'medium', color: { argb: '222222' } },
-    };
+    // El recuadro de metadatos NO se fusiona: así los tres valores
+    // (ruta, tipo de fibra y carrete) pueden ocupar sus propias celdas.
+    for (let r = boxTop; r <= boxBottom; r++) {
+      for (let col = 2; col <= 4; col++) {
+        sheet.getCell(r, col).border = {
+          top: r === boxTop ? { style: 'medium', color: { argb: '222222' } } : undefined,
+          bottom: r === boxBottom ? { style: 'medium', color: { argb: '222222' } } : undefined,
+          left: col === 2 ? { style: 'medium', color: { argb: '222222' } } : undefined,
+          right: col === 4 ? { style: 'medium', color: { argb: '222222' } } : undefined,
+        };
+      }
+    }
 
     const metaRows: Array<[number, string, string]> = [
-      [boxTop + 2, 'RUTA', String(route || '')],
+      [boxTop + 2, 'RUTA', route],
       [boxTop + 4, 'TIPO DE FIBRA', fiberCount],
-      [boxTop + 6, '# CARRETE', String(reel)],
+      [boxTop + 6, '# CARRETE', reel],
     ];
+
     for (const [r, label, value] of metaRows) {
-      const labelCell = sheet.getCell(r, 3);
+      const labelCell = sheet.getCell(r, 2);
       labelCell.value = label;
-      labelCell.font = { name: 'Arial', size: 10, bold: true };
+      labelCell.font = { name: 'Arial', size: 9, bold: true };
       labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-      const valueCell = sheet.getCell(r, 4);
+      sheet.mergeCells(r, 3, r, 4);
+      const valueCell = sheet.getCell(r, 3);
       valueCell.value = value;
       valueCell.font = { name: 'Arial', size: 10, bold: true };
       valueCell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -576,8 +571,9 @@ const addFiberTipsSheet = async (
             const rowHeightEmu = Array.from({ length: boxBottom - boxTop }, (_, i) =>
               ((sheet.getRow(boxTop + i).height || EXCEL_DEFAULT_ROW_HEIGHT_PT) / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
             ).reduce((a, b) => a + b, 0);
-            const maxW = cellWidthEmu / EMU_PER_PIXEL - 16;
-            const maxH = rowHeightEmu / EMU_PER_PIXEL - 16;
+
+            const maxW = Math.max(1, cellWidthEmu / EMU_PER_PIXEL - 10);
+            const maxH = Math.max(1, rowHeightEmu / EMU_PER_PIXEL - 10);
             const scale = Math.min(maxW / image.width, maxH / image.height);
             const imageWidth = Math.max(1, Math.round(image.width * scale));
             const imageHeight = Math.max(1, Math.round(image.height * scale));
@@ -619,12 +615,13 @@ const addFiberTipsSheet = async (
       };
     }
 
-    for (let r = boxTop; r <= boxBottom; r++) sheet.getRow(r).height = r === boxBottom ? 24 : 34;
+    for (let r = boxTop; r <= boxBottom; r++) {
+      sheet.getRow(r).height = r === boxBottom ? 24 : 42;
+    }
 
     row = boxBottom + 3;
   }
 };
-
 async function addEvidenceSheet(
   workbook: ExcelJS.Workbook,
   category: typeof CATEGORY_CONFIG[number],
