@@ -446,41 +446,31 @@ const addFiberTipsSheet = async (
     valueRange: string;
     dataLabel: typeof DATA_SHEET_LABELS[number];
   }> = [
-    // Bloque izquierdo: etiquetas A:B y valores D:E.
-    { labelRange: 'A7:B7', label: 'País/Div:', valueRange: 'D7:E7', dataLabel: 'País/Div:' },
-    { labelRange: 'A8:B8', label: 'Nombre del Supervisor/Insp.:', valueRange: 'D8:E8', dataLabel: 'Nombre del Supervisor/Insp.:' },
-    { labelRange: 'A9:B9', label: 'Nombre del Contratista:', valueRange: 'D9:E9', dataLabel: 'Nombre del Contratista:' },
-
-    // Bloque derecho: la etiqueta que estaba en E pasa a G y el valor ocupa H:I.
-    { labelRange: 'G7:G7', label: 'Área/Cd:', valueRange: 'H7:I7', dataLabel: 'Área/Cd:' },
-    { labelRange: 'G8:G8', label: 'Fecha Inicio:', valueRange: 'H8:I8', dataLabel: 'Fecha Inicio:' },
-    { labelRange: 'G9:G9', label: 'Fecha Fin:', valueRange: 'H9:I9', dataLabel: 'Fecha Fin:' },
-
-    // Datos que completan el encabezado del proyecto.
-    { labelRange: 'G10:G10', label: 'Nom. Proy.:', valueRange: 'H10:I10', dataLabel: 'Nom. Proy.:' },
-    { labelRange: 'K7:K7', label: 'Producto:', valueRange: 'L7:M7', dataLabel: 'Producto:' },
+    { labelRange: 'B6:B6', label: 'País/Div:', valueRange: 'C6:C6', dataLabel: 'País/Div:' },
+    { labelRange: 'B7:C7', label: 'Nombre del Supervisor/Insp.:', valueRange: 'D7:E7', dataLabel: 'Nombre del Supervisor/Insp.:' },
+    { labelRange: 'B8:C8', label: 'Nombre del Contratista:', valueRange: 'D8:E8', dataLabel: 'Nombre del Contratista:' },
+    { labelRange: 'E6:E6', label: 'Área/Cd:', valueRange: 'F6:F6', dataLabel: 'Área/Cd:' },
+    { labelRange: 'F7:F7', label: 'Nom. Proy.:', valueRange: 'G7:G7', dataLabel: 'Nom. Proy.:' },
+    { labelRange: 'H6:H6', label: 'Producto:', valueRange: 'I6:I6', dataLabel: 'Producto:' },
+    { labelRange: 'H7:H7', label: 'Fecha Inicio:', valueRange: 'I7:J7', dataLabel: 'Fecha Inicio:' },
+    { labelRange: 'H8:H8', label: 'Fecha Fin:', valueRange: 'I8:J8', dataLabel: 'Fecha Fin:' },
   ];
 
-  // La identificación ocupa su propia línea superior, como en la plantilla.
-  sheet.mergeCells('G6:I6');
-  const identificationLabel = sheet.getCell('G6');
+  // Identificación en la fila superior derecha, siguiendo la plantilla de referencia.
+  sheet.mergeCells('F5:H5');
+  const identificationLabel = sheet.getCell('F5');
   identificationLabel.value = 'Identificación (OB; DTTO; ID; OT; SISA):';
   identificationLabel.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
   identificationLabel.alignment = { vertical: 'middle', horizontal: 'right' };
 
-  sheet.mergeCells('J6:M6');
-  const identificationValue = sheet.getCell('J6');
+  sheet.mergeCells('I5:J5');
+  const identificationValue = sheet.getCell('I5');
   identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
   identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
   identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
   identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
 
-  for (const item of topRows) {
-    sheet.mergeCells(item.labelRange);
-    sheet.mergeCells(item.valueRange);
-
-    const labelCell = sheet.getCell(item.labelRange.split(':')[0]);
-    labelCell.value = item.label;
+e = item.label;
     labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
@@ -493,7 +483,8 @@ const addFiberTipsSheet = async (
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
   }
 
-  for (let r = 6; r <= 9; r++) sheet.getRow(r).height = 21;
+  for (let r = 5; r <= 8; r++) sheet.getRow(r).height = 21;
+  sheet.getRow(9).height = 8;
   sheet.getRow(10).height = 8;
 
   const groups = new Map<string, MemoryEvidence[]>();
