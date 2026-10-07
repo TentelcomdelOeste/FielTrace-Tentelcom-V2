@@ -3462,10 +3462,14 @@ export default function App() {
                                             )}
                                             <div className="absolute inset-x-0 bottom-0 bg-black/65 text-white px-2 py-1.5">
                                               <p className="text-[7px] font-black uppercase truncate">
-                                                FOTO {photoIndex + 1}/{group.required}
+                                                {category.id === 'NAPS'
+                                                  ? getNapsPhotoTitle(Number(ev.napPhotoNumber || photoIndex + 1))
+                                                  : 'FOTO ' + (photoIndex + 1) + '/' + group.required}
                                               </p>
                                               <p className="text-[7px] text-white/70 truncate">
-                                                {ev.categoryLabel || ev.category || category.label}
+                                                {category.id === 'NAPS'
+                                                  ? 'NAP' + (group.name ? ' · ' + group.name : '')
+                                                  : (ev.categoryLabel || ev.category || category.label)}
                                               </p>
                                             </div>
                                           </button>
