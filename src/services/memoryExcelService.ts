@@ -452,14 +452,14 @@ const addFiberTipsSheet = async (
   for (const [labelCellRef, label, valueCellRef, value] of topRows) {
     const labelCell = sheet.getCell(labelCellRef);
     labelCell.value = label;
-    labelCell.font = { name: 'Arial', size: 8, color: { argb: '222222' } };
+    labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
     const dataIndex = DATA_SHEET_LABELS.indexOf(label as typeof DATA_SHEET_LABELS[number]);
     const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
     const valueCell = sheet.getCell(valueCellRef);
     valueCell.value = { formula: 'Datos!C' + dataRow, result: value };
-    valueCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: '111111' } };
+    valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
   }
@@ -527,13 +527,13 @@ const addFiberTipsSheet = async (
     for (const [r, label, value] of metaRows) {
       const labelCell = sheet.getCell(r, 2);
       labelCell.value = label;
-      labelCell.font = { name: 'Arial', size: 9, bold: true };
+      labelCell.font = { name: 'Calibri', size: 11, bold: true };
       labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-      sheet.mergeCells(r, 3, r, 4);
       const valueCell = sheet.getCell(r, 3);
       valueCell.value = value;
-      valueCell.font = { name: 'Arial', size: 10, bold: true };
+      valueCell.font = { name: 'Calibri', size: 11, bold: true };
+      valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF00' } };
       valueCell.alignment = { vertical: 'middle', horizontal: 'center' };
       valueCell.border = {
         top: { style: 'thin', color: { argb: '222222' } },
@@ -566,28 +566,38 @@ const addFiberTipsSheet = async (
         if (url) {
           try {
             const image = await imageToBase64(url);
-            const cellWidthEmu = [startCol, startCol + 1, startCol + 2]
-              .reduce((sum, col) => sum + ((sheet.getColumn(col).width || EXCEL_DEFAULT_COL_WIDTH) / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU, 0);
-            const rowHeightEmu = Array.from({ length: boxBottom - boxTop }, (_, i) =>
-              ((sheet.getRow(boxTop + i).height || EXCEL_DEFAULT_ROW_HEIGHT_PT) / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
-            ).reduce((a, b) => a + b, 0);
-
-            const maxW = Math.max(1, cellWidthEmu / EMU_PER_PIXEL - 10);
-            const maxH = Math.max(1, rowHeightEmu / EMU_PER_PIXEL - 10);
-            const scale = Math.min(maxW / image.width, maxH / image.height);
+            const photoBoxWidthPx = 480;
+            const photoBoxHeightPx = 355;
+            const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
             const imageWidth = Math.max(1, Math.round(image.width * scale));
             const imageHeight = Math.max(1, Math.round(image.height * scale));
             const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
 
-            // En esta hoja no usamos offsets nativos para centrar la foto.
-            // ExcelJS puede interpretar esos offsets de forma distinta al abrir
-            // el archivo y terminar mostrando la imagen diminuta. La imagen se
-            // ancla directamente al inicio de su caja con su tamaño calculado.
+            const totalCellWidthEmu = [startCol, startCol + 1, startCol + 2].reduce((sum, col) => {
+              const width = sheet.getColumn(col).width || EXCEL_DEFAULT_COL_WIDTH;
+              return sum + Math.floor((width / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU);
+            }, 0);
+            const totalCellHeightEmu = Array.from({ length: boxBottom - boxTop }, (_, i) => {
+              const heightPt = sheet.getRow(boxTop + i).height || EXCEL_DEFAULT_ROW_HEIGHT_PT;
+              return Math.floor((heightPt / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU);
+            }).reduce((sum, value) => sum + value, 0);
+
+            const imageWidthEmu = Math.round(imageWidth * EMU_PER_PIXEL);
+            const imageHeightEmu = Math.round(imageHeight * EMU_PER_PIXEL);
+            const offsetXEmu = Math.max(0, Math.floor((totalCellWidthEmu - imageWidthEmu) / 2));
+            const offsetYEmu = Math.max(0, Math.floor((totalCellHeightEmu - imageHeightEmu) / 2));
+
             sheet.addImage(imageId, {
-              tl: { col: startCol - 1, row: boxTop - 1 },
+              tl: {
+                col: startCol - 1,
+                row: boxTop - 1,
+                nativeCol: startCol - 1,
+                nativeColOff: offsetXEmu,
+                nativeRow: boxTop - 1,
+                nativeRowOff: offsetYEmu,
+              },
               ext: { width: imageWidth, height: imageHeight },
-              editAs: 'oneCell',
-            });
+            } as any);
           } catch {
             imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
           }
@@ -611,7 +621,7 @@ const addFiberTipsSheet = async (
     }
 
     for (let r = boxTop; r <= boxBottom; r++) {
-      sheet.getRow(r).height = r === boxBottom ? 24 : 42;
+      sheet.getRow(r).height = r === boxBottom ? 24 : 50;
     }
 
     row = boxBottom + 3;
