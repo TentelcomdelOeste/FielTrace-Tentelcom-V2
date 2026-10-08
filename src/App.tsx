@@ -997,7 +997,8 @@ export default function App() {
     restoreSession(sortedProjects);
 
     // Si ya existen proyectos locales, el usuario puede trabajar inmediatamente.
-    // Firebase solo refresca la caché en segundo plano.    const refreshFromFirebase = async () => {
+    // Firebase solo refresca la caché en segundo plano.
+    const refreshFromFirebase = async () => {
       if (!navigator.onLine) {
         if (sortedProjects.length === 0) {
           await createDemoProject();
@@ -1996,6 +1997,7 @@ export default function App() {
     const reserveEvidence = evidences.filter(ev =>
       ev.category === 'RESERVA' && ev.reserveId === reserveId
     );
+
     const storedValue =
       reserveEvidence
         .map(ev => ev.reserveReelNumber?.trim() || ev.fiberReelNumber?.trim() || '')
@@ -2995,6 +2997,7 @@ export default function App() {
 
           // 3. Guardar Evidence en IndexedDB para que aparezca inmediatamente en el proyecto
           await storageService.addEvidence(evidenceObject, finalImage);
+
           // 4. Actualizar estado de UI
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
           setEvidences(evs);
@@ -3993,7 +3996,8 @@ export default function App() {
                                                 {category.id === 'NAPS'
                                                   ? 'NAP' + (group.name ? ' · ' + String(group.name).toUpperCase() : '')
                                                   : (ev.categoryLabel || ev.category || category.label)}
-                                              </p>                                            </div>
+                                              </p>
+                                            </div>
                                           </button>
                                         );
                                       })}
@@ -4992,6 +4996,7 @@ export default function App() {
               )}
             </div>
           </div>
+
           {/* Real-time Camera Bridge */}
           <div id="camera-viewfinder" className="relative flex-1 bg-transparent overflow-hidden" onTouchStart={onCameraTouchStart} onTouchMove={onCameraTouchMove} onTouchEnd={onCameraTouchEnd}>
             {!isNativeCamera && (
@@ -5991,7 +5996,8 @@ export default function App() {
                 className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase disabled:opacity-40">
                 {mufaCaptureDraft.photoNumber === 1 ? 'GUARDAR NOMBRE Y ABRIR CÁMARA' : 'ABRIR CÁMARA'}
               </button>
-              <button type="button" onClick={() => { setShowMufaCaptureModal(false); setMufaCaptureDraft(null); }}                className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+              <button type="button" onClick={() => { setShowMufaCaptureModal(false); setMufaCaptureDraft(null); }}
+                className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
             </motion.div>
           </motion.div>
         )}
@@ -6990,7 +6996,8 @@ export default function App() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
                     <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
                       RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
-                    </h3>                    <p className="text-xs text-gray-500 mt-2">
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-2">
                       {reserveCaptureDraft.side === 'initial'
                         ? 'Ingrese los datos una sola vez. Se reutilizarán en las 3 fotos de esta reserva.'
                         : (reserveCaptureDraft.side === 'final'
@@ -7989,7 +7996,8 @@ export default function App() {
                                     setShowStorageEvidenceViewer(false);
                                     setStorageEvidenceCategory(null);
                                     setEvidenceCategory('MUFA');
-                                    // Captura puntual: al volver de la cámara se regresa                                    // al visor después de completar únicamente esta foto.
+                                    // Captura puntual: al volver de la cámara se regresa
+                                    // al visor después de completar únicamente esta foto.
                                     setMufaCaptureDraft({
                                       mufaId,
                                       mufaNumber,
