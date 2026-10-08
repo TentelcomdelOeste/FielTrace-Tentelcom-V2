@@ -3873,12 +3873,39 @@ export default function App() {
                               <ChevronLeft className="w-4 h-4" /> Volver a secciones
                             </button>
 
-                            <div className="bg-gray-900 text-white rounded-[2rem] p-6">
-                              <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Revisión de sección</p>
-                              <h3 className="mt-1 text-xl font-black uppercase">{category.label}</h3>
-                              <p className="text-[10px] text-white/50 font-bold uppercase">
-                                {summary.groupCount} SET{summary.groupCount === 1 ? '' : 'S'} · {summary.captured}/{summary.requiredTotal || 0} FOTOS
-                              </p>
+                            <div className="bg-gray-900 text-white rounded-[2rem] p-5 sm:p-6">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                  <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Revisión de sección</p>
+                                  <h3 className="mt-1 text-xl font-black uppercase">{category.label}</h3>
+                                  <p className="text-[10px] text-white/50 font-bold uppercase">
+                                    {summary.groupCount} SET{summary.groupCount === 1 ? '' : 'S'} · {summary.captured}/{summary.requiredTotal || 0} FOTOS
+                                  </p>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleGenerateMemorySectionZip(category.id);
+                                  }}
+                                  disabled={
+                                    summary.captured === 0 ||
+                                    memoryExcelLoading ||
+                                    memoryZipLoading ||
+                                    memorySectionZipLoading !== null
+                                  }
+                                  className="shrink-0 min-h-11 px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center gap-2 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed transition-all"
+                                  title={summary.captured === 0 ? 'Esta sección no tiene fotografías' : 'Descargar fotografías de esta sección'}
+                                >
+                                  <Archive className={"w-4 h-4 " + (memorySectionZipLoading === category.id ? 'animate-pulse' : '')} />
+                                  <span className="hidden sm:inline text-[8px] font-black uppercase tracking-widest whitespace-nowrap">
+                                    {memorySectionZipLoading === category.id
+                                      ? (memorySectionZipProgress || 'PREPARANDO...')
+                                      : 'DESCARGAR FOTOS'}
+                                  </span>
+                                </button>
+                              </div>
                             </div>
 
                             {summary.groups.length === 0 ? (
