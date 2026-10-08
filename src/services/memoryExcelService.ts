@@ -1438,10 +1438,12 @@ async function addEvidenceSheet(
           const caption = sheet.getCell(blockBottom, col);
           const mufaName = String(group.name ?? '').trim().toUpperCase();
           const captionName = !mufaName || mufaName === 'MUFA' || mufaName === '—' ? '' : mufaName;
-          const mufaNumber = Number(group.number || 0);
+          // El nombre histórico "MUFA" no se concatena otra vez. Cada celda
+          // identifica además su posición dentro del set para evitar textos
+          // ambiguos como "MUFA MUFA".
           caption.value = captionName
-            ? `MUFA ${String(mufaNumber).padStart(2, '0')} · ${captionName}`
-            : (mufaNumber > 0 ? `MUFA ${String(mufaNumber).padStart(2, '0')}` : 'MUFA');
+            ? `MUFA · ${captionName} · FOTO ${index + 1}/9`
+            : `MUFA · FOTO ${index + 1}/9`;
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
