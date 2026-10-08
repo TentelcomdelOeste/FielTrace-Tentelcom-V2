@@ -2,6 +2,7 @@ name: Build FielTrace APK - native camera fix
 # Video overlay build verification
 
 # Trigger build for the latest main application update.
+# Manual APK build requested after latest desktop layout update.
 
 on:
   workflow_dispatch:
