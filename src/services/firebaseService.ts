@@ -116,6 +116,7 @@ export const firebaseService = {
         originalPath.replace(/\\.(jpeg|jpg|png)\\1$/i, '.$1'),
         originalPath.replace(/\\.(jpeg|jpg|png)\\.(jpeg|jpg|png)$/i, '.$2'),
         originalPath.replace(/(jpeg|jpg|png)\\1$/i, '.$1'),
+        originalPath.replace(/(jpeg|jpg|png)\\1$/i, '.$1.$1'),
         originalPath.replace(/\\.(jpeg|jpg|png)\\.(jpeg|jpg|png)$/i, '.$1'),
       ];
       variants.forEach(addCandidate);
