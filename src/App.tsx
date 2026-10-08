@@ -3800,7 +3800,7 @@ export default function App() {
                         <p className="mt-3 text-xs font-black uppercase text-gray-500">No hay proyectos disponibles</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-3 xl:flex xl:flex-wrap xl:items-stretch xl:gap-3 xl:space-y-0">
                         {memoryProjects.filter((p: any) => {
                           const term = memoryProjectSearch.toLowerCase();
                           return String(p.name || '').toLowerCase().includes(term) ||
@@ -3809,8 +3809,8 @@ export default function App() {
                           const total = (project._evidences || []).length;
                           return (
                             <button key={String(project.uuid || project.id)} type="button" onClick={() => { setMemorySelectedProject(project); setMemorySelectedCategory(null); }}
-                              className="w-full p-5 bg-white border border-gray-100 rounded-[2rem] shadow-sm flex items-center justify-between text-left active:scale-[0.99]">
-                              <div className="min-w-0">
+                              className="w-full p-5 bg-white border border-gray-100 rounded-[2rem] shadow-sm flex items-center justify-between text-left active:scale-[0.99] xl:w-fit xl:min-w-[280px] xl:max-w-[430px] xl:flex-none">
+                              <div className="min-w-0 xl:max-w-[350px]">
                                 <p className="text-[13px] font-black uppercase truncate">{project.name || 'PROYECTO SIN NOMBRE'}</p>
                                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest truncate">{project.client || 'SIN CLIENTE'}</p>
                                 <p className="mt-2 text-[9px] font-black text-blue-600 uppercase">{total} fotografías registradas</p>
