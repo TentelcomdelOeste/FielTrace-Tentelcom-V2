@@ -1304,6 +1304,124 @@ async function addEvidenceSheet(
       continue;
     }
 
+    if (category.id === 'MUFA') {
+      const photoRows = Math.ceil(category.required / 3);
+      const imageRowStart = row;
+      const blockHeight = 7;
+      const imageHeightRows = 6;
+
+      // Las dimensiones del recuadro ya definido son las que mandan.
+      // Primero fijamos sus alturas y después calculamos el espacio real
+      // disponible para la fotografía. Así ninguna imagen puede salirse.
+      for (let photoRow = 0; photoRow < photoRows; photoRow++) {
+        const blockTop = imageRowStart + photoRow * blockHeight;
+        const blockBottom = blockTop + imageHeightRows;
+        for (let r = blockTop; r < blockBottom; r++) {
+          sheet.getRow(r).height = 50;
+        }
+        sheet.getRow(blockBottom).height = 24;
+
+        for (let indexInRow = 0; indexInRow < 3; indexInRow++) {
+          const index = photoRow * 3 + indexInRow;
+          const col = 2 + indexInRow * 3;
+          const ev =
+            group.items.find(item => Number(item.mufaPhotoNumber ?? item.photoNumber) === index + 1) ||
+            group.items[index];
+
+          sheet.mergeCells(blockTop, col, blockBottom - 1, col + 2);
+
+          const imageCell = sheet.getCell(blockTop, col);
+          imageCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F3F5F7' } };
+          imageCell.border = {
+            top: { style: 'medium', color: { argb: '222222' } },
+            left: { style: 'medium', color: { argb: '222222' } },
+            bottom: { style: 'thin', color: { argb: '222222' } },
+            right: { style: 'medium', color: { argb: '222222' } },
+          };
+          imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+          if (ev) {
+            const url = getPhotoUrl(ev);
+            if (url) {
+              try {
+                const image = await imageToBase64(url);
+
+                const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
+                  const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
+                  return sum + Math.floor((width / EXCEL_DEFAULT_COL_WIDTH) * EXCEL_DEFAULT_COL_EMU);
+                }, 0);
+                const totalCellHeightEmu = Array.from(
+                  { length: blockBottom - blockTop },
+                  (_, i) => {
+                    const heightPt = sheet.getRow(blockTop + i).height || EXCEL_DEFAULT_ROW_HEIGHT_PT;
+                    return Math.floor(
+                      (heightPt / EXCEL_DEFAULT_ROW_HEIGHT_PT) * EXCEL_DEFAULT_ROW_EMU
+                    );
+                  },
+                ).reduce((sum, value) => sum + value, 0);
+
+                // Margen interno para que la foto nunca toque ni sobrepase
+                // las líneas del recuadro existente.
+                const availableWidthPx = Math.max(1, totalCellWidthEmu / EMU_PER_PIXEL - 12);
+                const availableHeightPx = Math.max(1, totalCellHeightEmu / EMU_PER_PIXEL - 12);
+
+                const scale = Math.min(
+                  availableWidthPx / image.width,
+                  availableHeightPx / image.height,
+                );
+                const imageWidth = Math.max(1, Math.floor(image.width * scale));
+                const imageHeight = Math.max(1, Math.floor(image.height * scale));
+
+                const imageId = workbook.addImage({
+                  base64: image.base64,
+                  extension: image.extension,
+                });
+
+                const imageWidthEmu = Math.round(imageWidth * EMU_PER_PIXEL);
+                const imageHeightEmu = Math.round(imageHeight * EMU_PER_PIXEL);
+                const offsetXEmu = Math.max(0, Math.floor((totalCellWidthEmu - imageWidthEmu) / 2));
+                const offsetYEmu = Math.max(0, Math.floor((totalCellHeightEmu - imageHeightEmu) / 2));
+
+                sheet.addImage(imageId, {
+                  tl: {
+                    col: col - 1,
+                    row: blockTop - 1,
+                    nativeCol: col - 1,
+                    nativeColOff: offsetXEmu,
+                    nativeRow: blockTop - 1,
+                    nativeRowOff: offsetYEmu,
+                  },
+                  ext: { width: imageWidth, height: imageHeight },
+                } as any);
+              } catch {
+                imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+              }
+            } else {
+              imageCell.value = 'SIN FOTO';
+            }
+          } else {
+            imageCell.value = 'FALTA FOTO';
+          }
+
+          sheet.mergeCells(blockBottom, col, blockBottom, col + 2);
+          const caption = sheet.getCell(blockBottom, col);
+          caption.value = ev
+            ? getNapsPhotoTitle(ev, index)
+            : `MUFA ${String(group.name ?? '').trim().toUpperCase()}`;
+          caption.font = { name: 'Arial', size: 10, bold: true };
+          caption.alignment = { vertical: 'middle', horizontal: 'center' };
+          caption.border = {
+            left: { style: 'medium', color: { argb: '222222' } },
+            bottom: { style: 'medium', color: { argb: '222222' } },
+            right: { style: 'medium', color: { argb: '222222' } },
+          };
+        }
+      }
+
+      row = imageRowStart + photoRows * blockHeight + 2;
+      continue;
+    }
+
     const imageRowStart = row;
     const imageRows = Math.ceil(category.required / 3);
     const reservationLayout = category.id === 'RESERVA';
