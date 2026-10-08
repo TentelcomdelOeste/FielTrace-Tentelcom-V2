@@ -318,7 +318,7 @@ export const storageService = {
    * Los registros existentes conservan su ID local; únicamente se agregan los
    * metadatos de sincronización que les falten.
    */
-  async prepareLocalDataForSync(): Promise<void> {
+  prepareLocalDataForSync: async (): Promise<void> => {
     const projects = await manager.getAll<Project>(STORE_PROJECTS);
     const normalizedProjects: Project[] = [];
 
