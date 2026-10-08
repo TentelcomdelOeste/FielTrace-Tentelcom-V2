@@ -152,107 +152,126 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
-async function imageToBase64(
-  url: string,
-): Promise<{ base64: string; extension: 'jpeg'; width: number; height: number }> {
-  const proxyUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+type ExcelImageData = {
+  buffer: ArrayBuffer;
+  extension: 'jpeg' | 'png';
+  width: number;
+  height: number;
+};
 
+const EXCEL_IMAGE_PREFETCH_CONCURRENCY = 4;
+const excelImageCache = new Map<string, Promise<ExcelImageData>>();
+let excelImagePrefetchQueue: string[] = [];
+let excelImagePrefetchCursor = 0;
+let excelImagePrefetchActive = 0;
+
+async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   let response: Response;
   try {
-    response = await fetch(proxyUrl);
+    // Preferir Firebase Storage directamente elimina un salto por Netlify.
+    response = await fetch(url, { mode: 'cors', cache: 'force-cache' });
   } catch {
-    response = await fetch(url, { mode: 'cors' });
+    const proxyUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
+      : url;
+    response = await fetch(proxyUrl, { cache: 'force-cache' });
   }
 
-  if (!response.ok && proxyUrl !== url) {
-    response = await fetch(url, { mode: 'cors' });
+  if (!response.ok) {
+    const proxyUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
+      : url;
+    if (response.url !== proxyUrl) {
+      response = await fetch(proxyUrl, { cache: 'force-cache' });
+    }
   }
   if (!response.ok) throw new Error(`No se pudo descargar la fotografía (${response.status})`);
 
-  const sourceBlob = await response.blob();
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  const blob = await response.blob();
 
-  let source: CanvasImageSource | null = null;
-  let sourceWidth = 0;
-  let sourceHeight = 0;
-  let objectUrl = '';
+  let width = 4;
+  let height = 3;
+  let bitmap: ImageBitmap | null = null;
 
   try {
     if (typeof createImageBitmap !== 'undefined') {
-      const bitmap = await createImageBitmap(sourceBlob);
-      source = bitmap;
-      sourceWidth = bitmap.width;
-      sourceHeight = bitmap.height;
+      bitmap = await createImageBitmap(blob);
+      width = bitmap.width;
+      height = bitmap.height;
     } else if (typeof document !== 'undefined') {
-      objectUrl = URL.createObjectURL(sourceBlob);
-      const imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
-        image.src = objectUrl;
-      });
-      source = imageElement;
-      sourceWidth = imageElement.naturalWidth;
-      sourceHeight = imageElement.naturalHeight;
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const element = new Image();
+          element.onload = () => resolve(element);
+          element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
+          element.src = objectUrl;
+        });
+        width = image.naturalWidth || width;
+        height = image.naturalHeight || height;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     }
   } finally {
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    bitmap?.close();
   }
 
-  if (!source || !sourceWidth || !sourceHeight) {
-    throw new Error('El navegador no pudo procesar la fotografía.');
-  }
+  // ExcelJS admite JPEG y PNG. Los archivos originales se conservan intactos:
+  // no se redimensionan, no se recomprimen y no pasan por Canvas.
+  const extension = contentType.includes('png') ? 'png' : 'jpeg';
+  const buffer = await blob.arrayBuffer();
 
-  const scale = Math.min(
-    1,
-    EXCEL_MAX_IMAGE_WIDTH / sourceWidth,
-    EXCEL_MAX_IMAGE_HEIGHT / sourceHeight,
-  );
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-
-  const context = canvas.getContext('2d', { alpha: false });
-  if (!context) {
-    if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) {
-      source.close();
-    }
-    throw new Error('El navegador no pudo crear el procesador de imágenes.');
-  }
-
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(source, 0, 0, width, height);
-  if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) {
-    source.close();
-  }
-
-  const optimizedBlob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      blob => blob ? resolve(blob) : reject(new Error('No se pudo comprimir la fotografía para Excel.')),
-      'image/jpeg',
-      EXCEL_JPEG_QUALITY,
-    );
-  });
-
-  // Liberar la memoria del canvas inmediatamente. El Blob optimizado es mucho
-  // menor que el original y es el único recurso que necesitamos convertir.
-  canvas.width = 1;
-  canvas.height = 1;
-
-  const base64 = await blobToDataUrl(optimizedBlob);
-
-  return {
-    base64,
-    extension: 'jpeg',
-    width,
-    height,
-  };
+  return { buffer, extension, width, height };
 }
+
+function primeExcelImagePrefetch() {
+  while (
+    excelImagePrefetchActive < EXCEL_IMAGE_PREFETCH_CONCURRENCY &&
+    excelImagePrefetchCursor < excelImagePrefetchQueue.length
+  ) {
+    const url = excelImagePrefetchQueue[excelImagePrefetchCursor++];
+    if (excelImageCache.has(url)) continue;
+
+    excelImagePrefetchActive += 1;
+    const promise = fetchOriginalImage(url)
+      .finally(() => {
+        excelImagePrefetchActive -= 1;
+        primeExcelImagePrefetch();
+      });
+
+    excelImageCache.set(url, promise);
+  }
+}
+
+function configureExcelImagePrefetch(urls: string[]) {
+  excelImageCache.clear();
+  excelImagePrefetchQueue = Array.from(new Set(urls.filter(Boolean)));
+  excelImagePrefetchCursor = 0;
+  excelImagePrefetchActive = 0;
+  primeExcelImagePrefetch();
+}
+
+async function getExcelImage(url: string): Promise<ExcelImageData> {
+  let promise = excelImageCache.get(url);
+
+  if (!promise) {
+    promise = fetchOriginalImage(url);
+    excelImageCache.set(url, promise);
+  }
+
+  try {
+    return await promise;
+  } finally {
+    // Mantener un máximo pequeño de fotografías adelantadas en memoria.
+    if (excelImageCache.get(url) === promise) {
+      excelImageCache.delete(url);
+    }
+    primeExcelImagePrefetch();
+  }
+}
+
 
 const styleHeader = (cell: ExcelJS.Cell, fill: string = '102033') => {
   cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
@@ -908,7 +927,7 @@ const addFiberTipsSheet = async (
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
             const imageWidth = Math.max(1, Math.round(image.width * scale));
             const imageHeight = Math.max(1, Math.round(image.height * scale));
-            const imageId = workbook.addImage({ base64: image.base64, extension: image.extension });
+            const imageId = workbook.addImage({ buffer: image.buffer, extension: image.extension });
 
             const totalCellWidthEmu = [startCol, startCol + 1, startCol + 2].reduce((sum, col) => {
               const width = sheet.getColumn(col).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1127,7 +1146,7 @@ async function addEvidenceSheet(
               const imageWidth = Math.max(1, Math.round(image.width * scale));
               const imageHeight = Math.max(1, Math.round(image.height * scale));
               const imageId = workbook.addImage({
-                base64: image.base64,
+                buffer: image.buffer,
                 extension: image.extension,
               });
 
@@ -1263,7 +1282,7 @@ async function addEvidenceSheet(
                 const imageHeight = Math.max(1, Math.floor(image.height * scale));
 
                 const imageId = workbook.addImage({
-                  base64: image.base64,
+                  buffer: image.buffer,
                   extension: image.extension,
                 });
 
@@ -1381,7 +1400,7 @@ async function addEvidenceSheet(
                 const imageHeight = Math.max(1, Math.floor(image.height * scale));
 
                 const imageId = workbook.addImage({
-                  base64: image.base64,
+                  buffer: image.buffer,
                   extension: image.extension,
                 });
 
@@ -1477,7 +1496,7 @@ async function addEvidenceSheet(
             // Insertar ÚNICAMENTE la fotografía. No se crea un lienzo gris
             // intermedio: la imagen conserva toda la nitidez de la versión optimizada.
             const imageId = workbook.addImage({
-              base64: image.base64,
+              buffer: image.buffer,
               extension: image.extension,
             });
 
@@ -1579,6 +1598,13 @@ async function addEvidenceSheet(
 }
 
 export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[]) {
+  const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+  // Preparar un pequeño pipeline de descargas paralelas. No se almacenan todas
+  // las imágenes en memoria: solo las siguientes 4 como máximo.
+  const imageUrls = evidences.map(getPhotoUrl).filter(Boolean);
+  configureExcelImagePrefetch(imageUrls);
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FielTrace';
   workbook.company = 'Tentelcom del Oeste S.A.';
@@ -1613,6 +1639,16 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  excelImageCache.clear();
+  excelImagePrefetchQueue = [];
+  excelImagePrefetchCursor = 0;
+  excelImagePrefetchActive = 0;
+
+  if (typeof console !== 'undefined') {
+    const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
+    console.info(\`[MemoryExcel] Exportación completada en \${(elapsed / 1000).toFixed(1)}s — \${evidences.length} evidencias\`);
   }
 
   return fileName;
