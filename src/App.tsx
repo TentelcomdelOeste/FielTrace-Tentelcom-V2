@@ -253,6 +253,7 @@ export default function App() {
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
   const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
   const [memoryZipLoading, setMemoryZipLoading] = useState(false);
+  const [memoryZipProgress, setMemoryZipProgress] = useState('');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -1336,13 +1337,21 @@ export default function App() {
   const handleGenerateMemoryPhotosZip = async () => {
     if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading) return;
     setMemoryZipLoading(true);
+    setMemoryZipProgress('INICIANDO...');
     try {
       const evidences = memorySelectedProject._evidences || [];
       await generateMemoryPhotosZip(
         memorySelectedProject,
         evidences,
-        (completed, total) => {
-          console.log(`[Memory ZIP] ${completed}/${total} fotografías preparadas`);
+        (completed, total, phase) => {
+          if (phase === 'pack') {
+            setMemoryZipProgress('ARMANDO ZIP...');
+          } else if (phase === 'ready') {
+            setMemoryZipProgress('PREPARANDO DESCARGA...');
+          } else {
+            setMemoryZipProgress(`FOTOS ${completed}/${total}`);
+          }
+          console.log(`[Memory ZIP] ${phase}: ${completed}/${total}`);
         },
       );
     } catch (error: any) {
@@ -1350,6 +1359,7 @@ export default function App() {
       alert(error?.message || 'No se pudo generar el ZIP de fotografías.');
     } finally {
       setMemoryZipLoading(false);
+      setMemoryZipProgress('');
     }
   };
 
@@ -3779,7 +3789,7 @@ export default function App() {
                           >
                             <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
                             <span className="text-[9px] font-black uppercase tracking-widest text-center">
-                              {memoryZipLoading ? 'PREPARANDO ZIP...' : 'DESCARGAR FOTOS ZIP'}
+                              {memoryZipLoading ? (memoryZipProgress || 'PREPARANDO ZIP...') : 'DESCARGAR FOTOS ZIP'}
                             </span>
                           </button>
                         </div>
