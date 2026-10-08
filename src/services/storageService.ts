@@ -16,7 +16,7 @@ const STORE_EVIDENCES = 'evidences';
 const STORE_PHOTOS = 'photos'; // Web preview fallback only
 const STORE_TEMPLATES = 'templates';
 const STORE_SYNC_QUEUE = 'syncQueue';
-const CURRENT_SYNC_SCHEMA_VERSION = 3;
+const CURRENT_SYNC_SCHEMA_VERSION = 4;
 
 // Evita ciclos de sincronización concurrentes al iniciar la app y al recuperar conexión.
 let syncInProgress = false;
