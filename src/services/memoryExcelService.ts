@@ -1436,14 +1436,9 @@ async function addEvidenceSheet(
 
           sheet.mergeCells(blockBottom, col, blockBottom, col + 2);
           const caption = sheet.getCell(blockBottom, col);
-          const mufaName = String(group.name ?? '').trim().toUpperCase();
-          const captionName = !mufaName || mufaName === 'MUFA' || mufaName === '—' ? '' : mufaName;
-          // El nombre histórico "MUFA" no se concatena otra vez. Cada celda
-          // identifica además su posición dentro del set para evitar textos
-          // ambiguos como "MUFA MUFA".
-          caption.value = captionName
-            ? `MUFA · ${captionName} · FOTO ${index + 1}/9`
-            : `MUFA · FOTO ${index + 1}/9`;
+          // La pestaña ya identifica la sección como MUFA.
+          // No repetimos la etiqueta ni el nombre histórico "MUFA" en cada foto.
+          caption.value = `FOTO ${index + 1}/9`;
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
