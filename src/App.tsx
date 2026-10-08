@@ -1337,7 +1337,7 @@ export default function App() {
   };
 
   const handleGenerateMemoryPhotosZip = async () => {
-    if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading) return;
+    if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading || memorySectionZipLoading) return;
     setMemoryZipLoading(true);
     setMemoryZipProgress('INICIANDO...');
     try {
@@ -3810,7 +3810,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => { void handleGenerateMemoryExcel(); }}
-                            disabled={memoryExcelLoading || memoryZipLoading}
+                            disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null}
                             className="bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]"
                           >
                             <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
@@ -3822,7 +3822,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => { void handleGenerateMemoryPhotosZip(); }}
-                            disabled={memoryExcelLoading || memoryZipLoading}
+                            disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null}
                             className="bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99]"
                           >
                             <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
