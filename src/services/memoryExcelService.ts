@@ -630,6 +630,79 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   sheet.getRow(10).height = 8;
 };
 
+const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
+  // Reproduce exactamente el encabezado superior de MEMORIA FOTOGRÁFICA /
+  // Redes FO, incluyendo FR-PE-15 y REV. 02, en cualquier posición de la hoja.
+  sheet.mergeCells(startRow, 4, startRow, 8);
+  const title = sheet.getCell(startRow, 4);
+  title.value = 'MEMORIA FOTOGRÁFICA';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  title.font = { name: 'Arial', size: 18, color: { argb: 'FFFFFF' } };
+  title.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(startRow).height = 30;
+
+  sheet.mergeCells(startRow + 1, 4, startRow + 1, 8);
+  const product = sheet.getCell(startRow + 1, 4);
+  product.value = 'Redes FO';
+  product.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  product.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
+  product.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.getRow(startRow + 1).height = 30;
+
+  for (let col = 9; col <= 10; col++) {
+    sheet.getCell(startRow, col).border = {
+      top: { style: 'thin', color: { argb: '222222' } },
+      left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+      right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+    };
+    sheet.getCell(startRow + 1, col).border = {
+      bottom: { style: 'thin', color: { argb: '222222' } },
+      left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+      right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+    };
+  }
+
+  sheet.getCell(startRow, 9).value = 'FR-PE-15';
+  sheet.getCell(startRow, 9).font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell(startRow, 9).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.getCell(startRow, 10).value = 'REV. 02';
+  sheet.getCell(startRow, 10).font = { name: 'Arial', size: 12, bold: true };
+  sheet.getCell(startRow, 10).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  sheet.mergeCells(startRow, 9, startRow + 1, 9);
+  sheet.mergeCells(startRow, 10, startRow + 1, 10);
+
+  for (let col = 4; col <= 10; col++) {
+    sheet.getCell(startRow, col).border = {
+      ...sheet.getCell(startRow, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(startRow + 1, col).border = {
+      ...sheet.getCell(startRow + 1, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+
+  // La columna B/C queda como espacio lateral, igual que en el encabezado inicial.
+  sheet.getCell(startRow, 2).border = {
+    ...sheet.getCell(startRow, 2).border,
+    left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow + 1, 2).border = {
+    ...sheet.getCell(startRow + 1, 2).border,
+    left: { style: 'thin', color: { argb: '222222' } },
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow + 1, 3).border = {
+    ...sheet.getCell(startRow + 1, 3).border,
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+
+  sheet.getRow(startRow + 2).height = 8;
+  sheet.getRow(startRow + 3).height = 8;
+};
+
 const addRepeatedProjectDataBox = (sheet: ExcelJS.Worksheet, project: any, startRow: number) => {
   const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
 
@@ -1351,8 +1424,11 @@ async function addEvidenceSheet(
       // utilizado al inicio de la hoja y, después de dos filas de separación,
       // comienza el nuevo set de 9 fotografías.
       if (groupIndex > 0) {
-        addRepeatedProjectDataBox(sheet, project, row);
-        row += 7;
+        // Mantener las dos filas divisorias y repetir TODO el encabezado superior
+        // (MEMORIA FOTOGRÁFICA / Redes FO / FR-PE-15 / REV. 02) antes de DATOS DE LA OBRA.
+        addRepeatedFiberHeader(sheet, row);
+        addRepeatedProjectDataBox(sheet, project, row + 4);
+        row += 11;
       }
 
       const imageRowStart = row;
@@ -1478,8 +1554,10 @@ async function addEvidenceSheet(
       // entre sets y, desde el segundo MUFA, se repite el mismo recuadro
       // DATOS DE LA OBRA antes de las 9 fotografías.
       if (groupIndex > 0) {
-        addRepeatedProjectDataBox(sheet, project, row);
-        row += 7;
+        // Mismo encabezado completo de la hoja antes de DATOS DE LA OBRA.
+        addRepeatedFiberHeader(sheet, row);
+        addRepeatedProjectDataBox(sheet, project, row + 4);
+        row += 11;
       }
 
       const imageRowStart = row;
