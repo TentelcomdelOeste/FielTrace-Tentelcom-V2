@@ -251,7 +251,8 @@ export default function App() {
   const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
   const [memorySelectedCategory, setMemorySelectedCategory] = useState<string | null>(null);
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
-  const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);\n  const [memoryZipLoading, setMemoryZipLoading] = useState(false);
+  const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
+  const [memoryZipLoading, setMemoryZipLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
