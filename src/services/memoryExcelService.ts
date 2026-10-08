@@ -72,6 +72,16 @@ const getGroupName = (ev: MemoryEvidence, category: string) => {
   return String(value ?? '').trim() || '—';
 };
 
+const getMufaDisplayName = (items: MemoryEvidence[]) => {
+  // El nombre válido del MUFA puede estar presente en cualquiera de las
+  // evidencias del set. No dependemos de que la primera fotografía tenga
+  // correctamente poblado mufaName.
+  const name = items
+    .map(item => String(item.mufaName ?? '').trim())
+    .find(value => value && value.toUpperCase() !== 'MUFA');
+  return name || '';
+};
+
 const getPhotoUrl = (ev: MemoryEvidence) =>
   String(
     ev.photoUrl ||
@@ -1440,8 +1450,8 @@ async function addEvidenceSheet(
           // con el nombre que el usuario asignó al crearlo.
           // No mostramos "FOTO 1/9", etc.; el número de fotografía ya queda
           // determinado por su posición dentro del set.
-          const mufaDisplayName = String(group.name || '').trim();
-          caption.value = mufaDisplayName || 'MUFA';
+          const mufaDisplayName = getMufaDisplayName(group.items);
+          caption.value = mufaDisplayName ? `MUFA ${mufaDisplayName}` : 'MUFA';
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
