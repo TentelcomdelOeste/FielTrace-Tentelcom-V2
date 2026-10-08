@@ -272,24 +272,77 @@ const getPhotoExtensionFromEvidence = (ev: any): 'jpg' | 'png' | 'webp' | 'heic'
   return 'jpg';
 };
 
+const describeFirebaseError = (error: any): string => {
+  if (!error) return 'Error desconocido';
+  const code = String(error?.code || '').trim();
+  const message = String(error?.message || error || '').trim();
+  return [code, message].filter(Boolean).join(' | ') || 'Error desconocido';
+};
+
+const getEvidenceDiagnosticLabel = (ev: any): string => {
+  const category = normalizeCategory(ev?.category);
+  const number = getGroupNumber(ev);
+  const photoNumber = getPhotoNumber(ev, 0);
+  const name = getGroupName(ev, category);
+  return [
+    category,
+    number ? `SET ${String(number).padStart(2, '0')}` : '',
+    name ? `NOMBRE: ${name}` : '',
+    photoNumber ? `FOTO ${String(photoNumber).padStart(2, '0')}` : '',
+    ev?.uuid ? `EVIDENCIA: ${ev.uuid}` : '',
+  ].filter(Boolean).join(' · ');
+};
+
 const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extension: string }> => {
-  let lastStorageError: unknown = null;
+  const storagePaths = getStoragePathCandidates(ev);
+  const storageErrors: string[] = [];
 
   // Primera opción: SDK autenticado. Esto evita CORS y URLs de descarga
   // antiguas que pueden responder 403.
-  for (const storagePath of getStoragePathCandidates(ev)) {
+  for (const storagePath of storagePaths) {
     try {
       const bytes = await firebaseService.getEvidencePhotoBytes(storagePath);
+      console.log('[Memory ZIP] Storage OK:', {
+        evidence: ev?.uuid || '',
+        path: storagePath,
+        bytes: bytes.byteLength,
+      });
       return { bytes, extension: getPhotoExtensionFromEvidence(ev) };
-    } catch (error) {
-      lastStorageError = error;
+    } catch (error: any) {
+      const detail = `${storagePath} => ${describeFirebaseError(error)}`;
+      storageErrors.push(detail);
+      console.warn('[Memory ZIP] Falló getBytes():', detail);
     }
   }
 
   // Compatibilidad con evidencias que solo conservan photoUrl.
-  const response = await fetchPhotoResponse(ev);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return { bytes, extension: getExtension(response, response.url) };
+  try {
+    const response = await fetchPhotoResponse(ev);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return { bytes, extension: getExtension(response, response.url) };
+  } catch (error: any) {
+    const urlError = describeFirebaseError(error);
+    const diagnostic = [
+      'No se pudo descargar una fotografía para el ZIP.',
+      getEvidenceDiagnosticLabel(ev),
+      `RUTAS STORAGE PROBADAS: ${storagePaths.length ? storagePaths.join(' || ') : 'NINGUNA'}`,
+      `ERRORES STORAGE: ${storageErrors.length ? storageErrors.join(' || ') : 'NINGUNO'}`,
+      `URL/PROXY: ${urlError}`,
+    ].join(' | ');
+
+    console.error('[Memory ZIP] DIAGNÓSTICO DE DESCARGA:', {
+      label: getEvidenceDiagnosticLabel(ev),
+      storagePaths,
+      storageErrors,
+      urlError,
+      photoUrl: ev?.photoUrl || '',
+      photoStoragePath: ev?.photoStoragePath || '',
+      projectUuid: ev?.projectUuid || '',
+      evidenceUuid: ev?.uuid || '',
+    });
+
+    throw new Error(diagnostic);
+  }
 };
 
 const fetchPhotoResponse = async (ev: any): Promise<Response> => {
@@ -328,11 +381,11 @@ const fetchPhotoResponse = async (ev: any): Promise<Response> => {
   }
 
   if (lastStatus) {
-    throw new Error(`No se pudo descargar una fotografía (${lastStatus}).`);
+    throw new Error(`HTTP ${lastStatus} en descarga directa/proxy${lastError instanceof Error ? ` | ${lastError.message}` : ''}`);
   }
   throw lastError instanceof Error
     ? lastError
-    : new Error('No se pudo descargar una fotografía.');
+    : new Error('No se pudo descargar una fotografía: error de red desconocido.');
 };
 
 export async function generateMemoryPhotosZip(
