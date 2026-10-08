@@ -208,7 +208,12 @@ export const storageService = {
 
   async getAllProjects(): Promise<Project[]> {
     const projects = await manager.getAll<Project>(STORE_PROJECTS);
-    return projects.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // La lista principal es local por usuario/dispositivo. Un proyecto oculto
+    // permanece almacenado localmente para poder recuperarlo desde "Proyectos compartidos"
+    // sin tocar Firestore ni Firebase Storage.
+    return projects
+      .filter(project => project.hiddenFromHome !== true)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   async getProject(id: number): Promise<Project> {
@@ -619,6 +624,26 @@ export const storageService = {
     await manager.delete(STORE_PROJECTS, projectId);
   },
 
+  /**
+   * Oculta proyectos únicamente de la lista principal de este dispositivo.
+   * NO elimina el proyecto, evidencias ni fotografías de Firebase.
+   */
+  async hideProjects(projectIds: number[]): Promise<number> {
+    let n = 0;
+    for (const id of projectIds) {
+      if (id == null) continue;
+      const project = await manager.get<Project>(STORE_PROJECTS, id);
+      if (!project) continue;
+
+      await manager.put(STORE_PROJECTS, {
+        ...project,
+        hiddenFromHome: true
+      });
+      n += 1;
+    }
+    return n;
+  },
+
   async deleteProjects(projectIds: number[]): Promise<number> {
     let n = 0;
     for (const id of projectIds) {
@@ -632,8 +657,10 @@ export const storageService = {
   /**
    * Importa un proyecto compartido desde Firebase al almacenamiento local.
    * Conserva el UUID de nube para que nuevas fotos sigan en el mismo proyecto.
+   * revealInHome=true se usa únicamente cuando el usuario abre explícitamente
+   * el proyecto desde "Proyectos compartidos".
    */
-  async importCloudProject(cloudProject: any, cloudEvidences: any[] = []): Promise<Project> {
+  async importCloudProject(cloudProject: any, cloudEvidences: any[] = [], revealInHome = false): Promise<Project> {
     const cloudUuid = String(cloudProject.uuid || cloudProject.id);
     const existingProjects = await manager.getAll<Project>(STORE_PROJECTS);
     const existing = existingProjects.find(project => project.uuid === cloudUuid);
@@ -650,6 +677,7 @@ export const storageService = {
         ...cloudProject,
         id: existing.id,
         uuid: cloudUuid,
+        hiddenFromHome: revealInHome ? false : existing.hiddenFromHome === true,
         createdAt: toDate(cloudProject.createdAt, existing.createdAt),
         updatedAt: toDate(cloudProject.updatedAt, new Date()),
         syncStatus: 'synced',
@@ -661,6 +689,7 @@ export const storageService = {
       localProject = {
         ...cloudData,
         uuid: cloudUuid,
+        hiddenFromHome: false,
         createdAt: toDate(cloudProject.createdAt),
         updatedAt: toDate(cloudProject.updatedAt),
         syncStatus: 'synced',
