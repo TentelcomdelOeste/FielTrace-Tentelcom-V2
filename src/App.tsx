@@ -8108,6 +8108,101 @@ export default function App() {
 
 
 
+        {memoryExcelModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5"
+            onClick={() => setMemoryExcelModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden"
+            >
+              <div className="px-5 py-5 border-b border-gray-100">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">Memoria Fotográfica</p>
+                    <h3 className="mt-1 text-base font-black uppercase text-gray-950">Seleccionar secciones</h3>
+                    <p className="mt-1 text-[10px] text-gray-400 font-bold uppercase">
+                      Seleccione los libros que desea incluir en el Excel.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMemoryExcelModalOpen(false)}
+                    className="w-9 h-9 rounded-xl bg-gray-50 text-gray-500 flex items-center justify-center shrink-0"
+                    aria-label="Cerrar"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-2 max-h-[55vh] overflow-y-auto">
+                <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 mb-3">
+                  <p className="text-[9px] font-black uppercase text-blue-700">
+                    Todas las secciones están seleccionadas por defecto.
+                  </p>
+                </div>
+
+                {MEMORY_EXCEL_SECTIONS.map((section) => {
+                  const checked = memoryExcelSelectedSections.includes(section.id);
+                  return (
+                    <label
+                      key={section.id}
+                      className={
+                        "flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all " +
+                        (checked
+                          ? "border-blue-200 bg-blue-50/60"
+                          : "border-gray-100 bg-gray-50/50")
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleMemoryExcelSection(section.id)}
+                        className="w-5 h-5 rounded-md border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                      />
+                      <span className="text-[10px] font-black uppercase text-gray-800 flex-1">
+                        {section.label}
+                      </span>
+                      {checked && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                    </label>
+                  );
+                })}
+
+                <div className="pt-2">
+                  <p className="text-[9px] text-gray-400 font-bold uppercase text-center">
+                    La hoja DATOS se incluirá siempre como portada del archivo.
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMemoryExcelModalOpen(false)}
+                  className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[10px] font-black uppercase tracking-widest active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={memoryExcelSelectedSections.length === 0}
+                  onClick={() => { void handleGenerateMemoryExcel(); }}
+                  className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                >
+                  Confirmar y generar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {confirmDeleteGalleryStep === 1 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[210] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
