@@ -254,6 +254,8 @@ export default function App() {
   const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
   const [memoryZipLoading, setMemoryZipLoading] = useState(false);
   const [memoryZipProgress, setMemoryZipProgress] = useState('');
+  const [memorySectionZipLoading, setMemorySectionZipLoading] = useState<string | null>(null);
+  const [memorySectionZipProgress, setMemorySectionZipProgress] = useState('');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -1360,6 +1362,42 @@ export default function App() {
     } finally {
       setMemoryZipLoading(false);
       setMemoryZipProgress('');
+    }
+  };
+
+  const handleGenerateMemorySectionZip = async (category: string) => {
+    if (
+      !memorySelectedProject ||
+      memoryExcelLoading ||
+      memoryZipLoading ||
+      memorySectionZipLoading
+    ) return;
+
+    setMemorySectionZipLoading(category);
+    setMemorySectionZipProgress('INICIANDO...');
+    try {
+      const evidences = memorySelectedProject._evidences || [];
+      await generateMemoryPhotosZip(
+        memorySelectedProject,
+        evidences,
+        (completed, total, phase) => {
+          if (phase === 'pack') {
+            setMemorySectionZipProgress('ARMANDO ZIP...');
+          } else if (phase === 'ready') {
+            setMemorySectionZipProgress('PREPARANDO DESCARGA...');
+          } else {
+            setMemorySectionZipProgress(`FOTOS ${completed}/${total}`);
+          }
+          console.log(`[Memory ZIP] sección ${category} ${phase}: ${completed}/${total}`);
+        },
+        category,
+      );
+    } catch (error: any) {
+      console.error('[Memory ZIP] Error generando sección:', category, error);
+      alert(error?.message || 'No se pudo generar el ZIP de la sección.');
+    } finally {
+      setMemorySectionZipLoading(null);
+      setMemorySectionZipProgress('');
     }
   };
 
