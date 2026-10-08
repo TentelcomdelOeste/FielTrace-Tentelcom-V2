@@ -965,7 +965,7 @@ async function addEvidenceSheet(
   const sheet = workbook.addWorksheet(category.label);
   sheet.views = [{ showGridLines: false }];
 
-  const useFiberHeader = category.id === 'RESERVA' || category.id === 'NAPS';
+  const useFiberHeader = category.id === 'RESERVA' || category.id === 'NAPS' || category.id === 'MUFA';
   if (useFiberHeader) {
     applyFiberStyleHeaderToSheet(sheet, project);
   } else {
