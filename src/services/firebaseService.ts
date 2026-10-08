@@ -171,6 +171,11 @@ export const firebaseService = {
         napName: evidence.napName || '',
         napPhotoNumber: evidence.napPhotoNumber ?? null,
 
+        mufaId: evidence.mufaId || '',
+        mufaNumber: evidence.mufaNumber ?? null,
+        mufaName: evidence.mufaName || '',
+        mufaPhotoNumber: evidence.mufaPhotoNumber ?? null,
+
         aceroId: evidence.aceroId || '',
         aceroNumber: evidence.aceroNumber ?? null,
         aceroSide: evidence.aceroSide || null,
