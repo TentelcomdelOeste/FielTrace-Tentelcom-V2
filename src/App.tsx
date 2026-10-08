@@ -1242,11 +1242,11 @@ export default function App() {
     const groupList = Array.from(groups.entries()).map(([id, items]) => {
       let normalizedItems = items;
       if (category === 'MUFA') {
-        // MUFA admite exactamente 9 posiciones. En registros históricos puede
-        // faltar mufaPhotoNumber aunque la fotografía sí exista en Firebase.
-        // En ese caso asignamos las posiciones libres de forma secuencial para
-        // que la foto no desaparezca del visor ni del estado de completitud.
-        const photoItems = [...items]
+        // MUFA es un set fijo de 9 fotografías. La existencia de la foto se
+        // determina por su URL, NO por mufaPhotoNumber. En registros históricos
+        // ese metadato puede faltar, pero la fotografía sigue siendo válida.
+        // El visor trabaja con las fotografías reales y las presenta 1/9 ... 9/9.
+        normalizedItems = [...items]
           .filter(hasPhoto)
           .sort((a, b) => {
             const slotA = Number(a.mufaPhotoNumber ?? a.photoNumber ?? 0);
@@ -1254,30 +1254,9 @@ export default function App() {
             if (slotA > 0 && slotB === 0) return -1;
             if (slotA === 0 && slotB > 0) return 1;
             return slotA - slotB;
-          });
-
-        const usedSlots = new Set<number>();
-        let nextFallbackSlot = 1;
-
-        normalizedItems = photoItems
-          .map(ev => {
-            let slot = Number(ev.mufaPhotoNumber ?? ev.photoNumber ?? 0);
-            if (!Number.isInteger(slot) || slot < 1 || slot > 9 || usedSlots.has(slot)) {
-              while (usedSlots.has(nextFallbackSlot) && nextFallbackSlot <= 9) {
-                nextFallbackSlot += 1;
-              }
-              slot = nextFallbackSlot;
-            }
-            if (slot >= 1 && slot <= 9) {
-              usedSlots.add(slot);
-              nextFallbackSlot = Math.max(nextFallbackSlot, slot + 1);
-              return { ...ev, mufaPhotoNumber: slot };
-            }
-            return null;
           })
-          .filter((ev): ev is any => ev !== null)
           .slice(0, 9);
-      }
+      }}
       return {
         id,
         items: normalizedItems,
