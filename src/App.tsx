@@ -4151,7 +4151,7 @@ export default function App() {
                     <span className="text-amber-600">{pendingEvidenceCategories} pendientes</span>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2.5">
+                  <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-4 xl:gap-3">
                     {evidenceCategoryProgress.map(category => (
                       <div
                         key={category.id}
@@ -4300,7 +4300,7 @@ export default function App() {
                   </button>
                 )}
 
-                <div className="space-y-2 pb-24">
+                <div className="space-y-2 pb-24 xl:grid xl:grid-cols-3 xl:gap-3 xl:space-y-0">
                   {evidences.length === 0 ? (
                     <div className="py-16 text-center space-y-3">
                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto"><CameraIcon className="w-8 h-8 text-gray-200" /></div>
@@ -4310,7 +4310,7 @@ export default function App() {
                     evidences.map((ev) => {
                       const operationalFields = (ev.customFields || []).filter((f: any) => f.active !== false);
                       return (
-                      <div key={ev.id || ev.uuid} className="bg-white border border-gray-100 rounded-2xl px-3.5 py-3 shadow-sm flex items-center gap-3">
+                      <div key={ev.id || ev.uuid} className="bg-white border border-gray-100 rounded-2xl px-3.5 py-3 shadow-sm flex items-center gap-3 xl:h-full">
                         <div className="w-2 h-2 rounded-full bg-green-500 shrink-0 shadow-[0_0_6px_#22c55e]"></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] font-black text-gray-950 tracking-tight">{ev.fecha} {ev.hora || ''}</p>
