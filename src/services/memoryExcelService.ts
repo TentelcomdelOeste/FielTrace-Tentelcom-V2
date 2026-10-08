@@ -26,6 +26,14 @@ const safeFileName = (value: unknown) =>
     .slice(0, 80) || 'Proyecto';
 
 const getGroupId = (ev: MemoryEvidence, category: string) => {
+  // MUFA debe conservar un único set aunque alguna evidencia histórica
+  // haya perdido el mufaId. Número + nombre identifican el mismo MUFA.
+  if (category === 'MUFA') {
+    const number = Number(ev.mufaNumber || 0);
+    const name = String(ev.mufaName || '').trim().toUpperCase();
+    if (number || name) return `MUFA|${number}|${name}`;
+  }
+
   const keys: Record<string, string[]> = {
     NAPS: ['napId'],
     MUFA: ['mufaId'],
@@ -1038,7 +1046,7 @@ async function addEvidenceSheet(
 
   for (const group of orderedGroups) {
     const startRow = row;
-    if (category.id !== 'RESERVA' && category.id !== 'NAPS') {
+    if (category.id !== 'RESERVA' && category.id !== 'NAPS' && category.id !== 'MUFA') {
       const groupTitle = category.id === 'NAPS'
         ? `NAP ${String(group.number).padStart(2, '0')}`
         : category.id === 'MUFA'
@@ -1405,9 +1413,8 @@ async function addEvidenceSheet(
 
           sheet.mergeCells(blockBottom, col, blockBottom, col + 2);
           const caption = sheet.getCell(blockBottom, col);
-          caption.value = ev
-            ? getNapsPhotoTitle(ev, index)
-            : `MUFA ${String(group.name ?? '').trim().toUpperCase()}`;
+          const mufaName = String(group.name ?? '').trim().toUpperCase();
+          caption.value = mufaName ? `MUFA ${mufaName}` : 'MUFA';
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
