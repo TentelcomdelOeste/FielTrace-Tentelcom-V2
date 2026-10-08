@@ -354,6 +354,7 @@ export default function App() {
   // NAPS se procesa de forma secuencial para impedir una décima captura
   // mientras la evidencia anterior todavía está guardándose.
   const napCaptureInFlightRef = useRef(false);
+  const mufaCaptureInFlightRef = useRef(false);
   // MEJORAS: bloqueo lógico de un solo disparo por lado (ANTES/DESPUÉS).
   // Impide duplicados por doble toque mientras la evidencia se procesa.
   const mejoraCaptureInFlightRef = useRef(false);
@@ -1407,35 +1408,45 @@ export default function App() {
       setReserveCaptureDraft(null);
 
       const mufaGroups = Array.from(new Set(
-        evidences.filter(ev => ev.category === 'MUFA' && ev.mufaId).map(ev => ev.mufaId as string)
+        evidences
+          .filter(ev => ev.category === 'MUFA' && (ev.mufaId || ev.mufaNumber != null))
+          .map(ev => ev.mufaId || `mufa_${ev.mufaNumber || 0}_${String(ev.mufaName || '').trim().toUpperCase()}`)
       ))
-        .map(mufaId => {
-          const group = evidences.filter(ev => ev.category === 'MUFA' && ev.mufaId === mufaId);
+        .map(mufaKey => {
+          const group = evidences.filter(ev => {
+            if (ev.category !== 'MUFA') return false;
+            const key = ev.mufaId || `mufa_${ev.mufaNumber || 0}_${String(ev.mufaName || '').trim().toUpperCase()}`;
+            return key === mufaKey;
+          });
           const first = group[0];
+          const capturedSlots = new Set(
+            group
+              .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+              .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+          );
+          const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
+            .find(n => !capturedSlots.has(n)) || 10;
           return {
-            mufaId,
+            mufaId: first?.mufaId || String(mufaKey),
             mufaNumber: Number(first?.mufaNumber || 0),
             mufaName: first?.mufaName || '',
-            count: group.length
+            count: capturedSlots.size,
+            nextPhotoNumber
           };
         })
-        .filter(group => group.count < 9)
+        .filter(group => group.nextPhotoNumber <= 9)
         .sort((a, b) => a.mufaNumber - b.mufaNumber);
 
       if (mufaGroups.length > 0) {
-        const nap = mufaGroups[0];
-        const draft = {
-          mufaId: nap.mufaId,
-          mufaNumber: nap.mufaNumber,
-          mufaName: nap.mufaName,
-          photoNumber: nap.count + 1,
-          remainingPhotos: 9 - nap.count
-        };
-        setMufaCaptureDraft(draft);
-
-        // Si el MUFA ya tiene nombre guardado, no volvemos a pedirlo.
-        // Al pulsar TOMAR FOTO se entra directamente a la cámara.
-        if (nap.mufaName.trim()) {
+        const mufa = mufaGroups[0];
+        setMufaCaptureDraft({
+          mufaId: mufa.mufaId,
+          mufaNumber: mufa.mufaNumber,
+          mufaName: mufa.mufaName,
+          photoNumber: mufa.nextPhotoNumber,
+          remainingPhotos: 9 - mufa.count
+        });
+        if (mufa.mufaName.trim()) {
           setShowMufaCaptureModal(false);
           setCurrentStep('camera');
         } else {
@@ -1451,7 +1462,6 @@ export default function App() {
       }
       return;
     }
-
     if (category === 'ALTAS') {
       setFiberCaptureDraft(null);
       setReserveCaptureDraft(null);
@@ -2294,6 +2304,7 @@ export default function App() {
     // Además se bloquea una segunda captura mientras la anterior termina de
     // guardarse, evitando que un doble toque produzca FOTO 10/9.
     const isNapCapture = evidenceCategory === 'NAPS' && !!napCaptureDraft;
+    const isMufaCapture = evidenceCategory === 'MUFA' && !!mufaCaptureDraft;
     const isMejoraCapture = evidenceCategory === 'MEJORAS' && !!mejoraCaptureDraft;
 
     if (isMejoraCapture) {
@@ -2342,6 +2353,31 @@ export default function App() {
       }
 
       napCaptureInFlightRef.current = true;
+    }
+
+    if (isMufaCapture) {
+      if (mufaCaptureInFlightRef.current) return;
+
+      const mufaEvidences = evidences.filter(ev => ev.category === 'MUFA' && (
+        (ev.mufaId && ev.mufaId === mufaCaptureDraft!.mufaId) ||
+        (!ev.mufaId &&
+          Number(ev.mufaNumber) === Number(mufaCaptureDraft!.mufaNumber) &&
+          String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft!.mufaName || '').trim().toUpperCase())
+      ));
+      const capturedSlots = new Set(
+        mufaEvidences
+          .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+          .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+      );
+
+      if (capturedSlots.size >= 9 || mufaCaptureDraft!.photoNumber > 9) {
+        setMufaCaptureDraft(null);
+        setShowMufaCaptureModal(false);
+        setCurrentStep('history');
+        return;
+      }
+
+      mufaCaptureInFlightRef.current = true;
     }
 
     capturingRef.current = true;
@@ -2467,6 +2503,23 @@ export default function App() {
         : { width: window.innerWidth, height: Math.max(1, window.innerHeight - 76), ratio: window.innerWidth / Math.max(1, window.innerHeight - 76) };
 
       // Objeto ÚNICO de metadatos/evidencia unificado (del cual se derivan overlay y IndexedDB)
+      if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
+        const currentMufaCount = evidences.filter(ev => ev.category === 'MUFA' && (
+          (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
+          (!ev.mufaId &&
+            Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
+            String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
+        )).length;
+
+        if (currentMufaCount >= 9) {
+          mufaCaptureInFlightRef.current = false;
+          setMufaCaptureDraft(null);
+          setShowMufaCaptureModal(false);
+          setCurrentStep('history');
+          return;
+        }
+      }
+
       const evidenceObject: any = {
         uuid,
         projectId: selectedProject.id!,
@@ -2685,12 +2738,10 @@ export default function App() {
               }
             }
           } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
-            // El límite debe calcularse sobre las fotos que FALTABAN al iniciar,
-            // no sobre el número absoluto de la foto. Ej.: si ya había 4/9,
-            // solo deben tomarse 5 y después cerrar automáticamente la cámara.
-            const remainingAfterCapture = mufaCaptureDraft.remainingPhotos - 1;
+            const remainingAfterCapture = Math.max(0, mufaCaptureDraft.remainingPhotos - 1);
 
-            if (remainingAfterCapture <= 0) {
+            if (mufaCaptureDraft.photoNumber >= 9 || remainingAfterCapture <= 0) {
+              mufaCaptureInFlightRef.current = false;
               setMufaCaptureDraft(null);
               setShowMufaCaptureModal(false);
               setCurrentStep('history');
@@ -2700,6 +2751,7 @@ export default function App() {
                 photoNumber: prev.photoNumber + 1,
                 remainingPhotos: remainingAfterCapture
               } : prev);
+              mufaCaptureInFlightRef.current = false;
             }
           }
         } catch (e: any) {
@@ -2707,6 +2759,9 @@ export default function App() {
         } finally {
           if (isNapCapture) {
             napCaptureInFlightRef.current = false;
+          }
+          if (isMufaCapture) {
+            mufaCaptureInFlightRef.current = false;
           }
           if (isMejoraCapture) {
             mejoraCaptureInFlightRef.current = false;
