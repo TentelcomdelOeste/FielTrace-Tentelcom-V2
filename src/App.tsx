@@ -1228,18 +1228,36 @@ export default function App() {
       : category === 'ACEROS' || category === 'DESECHOS' || category === 'ALTAS' || category === 'MEJORAS' ? 2
       : 1;
 
-    const groupList = Array.from(groups.entries()).map(([id, items]) => ({
-      id,
-      items,
-      number: Number(
-        items[0]?.napNumber ?? items[0]?.mufaNumber ?? items[0]?.fiberPairNumber ??
-        items[0]?.reserveNumber ?? items[0]?.aceroNumber ?? items[0]?.desechoNumber ??
-        items[0]?.altaNumber ?? items[0]?.mejoraNumber ?? 0
-      ),
-      name: items[0]?.napName || items[0]?.mufaName || items[0]?.categoryLabel || '',
-      count: items.length,
-      required
-    })).sort((a, b) => a.number - b.number);
+    const groupList = Array.from(groups.entries()).map(([id, items]) => {
+      let normalizedItems = items;
+      if (category === 'MUFA') {
+        // MUFA admite exactamente 9 posiciones. Si existen registros históricos
+        // duplicados, no deben convertirlos en una décima fotografía del set.
+        const seenSlots = new Set<number>();
+        normalizedItems = [...items]
+          .sort((a, b) => Number(a.mufaPhotoNumber ?? a.photoNumber ?? 0) - Number(b.mufaPhotoNumber ?? b.photoNumber ?? 0))
+          .filter(ev => {
+            const slot = Number(ev.mufaPhotoNumber ?? ev.photoNumber ?? 0);
+            if (!Number.isInteger(slot) || slot < 1 || slot > 9) return false;
+            if (seenSlots.has(slot)) return false;
+            seenSlots.add(slot);
+            return true;
+          })
+          .slice(0, 9);
+      }
+      return {
+        id,
+        items: normalizedItems,
+        number: Number(
+          items[0]?.napNumber ?? items[0]?.mufaNumber ?? items[0]?.fiberPairNumber ??
+          items[0]?.reserveNumber ?? items[0]?.aceroNumber ?? items[0]?.desechoNumber ??
+          items[0]?.altaNumber ?? items[0]?.mejoraNumber ?? 0
+        ),
+        name: items[0]?.napName || items[0]?.mufaName || items[0]?.categoryLabel || '',
+        count: category === 'MUFA' ? normalizedItems.length : items.length,
+        required
+      };
+    }).sort((a, b) => a.number - b.number);
 
     const captured = evidences.length;
     const requiredTotal = groupList.length * required;
@@ -2504,14 +2522,19 @@ export default function App() {
 
       // Objeto ÚNICO de metadatos/evidencia unificado (del cual se derivan overlay y IndexedDB)
       if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
-        const currentMufaCount = evidences.filter(ev => ev.category === 'MUFA' && (
-          (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
-          (!ev.mufaId &&
-            Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
-            String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
-        )).length;
+        const currentMufaSlots = new Set(
+          evidences
+            .filter(ev => ev.category === 'MUFA' && (
+              (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
+              (!ev.mufaId &&
+                Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
+                String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
+            ))
+            .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+        );
 
-        if (currentMufaCount >= 9) {
+        if (currentMufaSlots.size >= 9) {
           mufaCaptureInFlightRef.current = false;
           setMufaCaptureDraft(null);
           setShowMufaCaptureModal(false);
