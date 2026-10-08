@@ -60,6 +60,11 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        workbox: {
+          // The production bundle is currently >2 MiB. Keep it precached so the
+          // PWA/Android build does not fail Workbox's default 2 MiB limit.
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        },
         manifest: {
           name: 'FieldTrace Pro',
           short_name: 'FieldTrace',
