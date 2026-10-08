@@ -697,8 +697,8 @@ const addRepeatedProjectDataBox = (sheet: ExcelJS.Worksheet, project: any, start
   identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
 
   for (const item of topRows) {
-    sheet.mergeCells(...item.labelRange);
-    sheet.mergeCells(...item.valueRange);
+    sheet.mergeCells(item.labelRange[0], item.labelRange[1], item.labelRange[2], item.labelRange[3]);
+    sheet.mergeCells(item.valueRange[0], item.valueRange[1], item.valueRange[2], item.valueRange[3]);
 
     const labelCell = sheet.getCell(item.labelRange[0], item.labelRange[1]);
     labelCell.value = item.label;
@@ -1190,7 +1190,7 @@ async function addEvidenceSheet(
     return;
   }
 
-  for (const group of orderedGroups) {
+  for (const [groupIndex, group] of orderedGroups.entries()) {
     const startRow = row;
     if (category.id !== 'RESERVA' && category.id !== 'NAPS' && category.id !== 'MUFA') {
       const groupTitle = category.id === 'NAPS'
@@ -1350,8 +1350,7 @@ async function addEvidenceSheet(
       // A partir del segundo NAP se repite el mismo recuadro DATOS DE LA OBRA
       // utilizado al inicio de la hoja y, después de dos filas de separación,
       // comienza el nuevo set de 9 fotografías.
-      const napsGroupIndex = orderedGroups.indexOf(group);
-      if (napsGroupIndex > 0) {
+      if (groupIndex > 0) {
         addRepeatedProjectDataBox(sheet, project, row);
         row += 7;
       }
