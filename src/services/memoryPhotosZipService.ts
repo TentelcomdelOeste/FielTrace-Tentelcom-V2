@@ -220,6 +220,78 @@ const resolvePhotoUrls = async (ev: any): Promise<string[]> => {
   return urls;
 };
 
+const getStoragePathCandidates = (ev: any): string[] => {
+  const candidates: string[] = [];
+  const add = (value: unknown) => {
+    const path = String(value || '').trim();
+    if (path && !candidates.includes(path)) candidates.push(path);
+  };
+
+  add(ev?.photoStoragePath);
+
+  const projectUuid = String(ev?.projectUuid || '').trim();
+  const evidenceUuid = String(ev?.uuid || '').trim();
+  const rawFileName = String(
+    ev?.photoPath ||
+    ev?.photo?.fileName ||
+    (evidenceUuid ? `FT_${evidenceUuid}` : '')
+  ).trim();
+
+  if (projectUuid && evidenceUuid && rawFileName) {
+    // Mismo saneamiento usado por uploadEvidencePhoto().
+    const safeName = rawFileName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\.(jpeg|jpg|png)$/i, '');
+
+    const mime = String(ev?.photo?.mimeType || '').toLowerCase();
+    const preferredExtension = mime.includes('png') ? 'png' : 'jpg';
+
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${preferredExtension}`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.jpg`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.png`);
+
+    // Compatibilidad con fotografías históricas que pudieron quedar con
+    // extensión duplicada por la normalización anterior.
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${preferredExtension}${preferredExtension}`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${preferredExtension}.${preferredExtension}`);
+  }
+
+  return candidates;
+};
+
+const getPhotoExtensionFromEvidence = (ev: any): 'jpg' | 'png' | 'webp' | 'heic' => {
+  const mime = String(ev?.photo?.mimeType || '').toLowerCase();
+  if (mime.includes('png')) return 'png';
+  if (mime.includes('webp')) return 'webp';
+  if (mime.includes('heic')) return 'heic';
+
+  const name = String(ev?.photoPath || ev?.photo?.fileName || '').toLowerCase();
+  if (/\.png$/i.test(name)) return 'png';
+  if (/\.webp$/i.test(name)) return 'webp';
+  if (/\.heic$/i.test(name)) return 'heic';
+  return 'jpg';
+};
+
+const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extension: string }> => {
+  let lastStorageError: unknown = null;
+
+  // Primera opción: SDK autenticado. Esto evita CORS y URLs de descarga
+  // antiguas que pueden responder 403.
+  for (const storagePath of getStoragePathCandidates(ev)) {
+    try {
+      const bytes = await firebaseService.getEvidencePhotoBytes(storagePath);
+      return { bytes, extension: getPhotoExtensionFromEvidence(ev) };
+    } catch (error) {
+      lastStorageError = error;
+    }
+  }
+
+  // Compatibilidad con evidencias que solo conservan photoUrl.
+  const response = await fetchPhotoResponse(ev);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return { bytes, extension: getExtension(response, response.url) };
+};
+
 const fetchPhotoResponse = async (ev: any): Promise<Response> => {
   const urls = await resolvePhotoUrls(ev);
   let lastStatus = 0;
@@ -322,10 +394,9 @@ export async function generateMemoryPhotosZip(
 
     for (let index = 0; index < group.items.length; index++) {
       const ev = group.items[index];
-      const response = await fetchPhotoResponse(ev);
-
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      const extension = getExtension(response, response.url);
+      const downloaded = await downloadPhotoBytes(ev);
+      const bytes = downloaded.bytes;
+      const extension = downloaded.extension;
       const photoNumber = getPhotoNumber(ev, index + 1);
       const fileBase = `${String(photoNumber).padStart(2, '0')}`;
       const photoName = `${folder}/${fileBase}.${extension}`;
