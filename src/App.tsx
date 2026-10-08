@@ -1346,7 +1346,9 @@ export default function App() {
     setCloudImportingUuid(uuid);
     try {
       const remoteEvidences = await firebaseService.getCloudProjectEvidences(uuid);
-      const localProject = await storageService.importCloudProject(cloudProject, remoteEvidences);
+      // Al abrir explícitamente desde "Proyectos compartidos", el proyecto
+      // vuelve a la lista principal de este dispositivo.
+      const localProject = await storageService.importCloudProject(cloudProject, remoteEvidences, true);
       const evs = await storageService.getEvidencesByProject(localProject.id!);
       setProjects(prev => {
         const without = prev.filter(p => p.uuid !== localProject.uuid);
@@ -2127,26 +2129,22 @@ export default function App() {
       setConfirmDeleteProjectsStep(0);
       return;
     }
+
     try {
-      if ((storageService as any).deleteProjects) {
-        await (storageService as any).deleteProjects(ids);
-      } else {
-        for (const id of ids) {
-          if ((storageService as any).deleteAllEvidencesByProject) {
-            await (storageService as any).deleteAllEvidencesByProject(id);
-          }
-          await (storageService as any).deleteProject?.(id);
-        }
-      }
+      // IMPORTANTE: esta eliminación es solo visual/local.
+      // No toca Firestore, Firebase Storage ni las evidencias del proyecto.
+      await storageService.hideProjects(ids);
+
       if (selectedProject?.id != null && ids.includes(selectedProject.id)) {
         setSelectedProject(null);
         setEvidences([]);
         setCurrentStep('home');
       }
+
       clearProjectSelection();
       await loadData();
     } catch (e) {
-      console.error('[Projects] delete failed', e);
+      console.error('[Projects] No se pudo ocultar el proyecto de la lista principal', e);
     } finally {
       setPendingDeleteProjectIds([]);
       setConfirmDeleteProjectsStep(0);
@@ -8019,7 +8017,7 @@ export default function App() {
                 {pendingDeleteProjectIds.length === 1 ? '¿Eliminar proyecto?' : `¿Eliminar ${pendingDeleteProjectIds.length} proyectos?`}
               </h3>
               <p className="text-sm text-gray-600">
-                Se borrarán el proyecto y todos sus registros. Las fotos del álbum Field Trace no se eliminan automáticamente.
+                Se quitará el proyecto únicamente de la lista principal de este dispositivo. Sus datos, registros y fotografías permanecerán en Firebase y podrán consultarse desde <span className="font-bold text-gray-900">Proyectos compartidos</span>.
               </p>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => { setConfirmDeleteProjectsStep(0); setPendingDeleteProjectIds([]); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
@@ -8034,14 +8032,12 @@ export default function App() {
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border-2 border-red-200">
               <h3 className="text-base font-black uppercase tracking-tight text-red-700">Confirmación final</h3>
               <p className="text-sm text-gray-600">
-                Esta acción <span className="font-bold text-red-600">no se puede deshacer</span>.
-                {pendingDeleteProjectIds.length === 1
-                  ? ' ¿Eliminar definitivamente este proyecto?'
-                  : ` ¿Eliminar definitivamente ${pendingDeleteProjectIds.length} proyectos?`}
+                El proyecto dejará de mostrarse en la lista principal de este dispositivo.
+                <span className="block mt-2 font-bold text-gray-900">Los datos de Firebase y las fotografías de Storage NO se eliminarán.</span>
               </p>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => { setConfirmDeleteProjectsStep(0); setPendingDeleteProjectIds([]); }} className="flex-1 py-3.5 rounded-2xl bg-gray-100 text-gray-700 text-[11px] font-black uppercase tracking-wider">Cancelar</button>
-                <button type="button" onClick={() => { void executeDeleteProjects(); }} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Sí, eliminar</button>
+                <button type="button" onClick={() => { void executeDeleteProjects(); }} className="flex-1 py-3.5 rounded-2xl bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">Sí, ocultar</button>
               </div>
             </motion.div>
           </motion.div>
