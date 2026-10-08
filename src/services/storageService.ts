@@ -310,7 +310,7 @@ export const storageService = {
     }
 
     return evidenceId;
-  }
+  },
 
 
   /**
