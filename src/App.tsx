@@ -1256,7 +1256,7 @@ export default function App() {
             return slotA - slotB;
           })
           .slice(0, 9);
-      }}
+      }
       return {
         id,
         items: normalizedItems,
