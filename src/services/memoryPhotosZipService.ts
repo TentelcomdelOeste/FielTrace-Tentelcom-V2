@@ -515,12 +515,16 @@ export async function generateMemoryPhotosZip(
 
   const entries: ZipEntry[] = [];
   const usedNames = new Set<string>();
+  const MAX_CONCURRENT_DOWNLOADS = 4;
   let completed = 0;
 
   onProgress?.(0, photoEvidences.length, 'download');
 
-  // Las fotografías se descargan como bytes originales. No se redimensionan,
-  // recomprimen ni convierten; el ZIP conserva exactamente el archivo remoto.
+  // Primero construimos la lista de trabajos y sus nombres finales. Después
+  // descargamos hasta 4 fotografías simultáneamente. Esto evita el cuello de
+  // botella de esperar una fotografía completa antes de iniciar la siguiente.
+  const jobs: Array<{ ev: any; photoName: string }> = [];
+
   for (const group of orderedGroups) {
     const section = sanitizeName(SECTION_LABELS[group.category] || group.category, 'SIN CATEGORIA');
     const groupLabel = group.category === 'NAPS'
@@ -530,33 +534,69 @@ export async function generateMemoryPhotosZip(
         : `SET ${String(group.number || 0).padStart(2, '0')}`;
 
     const groupFolder = sanitizeName(groupLabel, 'SET');
-    // Estructura: SECCIÓN / NOMBRE DEL SET (o NAP/MUFA) / SET XX / fotografías.
-    // Esto evita mezclar sets cuando un proyecto contiene múltiples registros.
     const setFolder = `SET ${String(group.number || 0).padStart(2, '0')}`;
     const folder = `${section}/${groupFolder}/${setFolder}`;
 
     for (let index = 0; index < group.items.length; index++) {
       const ev = group.items[index];
-      onProgress?.(completed, photoEvidences.length, 'download');
-      const downloaded = await downloadPhotoBytes(ev);
-      const bytes = downloaded.bytes;
-      const extension = downloaded.extension;
       const photoNumber = getPhotoNumber(ev, index + 1);
+      const extension = getPhotoExtensionFromEvidence(ev);
       const fileBase = `${String(photoNumber).padStart(2, '0')}`;
-      const photoName = `${folder}/${fileBase}.${extension}`;
+      let photoName = `${folder}/${fileBase}.${extension}`;
 
-      let uniqueName = photoName;
       let suffix = 2;
-      while (usedNames.has(uniqueName)) {
-        uniqueName = `${folder}/${fileBase} (${suffix++}).${extension}`;
+      while (usedNames.has(photoName)) {
+        photoName = `${folder}/${fileBase} (${suffix++}).${extension}`;
       }
-      usedNames.add(uniqueName);
-
-      const crc = await crc32Yielding(bytes);
-      entries.push({ name: uniqueName, data: bytes, crc });
-      completed++;
-      onProgress?.(completed, photoEvidences.length, 'download');
+      usedNames.add(photoName);
+      jobs.push({ ev, photoName });
     }
+  }
+
+  const results = new Array<ZipEntry | null>(jobs.length).fill(null);
+  let nextJobIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const jobIndex = nextJobIndex++;
+      if (jobIndex >= jobs.length) return;
+
+      const job = jobs[jobIndex];
+      try {
+        const downloaded = await downloadPhotoBytes(job.ev);
+        const crc = await crc32Yielding(downloaded.bytes);
+
+        results[jobIndex] = {
+          name: job.photoName,
+          data: downloaded.bytes,
+          crc,
+        };
+
+        completed++;
+        onProgress?.(completed, photoEvidences.length, 'download');
+      } catch (error) {
+        // El primer error cancela el proceso completo. Los demás workers
+        // terminarán su solicitud actual y la promesa principal propagará
+        // el error para que la UI libere el botón.
+        throw error;
+      }
+    }
+  };
+
+  // Pool controlado: máximo 4 fotografías simultáneas. No usamos
+  // Promise.all() sobre las 250+ fotos porque eso puede saturar memoria/red.
+  await Promise.all(
+    Array.from(
+      { length: Math.min(MAX_CONCURRENT_DOWNLOADS, jobs.length) },
+      () => worker(),
+    ),
+  );
+
+  for (const entry of results) {
+    if (!entry) {
+      throw new Error('No se pudo completar una de las fotografías del ZIP.');
+    }
+    entries.push(entry);
   }
 
   onProgress?.(completed, photoEvidences.length, 'pack');
