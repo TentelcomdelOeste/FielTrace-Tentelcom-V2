@@ -3323,9 +3323,14 @@ export default function App() {
             .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
             .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
         );
+        const firstMufaNumber = Number(first?.mufaNumber || 0);
+        const firstMufaName = String(first?.mufaName || '').trim();
+        const displayName = firstMufaNumber === 0 && (!firstMufaName || firstMufaName.toUpperCase() === 'MUFA')
+          ? ''
+          : firstMufaName;
         return {
-          mufaNumber: Number(first?.mufaNumber || 0),
-          mufaName: first?.mufaName || '',
+          mufaNumber: firstMufaNumber,
+          mufaName: displayName,
           count: capturedSlots.size
         };
       }).sort((a, b) => a.mufaNumber - b.mufaNumber);
@@ -7750,15 +7755,17 @@ export default function App() {
                     );
 
                     return groups.map((group: any[], groupIndex: number) => {
-                      const mufaNumber = Number(group[0]?.mufaNumber || groupIndex + 1);
-                      const mufaName = group[0]?.mufaName || 'SIN NOMBRE';
+                      const storedMufaNumber = Number(group[0]?.mufaNumber || 0);
+                      const mufaNumber = storedMufaNumber > 0 ? storedMufaNumber : groupIndex + 1;
+                      const storedMufaName = String(group[0]?.mufaName || '').trim();
+                      const mufaName = storedMufaName && storedMufaName.toUpperCase() !== 'MUFA' ? storedMufaName : '';
 
                       return (
                         <div key={group[0]?.mufaId || `mufa-group-${mufaNumber}`} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
                           <div className="flex items-center justify-between gap-3 px-1 pb-3">
                             <div>
                               <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">
-                                MUFA {String(mufaNumber).padStart(2, '0')} · {mufaName}
+                                MUFA {String(mufaNumber).padStart(2, '0')}{mufaName ? ' · ' + mufaName : ''}
                               </p>
                               <p className="text-[8px] font-bold uppercase text-gray-400 mt-1 lg:text-[9px] lg:leading-tight">
                                 {group.length}/9 FOTOS · GRUPO INDEPENDIENTE
