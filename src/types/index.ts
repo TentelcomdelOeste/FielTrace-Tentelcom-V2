@@ -47,6 +47,9 @@ export interface Project {
   lastSyncedAt?: Date;
   syncError?: string;
   retryCount?: number;
+  // Marca exclusivamente local: oculta el proyecto de la lista principal de este dispositivo/usuario.
+  // No se sincroniza con Firebase ni afecta "Proyectos compartidos".
+  hiddenFromHome?: boolean;
   // Versionado de esquema de sincronización remota. Permite migrar una vez los registros antiguos.
   syncSchemaVersion?: number;
 }
