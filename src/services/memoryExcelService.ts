@@ -1450,7 +1450,7 @@ async function addEvidenceSheet(
           // con el nombre que el usuario asignó al crearlo.
           // No mostramos "FOTO 1/9", etc.; el número de fotografía ya queda
           // determinado por su posición dentro del set.
-          const mufaDisplayName = getMufaDisplayName(group.items);
+          const mufaDisplayName = getMufaDisplayName(group.items).toUpperCase();
           caption.value = mufaDisplayName ? `MUFA ${mufaDisplayName}` : 'MUFA';
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
