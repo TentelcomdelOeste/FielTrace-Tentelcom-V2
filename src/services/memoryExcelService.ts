@@ -1436,9 +1436,12 @@ async function addEvidenceSheet(
 
           sheet.mergeCells(blockBottom, col, blockBottom, col + 2);
           const caption = sheet.getCell(blockBottom, col);
-          // La pestaña ya identifica la sección como MUFA.
-          // No repetimos la etiqueta ni el nombre histórico "MUFA" en cada foto.
-          caption.value = `FOTO ${index + 1}/9`;
+          // En MUFA, el pie de cada fotografía debe identificar el SET
+          // con el nombre que el usuario asignó al crearlo.
+          // No mostramos "FOTO 1/9", etc.; el número de fotografía ya queda
+          // determinado por su posición dentro del set.
+          const mufaDisplayName = String(group.name || '').trim();
+          caption.value = mufaDisplayName || 'MUFA';
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
