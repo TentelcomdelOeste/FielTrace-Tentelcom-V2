@@ -7709,16 +7709,19 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'MUFA' ? (() => {
                     const mufaPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA' && ev.mufaId)
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA' && (
+                        ev.mufaId || ev.mufaNumber != null || String(ev.mufaName || '').trim()
+                      ))
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.mufaNumber || 0) - Number(b.mufaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
-                        return Number(a.mufaPhotoNumber || 0) - Number(b.mufaPhotoNumber || 0);
+                        return Number(a.mufaPhotoNumber || a.photoNumber || 0) - Number(b.mufaPhotoNumber || b.photoNumber || 0);
                       });
 
                     const groups = Array.from(
                       mufaPhotos.reduce((map: Map<string, any[]>, ev: any) => {
-                        const key = ev.mufaId || `legacy-nap-${ev.mufaNumber || ev.id || ev.uuid}`;
+                        const key = ev.mufaId ||
+                          'mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase();
                         if (!map.has(key)) map.set(key, []);
                         map.get(key)!.push(ev);
                         return map;
@@ -7789,7 +7792,7 @@ export default function App() {
                                     setEvidenceCategory('MUFA');
                                     // Captura puntual: al volver de la cámara se regresa
                                     // al visor después de completar únicamente esta foto.
-                                    setNapCaptureDraft({
+                                    setMufaCaptureDraft({
                                       mufaId,
                                       mufaNumber,
                                       mufaName,
