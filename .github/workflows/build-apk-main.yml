@@ -280,7 +280,7 @@ jobs:
           test -n "$FIELDTRACE_KEY_ALIAS"
           test -n "$FIELDTRACE_KEY_PASSWORD"
 
-          EXPECTED_SHA256="73:9A:14:31:97:70:03:51:92:30:B0:B4:84:15:5F:90:3F:F2:F8:52:1B:40:C3:7A:8B:A1:8F:B2:67:B0:DC:B3"
+          EXPECTED_SHA256="D4:DC:8C:E9:27:10:09:33:D3:0C:46:8F:3B:E2:6D:25:F9:F5:9C:4D:80:93:45:49:12:A8:63:E4:F4:E2:C8:69"
           KEYTOOL_OUT=$(keytool -list -v \
             -keystore android/app/fieldtrace-signing.jks \
             -storepass "$FIELDTRACE_KEYSTORE_PASSWORD" \
@@ -385,7 +385,7 @@ jobs:
           VERIFY_OUT=$("$APKSIGNER" verify --verbose --print-certs "$APK" 2>&1)
           echo "$VERIFY_OUT"
 
-          EXPECTED_SHA256="739a1431977003519230b0b484155f903ff2f8521b40c37a8ba18fb267b0dcb3"
+          EXPECTED_SHA256="d4dc8ce927100933d30c468f3be26d25f9f59c4d8093454912a863e4f4e2c869"
           echo "$VERIFY_OUT" | grep -qi "$EXPECTED_SHA256"
           if echo "$VERIFY_OUT" | grep -q "CN=Android Debug"; then
             echo "FAIL: APK is signed with Android Debug instead of the persistent FieldTrace key"
