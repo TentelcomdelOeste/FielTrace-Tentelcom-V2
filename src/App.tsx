@@ -3572,11 +3572,11 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
-                <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-4 text-white shadow-2xl relative overflow-hidden">
+                <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-3 text-white shadow-2xl relative overflow-hidden">
                    <div className="relative z-10">
-                     <p className="text-[10px] font-black uppercase opacity-40 mb-2 tracking-widest">Estado de Sincronización</p>
-                     <h3 className="text-xl font-bold leading-tight mb-3">{syncRunning ? 'Sincronizando...' : syncSummary.failed > 0 ? 'Atención requerida' : syncSummary.pending > 0 ? 'Registros pendientes' : 'Todo sincronizado'}</h3>
-                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-5 text-[10px] font-bold uppercase tracking-tight text-white/70">
+                     <p className="text-[10px] font-black uppercase opacity-40 mb-1 xl:mb-1 tracking-widest">Estado de Sincronización</p>
+                     <h3 className="text-xl font-bold leading-tight mb-2 xl:mb-1.5">{syncRunning ? 'Sincronizando...' : syncSummary.failed > 0 ? 'Atención requerida' : syncSummary.pending > 0 ? 'Registros pendientes' : 'Todo sincronizado'}</h3>
+                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 xl:mb-2 text-[10px] font-bold uppercase tracking-tight text-white/70">
                        <span className="text-green-400">✓ {syncSummary.synced} sincronizados</span>
                        <span className="text-amber-300">↻ {syncSummary.pending} pendientes</span>
                        <span className="text-red-300">⚠ {syncSummary.failed} con error</span>
@@ -3596,13 +3596,13 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => { void loadMemoryDashboard(); }}
-                  className="w-full p-5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform xl:ml-0"
+                  className="w-full p-5 xl:p-3.5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform xl:ml-0"
                 >
                   <div className="flex items-center gap-3 text-left">
                     <FileSpreadsheet className="w-6 h-6" />
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-widest">Memoria Fotográfica</p>
-                      <p className="text-[9px] font-bold text-white/70 uppercase">Revisar proyectos y fotografías en Firebase</p>
+                      <p className="text-[11px] xl:text-[13px] font-black uppercase tracking-widest">Memoria Fotográfica</p>
+                      <p className="text-[9px] xl:text-[10px] font-bold text-white/70 uppercase">Revisar proyectos y fotografías en Firebase</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5" />
