@@ -1473,6 +1473,15 @@ async function addEvidenceSheet(
 
     if (category.id === 'MUFA') {
       const photoRows = Math.ceil(category.required / 3);
+
+      // Replica el mismo flujo de NAPS: se conservan las dos filas divisorias
+      // entre sets y, desde el segundo MUFA, se repite el mismo recuadro
+      // DATOS DE LA OBRA antes de las 9 fotografías.
+      if (groupIndex > 0) {
+        addRepeatedProjectDataBox(sheet, project, row);
+        row += 7;
+      }
+
       const imageRowStart = row;
       const blockHeight = 7;
       const imageHeightRows = 6;
