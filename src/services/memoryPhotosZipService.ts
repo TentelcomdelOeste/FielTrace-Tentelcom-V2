@@ -220,12 +220,47 @@ const resolvePhotoUrls = async (ev: any): Promise<string[]> => {
   return urls;
 };
 
+const extractStoragePathFromUrl = (value: unknown): string[] => {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+
+  const candidates: string[] = [];
+
+  // Firebase Storage download URLs use:
+  // .../o/<URL-encoded-storage-path>?alt=media&token=...
+  try {
+    const url = new URL(raw);
+    const match = url.pathname.match(/\/o\/(.+)$/);
+    if (match?.[1]) {
+      candidates.push(decodeURIComponent(match[1]));
+    }
+  } catch {
+    // Puede ser una URL antigua/mal formada; seguimos con los formatos conocidos.
+  }
+
+  // Compatibilidad con referencias gs://bucket/path.
+  if (raw.startsWith('gs://')) {
+    const withoutScheme = raw.slice(5);
+    const slash = withoutScheme.indexOf('/');
+    if (slash > 0) candidates.push(withoutScheme.slice(slash + 1));
+  }
+
+  return candidates.filter(Boolean);
+};
+
 const getStoragePathCandidates = (ev: any): string[] => {
   const candidates: string[] = [];
   const add = (value: unknown) => {
     const path = String(value || '').trim();
     if (path && !candidates.includes(path)) candidates.push(path);
   };
+
+  // PRIORIDAD MÁXIMA: si Firestore conserva una photoUrl válida, extraemos
+  // de ella la ruta exacta del objeto. Esto permite descargar fotografías
+  // históricas aunque photoStoragePath/photoPath hayan quedado mal formados.
+  for (const url of [ev?.photoUrl, ev?.photo?.uri, ev?.photo?.url]) {
+    extractStoragePathFromUrl(url).forEach(add);
+  }
 
   add(ev?.photoStoragePath);
 
