@@ -229,7 +229,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
 import { firebaseService } from './services/firebaseService';
 import { exportService } from './services/exportService';
-import { generateMemoryExcel } from './services/memoryExcelService';
+import { generateMemoryExcel } from './services/memoryExcelService';\nimport { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
 import { shareService } from './services/shareService';
@@ -249,7 +249,7 @@ export default function App() {
   const [memoryProjectSearch, setMemoryProjectSearch] = useState("");
   const [memorySelectedCategory, setMemorySelectedCategory] = useState<string | null>(null);
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
-  const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
+  const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);\n  const [memoryZipLoading, setMemoryZipLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
@@ -1327,6 +1327,26 @@ export default function App() {
       alert(error?.message || 'No se pudo generar el Excel de memoria fotográfica.');
     } finally {
       setMemoryExcelLoading(false);
+    }
+  };
+
+  const handleGenerateMemoryPhotosZip = async () => {
+    if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading) return;
+    setMemoryZipLoading(true);
+    try {
+      const evidences = memorySelectedProject._evidences || [];
+      await generateMemoryPhotosZip(
+        memorySelectedProject,
+        evidences,
+        (completed, total) => {
+          console.log(`[Memory ZIP] ${completed}/${total} fotografías preparadas`);
+        },
+      );
+    } catch (error: any) {
+      console.error('[Memory ZIP] Error generando:', error);
+      alert(error?.message || 'No se pudo generar el ZIP de fotografías.');
+    } finally {
+      setMemoryZipLoading(false);
     }
   };
 
@@ -3735,17 +3755,31 @@ export default function App() {
                           <p className="text-[8px] text-blue-500 font-bold uppercase mt-1">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => { void handleGenerateMemoryExcel(); }}
-                          disabled={memoryExcelLoading}
-                          className="w-full bg-blue-600 text-white rounded-2xl px-5 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]"
-                        >
-                          <FileSpreadsheet className={"w-5 h-5 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
-                          <span className="text-[10px] font-black uppercase tracking-widest">
-                            {memoryExcelLoading ? 'GENERANDO EXCEL...' : 'GENERAR EXCEL DE MEMORIA'}
-                          </span>
-                        </button>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => { void handleGenerateMemoryExcel(); }}
+                            disabled={memoryExcelLoading || memoryZipLoading}
+                            className="bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]"
+                          >
+                            <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-center">
+                              {memoryExcelLoading ? 'GENERANDO...' : 'GENERAR EXCEL'}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => { void handleGenerateMemoryPhotosZip(); }}
+                            disabled={memoryExcelLoading || memoryZipLoading}
+                            className="bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99]"
+                          >
+                            <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-center">
+                              {memoryZipLoading ? 'PREPARANDO ZIP...' : 'DESCARGAR FOTOS ZIP'}
+                            </span>
+                          </button>
+                        </div>
 
                         <div className="space-y-3">
                           {memoryCategories.map((category) => {
