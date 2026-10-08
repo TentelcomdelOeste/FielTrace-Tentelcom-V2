@@ -1833,9 +1833,16 @@ async function addEvidenceSheet(
 export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[]) {
   const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-  // Preparar un pequeño pipeline de descargas paralelas. No se almacenan todas
-  // las imágenes en memoria: solo las siguientes 4 como máximo.
-  const imageUrls = evidences.map(getPhotoUrl).filter(Boolean);
+  const selectedCategories = selectedCategoryIds?.length
+    ? new Set(selectedCategoryIds.map(id => normalizeMemoryCategory(id)))
+    : null;
+
+  // Preparar el pipeline de descargas únicamente para las secciones elegidas.
+  // Así, al desmarcar libros, tampoco se descargan sus fotografías.
+  const imageUrls = evidences
+    .filter(ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category)))
+    .map(getPhotoUrl)
+    .filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
   const workbook = new ExcelJS.Workbook();
@@ -1847,10 +1854,6 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   // Los valores variables de la columna C se dejan vacíos hasta integrar
   // los datos específicos del proyecto/sitio.
   addDataSheet(workbook, project);
-
-  const selectedCategories = selectedCategoryIds?.length
-    ? new Set(selectedCategoryIds.map(id => normalizeMemoryCategory(id)))
-    : null;
 
   for (const category of CATEGORY_CONFIG) {
     if (selectedCategories && !selectedCategories.has(category.id)) continue;
