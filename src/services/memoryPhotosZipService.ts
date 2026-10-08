@@ -480,9 +480,13 @@ export async function generateMemoryPhotosZip(
   project: any,
   evidences: any[],
   onProgress?: (completed: number, total: number, phase: 'download' | 'pack' | 'ready') => void,
+  sectionCategory?: string,
 ): Promise<void> {
   const projectName = sanitizeName(project?.name, 'PROYECTO');
-  const photoEvidences = evidences.filter(hasPhoto);
+  const normalizedSection = sectionCategory ? normalizeCategory(sectionCategory) : '';
+  const photoEvidences = evidences
+    .filter(hasPhoto)
+    .filter(ev => !normalizedSection || normalizeCategory(ev?.category) === normalizedSection);
 
   if (!photoEvidences.length) {
     throw new Error('Este proyecto no tiene fotografías disponibles para descargar.');
@@ -628,5 +632,8 @@ export async function generateMemoryPhotosZip(
   await yieldToBrowser();
   onProgress?.(completed, photoEvidences.length, 'ready');
   const blob = new Blob(parts, { type: 'application/zip' });
-  triggerDownload(blob, `${projectName} - FOTOS.zip`);
+  const downloadLabel = normalizedSection
+    ? sanitizeName(SECTION_LABELS[normalizedSection] || normalizedSection, normalizedSection)
+    : 'FOTOS';
+  triggerDownload(blob, `${projectName} - ${downloadLabel}.zip`);
 }
