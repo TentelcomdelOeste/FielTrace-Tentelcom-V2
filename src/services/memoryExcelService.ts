@@ -1038,7 +1038,7 @@ async function addEvidenceSheet(
 
   for (const group of orderedGroups) {
     const startRow = row;
-    if (category.id !== 'RESERVA') {
+    if (category.id !== 'RESERVA' && category.id !== 'NAPS') {
       const groupTitle = category.id === 'NAPS'
         ? `NAP ${String(group.number).padStart(2, '0')}`
         : category.id === 'MUFA'
@@ -1192,9 +1192,15 @@ async function addEvidenceSheet(
       const blockHeight = 7;
       const imageHeightRows = 6;
 
+      // Las dimensiones del recuadro ya definido son las que mandan.
+      // Primero fijamos sus alturas y después calculamos el espacio real
+      // disponible para la fotografía. Así ninguna imagen puede salirse.
       for (let photoRow = 0; photoRow < photoRows; photoRow++) {
         const blockTop = imageRowStart + photoRow * blockHeight;
         const blockBottom = blockTop + imageHeightRows;
+        for (let r = blockTop; r < blockBottom; r++) {
+          sheet.getRow(r).height = 50;
+        }
         sheet.getRow(blockBottom).height = 24;
 
         for (let indexInRow = 0; indexInRow < 3; indexInRow++) {
@@ -1221,18 +1227,6 @@ async function addEvidenceSheet(
             if (url) {
               try {
                 const image = await imageToBase64(url);
-                const photoBoxWidthPx = 600;
-                const photoBoxHeightPx = 450;
-                const scale = Math.min(
-                  photoBoxWidthPx / image.width,
-                  photoBoxHeightPx / image.height,
-                );
-                const imageWidth = Math.max(1, Math.round(image.width * scale));
-                const imageHeight = Math.max(1, Math.round(image.height * scale));
-                const imageId = workbook.addImage({
-                  base64: image.base64,
-                  extension: image.extension,
-                });
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1247,6 +1241,23 @@ async function addEvidenceSheet(
                     );
                   },
                 ).reduce((sum, value) => sum + value, 0);
+
+                // Margen interno para que la foto nunca toque ni sobrepase
+                // las líneas del recuadro existente.
+                const availableWidthPx = Math.max(1, totalCellWidthEmu / EMU_PER_PIXEL - 12);
+                const availableHeightPx = Math.max(1, totalCellHeightEmu / EMU_PER_PIXEL - 12);
+
+                const scale = Math.min(
+                  availableWidthPx / image.width,
+                  availableHeightPx / image.height,
+                );
+                const imageWidth = Math.max(1, Math.floor(image.width * scale));
+                const imageHeight = Math.max(1, Math.floor(image.height * scale));
+
+                const imageId = workbook.addImage({
+                  base64: image.base64,
+                  extension: image.extension,
+                });
 
                 const imageWidthEmu = Math.round(imageWidth * EMU_PER_PIXEL);
                 const imageHeightEmu = Math.round(imageHeight * EMU_PER_PIXEL);
@@ -1276,10 +1287,9 @@ async function addEvidenceSheet(
 
           sheet.mergeCells(blockBottom, col, blockBottom, col + 2);
           const caption = sheet.getCell(blockBottom, col);
-          caption.value = ev ? getNapsPhotoTitle(ev, index) : getNapsPhotoTitle(
-            { napName: group.name } as MemoryEvidence,
-            index,
-          );
+          caption.value = ev
+            ? getNapsPhotoTitle(ev, index)
+            : getNapsPhotoTitle({ napName: group.name } as MemoryEvidence, index);
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
@@ -1287,10 +1297,6 @@ async function addEvidenceSheet(
             bottom: { style: 'medium', color: { argb: '222222' } },
             right: { style: 'medium', color: { argb: '222222' } },
           };
-        }
-
-        for (let r = blockTop; r < blockBottom; r++) {
-          sheet.getRow(r).height = 50;
         }
       }
 
