@@ -2314,9 +2314,74 @@ export default function App() {
       return { width: 4096, height: 4096 };
     }
   };
+  /**
+   * Regla única de integridad para todos los SETS fotográficos.
+   * Nunca se permite capturar una posición ya existente ni agregar fotos
+   * a un SET que alcanzó su cantidad máxima. La validación ocurre antes
+   * de acceder a la cámara para que el bloqueo sea absoluto.
+   */
+  const validateActiveSetBeforeCapture = (): { allowed: boolean; message?: string } => {
+    const category = evidenceCategory;
+    const reject = (message: string) => {
+      alert(message);
+      return { allowed: false, message };
+    };
+
+    if (category === 'NAPS' && napCaptureDraft) {
+      const group = evidences.filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId);
+      const slots = new Set(group.map(ev => Number(ev.napPhotoNumber)).filter(n => Number.isInteger(n) && n >= 1 && n <= 9));
+      if (slots.size >= 9 || napCaptureDraft.photoNumber > 9) return reject('Este SET de NAPS ya está completo (9/9). Cree un nuevo SET para continuar.');
+      if (slots.has(napCaptureDraft.photoNumber)) return reject(`La FOTO ${napCaptureDraft.photoNumber}/9 de este NAP ya existe. No se puede duplicar una posición.`);
+      return { allowed: true };
+    }
+
+    if (category === 'MUFA' && mufaCaptureDraft) {
+      const group = evidences.filter(ev => ev.category === 'MUFA' && (
+        (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
+        (!ev.mufaId && Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
+          String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
+      ));
+      const slots = new Set(group.map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber)).filter(n => Number.isInteger(n) && n >= 1 && n <= 9));
+      if (slots.size >= 9 || mufaCaptureDraft.photoNumber > 9) return reject('Este SET de MUFA ya está completo (9/9). Cree un nuevo SET para continuar.');
+      if (slots.has(mufaCaptureDraft.photoNumber)) return reject(`La FOTO ${mufaCaptureDraft.photoNumber}/9 de este MUFA ya existe. No se puede duplicar una posición.`);
+      return { allowed: true };
+    }
+
+    if (category === 'PUNTAS_FIBRA' && fiberCaptureDraft) {
+      const group = evidences.filter(ev =>
+        (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') && ev.fiberPairId === fiberCaptureDraft.pairId
+      );
+      const expectedCategory = fiberCaptureDraft.side === 'initial' ? 'PUNTAS_FIBRA_INICIAL' : 'PUNTAS_FIBRA_FINAL';
+      if (group.length >= 2) return reject('Este SET de PUNTAS DE FIBRA ya está completo (2/2). Cree un nuevo SET para continuar.');
+      if (group.some(ev => ev.category === expectedCategory)) return reject(`Este SET ya tiene la PUNTA ${fiberCaptureDraft.side === 'initial' ? 'INICIAL' : 'FINAL'} registrada.`);
+      return { allowed: true };
+    }
+
+    const sideSetConfig: Record<string, { id?: string; side?: string; label: string; max: number; idField: string; sideField: string }> = {
+      RESERVA: { id: reserveCaptureDraft?.reserveId, side: reserveCaptureDraft?.side, label: 'RESERVA', max: 3, idField: 'reserveId', sideField: 'reserveSide' },
+      ACEROS: { id: aceroCaptureDraft?.aceroId, side: aceroCaptureDraft?.side, label: 'ACERO', max: 2, idField: 'aceroId', sideField: 'aceroSide' },
+      DESECHOS: { id: desechoCaptureDraft?.desechoId, side: desechoCaptureDraft?.side, label: 'DESECHO', max: 2, idField: 'desechoId', sideField: 'desechoSide' },
+      ALTAS: { id: altaCaptureDraft?.altaId, side: altaCaptureDraft?.side, label: 'ALTA', max: 2, idField: 'altaId', sideField: 'altaSide' },
+      MEJORAS: { id: mejoraCaptureDraft?.mejoraId, side: mejoraCaptureDraft?.side, label: 'MEJORA', max: 2, idField: 'mejoraId', sideField: 'mejoraSide' }
+    };
+
+    const config = sideSetConfig[category];
+    if (!config?.id || !config.side) return { allowed: true };
+
+    const group = evidences.filter(ev => ev.category === category && String((ev as any)[config.idField] || '') === String(config.id));
+    if (group.length >= config.max) return reject(`Este SET de ${config.label} ya está completo (${config.max}/${config.max}). Cree un nuevo SET para continuar.`);
+    if (group.some(ev => String((ev as any)[config.sideField] || '') === String(config.side))) return reject(`Esta posición del SET de ${config.label} ya está registrada. No se puede duplicar la fotografía.`);
+
+    return { allowed: true };
+  };
+
   const captureBatchPhoto = async () => {
     // Anti doble-tap con ref (sin spinner ni disabled en el botón)
     if (!selectedProject || capturingRef.current) return;
+
+    // Bloqueo absoluto de SET antes de acceder a la cámara.
+    const setValidation = validateActiveSetBeforeCapture();
+    if (!setValidation.allowed) return;
 
     // NAPS tiene un límite absoluto de 9 fotografías por set.
     // Además se bloquea una segunda captura mientras la anterior termina de
