@@ -399,9 +399,13 @@ jobs:
             -alias "$FIELDTRACE_KEY_ALIAS" \
             | awk -F': ' '/SHA256:/ {print $2; exit}' \
             | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          # apksigner prefixes the digest line with "V2 Signer:".
+          # Using $2 would capture the label instead of the digest; use the
+          # final colon-separated field so the comparison is against the actual
+          # certificate fingerprint.
           APK_SHA256=$(echo "$VERIFY_OUT" \
-            | awk -F': ' '/certificate SHA-256 digest:/ {print $2; exit}' \
-            | tr -d ':' | tr '[:upper:]' '[:lower:]')
+            | awk -F': ' '/certificate SHA-256 digest:/ {print $NF; exit}' \
+            | tr -d ':' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
 
           test -n "$KEY_SHA256"
           test -n "$APK_SHA256"
