@@ -3554,7 +3554,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-7 pt-4 xl:-mt-4 xl:space-y-4"
+                className="space-y-7 pt-4 -mt-4 xl:-mt-4 xl:space-y-4"
               >
                 <div className="flex justify-between items-center">
                    <div>
@@ -3563,7 +3563,7 @@ export default function App() {
                    <div className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100"><UserCircle className="w-6 h-6 text-gray-400"/></div>
                 </div>
 
-                <div className="xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
+                <div className="space-y-4 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
                 <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-4 text-white shadow-2xl relative overflow-hidden">
                    <div className="relative z-10">
                      <p className="text-[10px] font-black uppercase opacity-40 mb-2 tracking-widest">Estado de Sincronización</p>
