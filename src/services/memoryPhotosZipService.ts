@@ -351,12 +351,23 @@ const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extensi
   const storagePaths = getStoragePathCandidates(ev);
   const storageErrors: string[] = [];
 
-  // Primera opción: SDK autenticado. Esto evita CORS y URLs de descarga
-  // antiguas que pueden responder 403.
+  // Primero usamos la misma URL que ya funciona para la visualización/Excel.
+  // Esto evita que un getBytes() sobre una ruta histórica incorrecta bloquee
+  // toda la generación del ZIP.
+  try {
+    const response = await fetchPhotoResponse(ev);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return { bytes, extension: getExtension(response, response.url) };
+  } catch (error: any) {
+    storageErrors.push(`URL/PROXY => ${describeFirebaseError(error)}`);
+  }
+
+  // Si no existe una URL utilizable, intentamos el SDK autenticado con las
+  // rutas conocidas/reconstruidas.
   for (const storagePath of storagePaths) {
     try {
       const bytes = await firebaseService.getEvidencePhotoBytes(storagePath);
-      console.log('[Memory ZIP] Storage OK:', {
+      console.log('[Memory ZIP] Storage SDK OK:', {
         evidence: ev?.uuid || '',
         path: storagePath,
         bytes: bytes.byteLength,
@@ -369,35 +380,57 @@ const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extensi
     }
   }
 
-  // Compatibilidad con evidencias que solo conservan photoUrl.
+  const diagnostic = [
+    'No se pudo descargar una fotografía para el ZIP.',
+    getEvidenceDiagnosticLabel(ev),
+    `URLS DE FOTO DETECTADAS: ${getPhotoSourceUrls(ev).length ? getPhotoSourceUrls(ev).join(' || ') : 'NINGUNA'}`,
+    `RUTAS STORAGE PROBADAS: ${storagePaths.length ? storagePaths.join(' || ') : 'NINGUNA'}`,
+    `ERRORES: ${storageErrors.length ? storageErrors.join(' || ') : 'NINGUNO'}`,
+  ].join(' | ');
+
+  console.error('[Memory ZIP] DIAGNÓSTICO DE DESCARGA:', {
+    label: getEvidenceDiagnosticLabel(ev),
+    storagePaths,
+    storageErrors,
+    photoSources: getPhotoSourceUrls(ev),
+    photoStoragePath: ev?.photoStoragePath || '',
+    projectUuid: ev?.projectUuid || '',
+    evidenceUuid: ev?.uuid || '',
+  });
+
+  throw new Error(diagnostic);
+};
+
+const FETCH_TIMEOUT_MS = 45_000;
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetchPhotoResponse(ev);
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    return { bytes, extension: getExtension(response, response.url) };
+    return await fetch(input, { ...init, signal: controller.signal });
   } catch (error: any) {
-    const urlError = describeFirebaseError(error);
-    const diagnostic = [
-      'No se pudo descargar una fotografía para el ZIP.',
-      getEvidenceDiagnosticLabel(ev),
-      `URLS DE FOTO DETECTADAS: ${getPhotoSourceUrls(ev).length ? getPhotoSourceUrls(ev).join(' || ') : 'NINGUNA'}`,
-      `RUTAS STORAGE PROBADAS: ${storagePaths.length ? storagePaths.join(' || ') : 'NINGUNA'}`,
-      `ERRORES STORAGE: ${storageErrors.length ? storageErrors.join(' || ') : 'NINGUNO'}`,
-      `URL/PROXY: ${urlError}`,
-    ].join(' | ');
-
-    console.error('[Memory ZIP] DIAGNÓSTICO DE DESCARGA:', {
-      label: getEvidenceDiagnosticLabel(ev),
-      storagePaths,
-      storageErrors,
-      urlError,
-      photoUrl: ev?.photoUrl || '',
-      photoStoragePath: ev?.photoStoragePath || '',
-      projectUuid: ev?.projectUuid || '',
-      evidenceUuid: ev?.uuid || '',
-    });
-
-    throw new Error(diagnostic);
+    if (error?.name === 'AbortError') {
+      throw new Error(`Tiempo de espera agotado después de ${FETCH_TIMEOUT_MS / 1000} segundos.`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
+};
+
+const yieldToBrowser = () => new Promise<void>(resolve => window.setTimeout(resolve, 0));
+
+const crc32Yielding = async (data: Uint8Array): Promise<number> => {
+  let crc = 0xffffffff;
+  const CHUNK_SIZE = 8 * 1024 * 1024;
+  for (let start = 0; start < data.length; start += CHUNK_SIZE) {
+    const end = Math.min(start + CHUNK_SIZE, data.length);
+    for (let i = start; i < end; i++) {
+      crc = crcTable[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+    }
+    await yieldToBrowser();
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 };
 
 const fetchPhotoResponse = async (ev: any): Promise<Response> => {
@@ -407,7 +440,7 @@ const fetchPhotoResponse = async (ev: any): Promise<Response> => {
 
   for (const url of urls) {
     try {
-      const direct = await fetch(url, { mode: 'cors', cache: 'no-store' });
+      const direct = await fetchWithTimeout(url, { mode: 'cors', cache: 'no-store' });
       if (direct.ok) return direct;
       lastStatus = direct.status;
 
@@ -415,7 +448,7 @@ const fetchPhotoResponse = async (ev: any): Promise<Response> => {
       // directa (por ejemplo 403), usamos el proxy de Storage de Netlify.
       if (typeof window !== 'undefined') {
         const proxyUrl = `${window.location.origin}/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
-        const proxied = await fetch(proxyUrl, { cache: 'no-store' });
+        const proxied = await fetchWithTimeout(proxyUrl, { cache: 'no-store' });
         if (proxied.ok) return proxied;
         lastStatus = proxied.status;
       }
@@ -425,7 +458,7 @@ const fetchPhotoResponse = async (ev: any): Promise<Response> => {
       if (typeof window !== 'undefined') {
         try {
           const proxyUrl = `${window.location.origin}/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
-          const proxied = await fetch(proxyUrl, { cache: 'no-store' });
+          const proxied = await fetchWithTimeout(proxyUrl, { cache: 'no-store' });
           if (proxied.ok) return proxied;
           lastStatus = proxied.status;
         } catch (proxyError) {
@@ -446,7 +479,7 @@ const fetchPhotoResponse = async (ev: any): Promise<Response> => {
 export async function generateMemoryPhotosZip(
   project: any,
   evidences: any[],
-  onProgress?: (completed: number, total: number) => void,
+  onProgress?: (completed: number, total: number, phase: 'download' | 'pack' | 'ready') => void,
 ): Promise<void> {
   const projectName = sanitizeName(project?.name, 'PROYECTO');
   const photoEvidences = evidences.filter(hasPhoto);
@@ -484,6 +517,8 @@ export async function generateMemoryPhotosZip(
   const usedNames = new Set<string>();
   let completed = 0;
 
+  onProgress?.(0, photoEvidences.length, 'download');
+
   // Las fotografías se descargan como bytes originales. No se redimensionan,
   // recomprimen ni convierten; el ZIP conserva exactamente el archivo remoto.
   for (const group of orderedGroups) {
@@ -502,6 +537,7 @@ export async function generateMemoryPhotosZip(
 
     for (let index = 0; index < group.items.length; index++) {
       const ev = group.items[index];
+      onProgress?.(completed, photoEvidences.length, 'download');
       const downloaded = await downloadPhotoBytes(ev);
       const bytes = downloaded.bytes;
       const extension = downloaded.extension;
@@ -516,11 +552,14 @@ export async function generateMemoryPhotosZip(
       }
       usedNames.add(uniqueName);
 
-      entries.push({ name: uniqueName, data: bytes, crc: crc32(bytes) });
+      const crc = await crc32Yielding(bytes);
+      entries.push({ name: uniqueName, data: bytes, crc });
       completed++;
-      onProgress?.(completed, photoEvidences.length);
+      onProgress?.(completed, photoEvidences.length, 'download');
     }
   }
+
+  onProgress?.(completed, photoEvidences.length, 'pack');
 
   // Se usa ZIP sin compresión: las fotos ya están comprimidas (JPG/WEBP),
   // por lo que recomprimirlas solo consumiría CPU y memoria sin mejorar
@@ -529,11 +568,13 @@ export async function generateMemoryPhotosZip(
   const centralParts: Uint8Array[] = [];
   let offset = 0;
 
-  for (const entry of entries) {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
     const localHeader = makeLocalHeader(entry, offset);
     parts.push(localHeader, entry.data);
     centralParts.push(makeCentralHeader(entry, offset));
     offset += localHeader.length + entry.data.length;
+    if ((i + 1) % 5 === 0) await yieldToBrowser();
   }
 
   let centralOffset = offset;
@@ -544,6 +585,8 @@ export async function generateMemoryPhotosZip(
   }
 
   parts.push(makeEndRecord(entries.length, centralSize, centralOffset));
+  await yieldToBrowser();
+  onProgress?.(completed, photoEvidences.length, 'ready');
   const blob = new Blob(parts, { type: 'application/zip' });
   triggerDownload(blob, `${projectName} - FOTOS.zip`);
 }
