@@ -1207,12 +1207,21 @@ export default function App() {
           : evCategory;
       return normalizedCategory === category;
     });
+    const hasPhoto = (ev: any) => Boolean(
+      String(ev.photoUrl || ev.photo?.uri || ev.photo?.url || '').trim()
+    );
     const groups = new Map<string, any[]>();
 
     evidences.forEach((ev: any) => {
       let key = ev.uuid || String(evidences.indexOf(ev));
       if (category === 'NAPS') key = ev.napId || key;
-      if (category === 'MUFA') key = ev.mufaId || key;
+      if (category === 'MUFA') {
+        key = ev.mufaId || (
+          ev.mufaNumber != null || String(ev.mufaName || '').trim()
+            ? 'mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase()
+            : key
+        );
+      }
       if (category === 'PUNTAS_FIBRA') key = ev.fiberPairId || key;
       if (category === 'RESERVA') key = ev.reserveId || key;
       if (category === 'ACEROS') key = ev.aceroId || key;
@@ -1255,12 +1264,12 @@ export default function App() {
           items[0]?.altaNumber ?? items[0]?.mejoraNumber ?? 0
         ),
         name: items[0]?.napName || items[0]?.mufaName || items[0]?.categoryLabel || '',
-        count: category === 'MUFA' ? normalizedItems.length : items.length,
+        count: normalizedItems.filter(hasPhoto).length,
         required
       };
     }).sort((a, b) => a.number - b.number);
 
-    const captured = evidences.length;
+    const captured = evidences.filter(hasPhoto).length;
     const requiredTotal = groupList.length * required;
     const complete = groupList.filter(group => group.count >= required).length;
     return {
