@@ -880,43 +880,31 @@ export default function App() {
   }, [refreshSyncSummary]);
 
   const loadData = async () => {
-    // Firebase es la fuente compartida entre dispositivos. IndexedDB/LocalDB
-    // se mantiene como caché local para trabajar offline.
-    let localProjects = await storageService.getAllProjects();
-
-    if (navigator.onLine) {
-      try {
-        const remoteProjects = await firebaseService.getCloudProjects();
-
-        // Importa/actualiza los proyectos remotos en la base local.
-        // Se conserva el UUID de Firebase para que todos los dispositivos
-        // trabajen sobre el mismo proyecto.
-        for (const remoteProject of remoteProjects) {
-          try {
-            await storageService.importCloudProject(remoteProject);
-          } catch (error) {
-            console.warn('[Projects] No se pudo importar proyecto de Firebase:', remoteProject?.uuid || remoteProject?.id, error);
-          }
-        }
-
-        localProjects = await storageService.getAllProjects();
-      } catch (error) {
-        // Si Firebase no está disponible, seguimos trabajando con el caché local.
-        console.warn('[Projects] Firebase no disponible; usando proyectos locales:', error);
-      }
-    }
-
-    const sortedProjects = [...localProjects].sort((a, b) => {
+    // OFFLINE-FIRST REAL:
+    // 1) Los proyectos locales se muestran inmediatamente.
+    // 2) Firebase se consulta en segundo plano y actualiza la lista cuando termina.
+    // Nunca hacemos que la pantalla inicial dependa de la latencia de Firebase.
+    const sortProjects = (items: Project[]) => [...items].sort((a, b) => {
       const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
       const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return dateB - dateA;
     });
 
-    setProjects(sortedProjects);
+    const restoreSession = (items: Project[]) => {
+      const storedStep = sessionStorage.getItem('activeStep');
+      const storedProjectId = sessionStorage.getItem('activeProjectId');
+      if (!storedProjectId) return;
 
-    if (sortedProjects.length === 0) {
-      // Primera instalación: crear DEMO solo cuando no existen proyectos
-      // ni localmente ni en Firebase.
+      const foundProject = items.find(p => p.id === Number(storedProjectId));
+      if (foundProject) {
+        setSelectedProject(foundProject);
+        if (storedStep) {
+          setCurrentStep(storedStep as 'home' | 'history' | 'setup' | 'camera' | 'summary' | 'memory');
+        }
+      }
+    };
+
+    const createDemoProject = async () => {
       const demoId = await storageService.createProject({
         name: "PROYECTO DEMO",
         client: "CLIENTE EJEMPLO",
@@ -941,15 +929,6 @@ export default function App() {
       } as any);
 
       const now = new Date();
-      const sampleFields1 = [
-        { name: "Material", value: "Cable FO", showInPhoto: true, active: true },
-        { name: "Cantidad", value: "02 UNID", showInPhoto: true, active: true },
-      ];
-      const sampleFields2 = [
-        { name: "Material", value: "Conector SC/APC", showInPhoto: true, active: true },
-        { name: "Cantidad", value: "04 UNID", showInPhoto: true, active: true },
-      ];
-
       const baseDemo = {
         projectId: demoId,
         projectName: "PROYECTO DEMO",
@@ -964,35 +943,87 @@ export default function App() {
 
       await storageService.addEvidence({
         ...baseDemo,
-        customFields: sampleFields1,
+        customFields: [
+          { name: "Material", value: "Cable FO", showInPhoto: true, active: true },
+          { name: "Cantidad", value: "02 UNID", showInPhoto: true, active: true },
+        ],
         createdAt: new Date(now.getTime() - 5 * 60 * 1000),
         timestamp: now.getTime() - 5 * 60 * 1000,
       } as any, "");
 
       await storageService.addEvidence({
         ...baseDemo,
-        customFields: sampleFields2,
+        customFields: [
+          { name: "Material", value: "Conector SC/APC", showInPhoto: true, active: true },
+          { name: "Cantidad", value: "04 UNID", showInPhoto: true, active: true },
+        ],
         createdAt: now,
         timestamp: now.getTime(),
       } as any, "");
 
       await storageService.syncAllLocalData();
-      await loadData();
-      return;
-    }
+      const demoProjects = sortProjects(await storageService.getAllProjects());
+      setProjects(demoProjects);
+      restoreSession(demoProjects);
+    };
 
-    const storedStep = sessionStorage.getItem('activeStep');
-    const storedProjectId = sessionStorage.getItem('activeProjectId');
+    // Primera lectura: IndexedDB/LocalDB no depende de Internet.
+    let localProjects = await storageService.getAllProjects();
+    let sortedProjects = sortProjects(localProjects);
+    setProjects(sortedProjects);
+    restoreSession(sortedProjects);
 
-    if (storedProjectId) {
-      const foundProject = sortedProjects.find(p => p.id === Number(storedProjectId));
-      if (foundProject) {
-        setSelectedProject(foundProject);
-        if (storedStep) {
-          setCurrentStep(storedStep as 'home' | 'history' | 'setup' | 'camera' | 'summary' | 'memory');
+    // Si ya existen proyectos locales, el usuario puede trabajar inmediatamente.
+    // Firebase solo refresca la caché en segundo plano.
+    const refreshFromFirebase = async () => {
+      if (!navigator.onLine) {
+        if (sortedProjects.length === 0) {
+          await createDemoProject();
+        }
+        return;
+      }
+
+      try {
+        const remoteProjects = await firebaseService.getCloudProjects();
+
+        // Importación en segundo plano. No bloquea la primera pintura de proyectos.
+        await Promise.all(
+          remoteProjects.map(async remoteProject => {
+            try {
+              await storageService.importCloudProject(remoteProject);
+            } catch (error) {
+              console.warn(
+                '[Projects] No se pudo importar proyecto de Firebase:',
+                remoteProject?.uuid || remoteProject?.id,
+                error
+              );
+            }
+          })
+        );
+
+        localProjects = await storageService.getAllProjects();
+        sortedProjects = sortProjects(localProjects);
+        setProjects(sortedProjects);
+        restoreSession(sortedProjects);
+
+        // Solo crear DEMO cuando Firebase confirmó que realmente no hay proyectos.
+        if (sortedProjects.length === 0 && remoteProjects.length === 0) {
+          await createDemoProject();
+        }
+      } catch (error) {
+        // Un fallo/lentitud de Firebase nunca debe ocultar los proyectos locales.
+        console.warn('[Projects] Firebase no disponible; usando proyectos locales:', error);
+
+        // En una instalación completamente nueva y sin Internet, dejamos que
+        // el usuario tenga una pantalla funcional sin depender de una recarga.
+        if (sortedProjects.length === 0 && !navigator.onLine) {
+          await createDemoProject();
         }
       }
-    }
+    };
+
+    // No esperamos este proceso. El listado local ya está visible.
+    void refreshFromFirebase();
   };
   // Keep sessionStorage in sync
   useEffect(() => {
