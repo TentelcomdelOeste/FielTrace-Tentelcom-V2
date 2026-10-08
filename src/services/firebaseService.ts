@@ -27,18 +27,36 @@ const db = getFirestore(app, firebaseConfigData.firestoreDatabaseId || '(default
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// Authenticate anonymously so Firestore security rules (request.auth != null) pass successfully
+// Authenticate anonymously so Firestore security rules (request.auth != null) pass successfully.
+// Reutilizamos la misma promesa mientras la autenticación inicial está en curso.
+// Esto evita varias llamadas concurrentes a signInAnonymously al arrancar la app.
+let authenticationPromise: Promise<string | null> | null = null;
+
 export async function ensureAuthenticated(): Promise<string | null> {
-  try {
-    if (auth.currentUser) {
-      return auth.currentUser.uid;
-    }
-    const cred = await signInAnonymously(auth);
-    return cred.user.uid;
-  } catch (error) {
-    console.error('[Firebase] Error en autenticación anónima:', error);
-    return null;
+  if (auth.currentUser) {
+    return auth.currentUser.uid;
   }
+
+  if (authenticationPromise) {
+    return authenticationPromise;
+  }
+
+  authenticationPromise = (async () => {
+    try {
+      if (auth.currentUser) {
+        return auth.currentUser.uid;
+      }
+      const cred = await signInAnonymously(auth);
+      return cred.user.uid;
+    } catch (error) {
+      console.error('[Firebase] Error en autenticación anónima:', error);
+      return null;
+    } finally {
+      authenticationPromise = null;
+    }
+  })();
+
+  return authenticationPromise;
 }
 
 // Auto sign in on load
