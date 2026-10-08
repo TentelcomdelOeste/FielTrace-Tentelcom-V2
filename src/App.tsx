@@ -254,6 +254,18 @@ export default function App() {
   const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
   const [memoryExcelModalOpen, setMemoryExcelModalOpen] = useState(false);
   const [memoryExcelSelectedSections, setMemoryExcelSelectedSections] = useState<string[]>(MEMORY_EXCEL_SECTIONS.map(section => section.id));
+
+  useEffect(() => {
+    if (!memoryExcelModalOpen) return;
+    if (typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches === false) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [memoryExcelModalOpen]);
   const [memoryZipLoading, setMemoryZipLoading] = useState(false);
   const [memoryZipProgress, setMemoryZipProgress] = useState('');
   const [memorySectionZipLoading, setMemorySectionZipLoading] = useState<string | null>(null);
@@ -8113,14 +8125,14 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5"
+            className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-sm flex items-center justify-center p-5 overflow-hidden"
             onClick={() => setMemoryExcelModalOpen(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden"
+              className="bg-white rounded-[2rem] w-full max-w-md md:max-w-3xl lg:max-w-4xl shadow-2xl overflow-hidden"
             >
               <div className="px-5 py-5 border-b border-gray-100">
                 <div className="flex items-start justify-between gap-4">
@@ -8142,20 +8154,22 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-5 space-y-2 max-h-[55vh] overflow-y-auto">
-                <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 mb-3">
+              <div className="p-5">
+                <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 mb-4">
+
                   <p className="text-[9px] font-black uppercase text-blue-700">
                     Todas las secciones están seleccionadas por defecto.
                   </p>
                 </div>
 
-                {MEMORY_EXCEL_SECTIONS.map((section) => {
-                  const checked = memoryExcelSelectedSections.includes(section.id);
-                  return (
-                    <label
-                      key={section.id}
-                      className={
-                        "flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all " +
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {MEMORY_EXCEL_SECTIONS.map((section) => {
+                    const checked = memoryExcelSelectedSections.includes(section.id);
+                    return (
+                      <label
+                        key={section.id}
+                        className={
+                          "flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all " +
                         (checked
                           ? "border-blue-200 bg-blue-50/60"
                           : "border-gray-100 bg-gray-50/50")
@@ -8171,11 +8185,12 @@ export default function App() {
                         {section.label}
                       </span>
                       {checked && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
-                    </label>
-                  );
-                })}
+                      </label>
+                    );
+                  })}
+                </div>
 
-                <div className="pt-2">
+                <div className="pt-3">
                   <p className="text-[9px] text-gray-400 font-bold uppercase text-center">
                     La hoja DATOS se incluirá siempre como portada del archivo.
                   </p>
