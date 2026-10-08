@@ -190,12 +190,77 @@ const triggerDownload = (blob: Blob, fileName: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
-const resolvePhotoUrl = async (ev: any): Promise<string> => {
-  const direct = String(ev?.photoUrl || ev?.photo?.uri || ev?.photo?.url || '').trim();
-  if (direct) return direct;
+const resolvePhotoUrls = async (ev: any): Promise<string[]> => {
+  const urls: string[] = [];
+  const add = (value: unknown) => {
+    const url = String(value || '').trim();
+    if (url && !urls.includes(url)) urls.push(url);
+  };
+
+  // Primero usamos la URL guardada en Firestore. Si es una URL antigua,
+  // Firebase Storage puede responder 403; en ese caso se intenta generar
+  // una URL fresca directamente desde la ruta de Storage.
+  add(ev?.photoUrl);
+  add(ev?.photo?.uri);
+  add(ev?.photo?.url);
+
   const storagePath = String(ev?.photoStoragePath || '').trim();
-  if (storagePath) return firebaseService.getEvidencePhotoUrl(storagePath);
-  throw new Error('La fotografía no tiene una URL ni una ruta de Storage válida.');
+  if (storagePath) {
+    try {
+      add(await firebaseService.getEvidencePhotoUrl(storagePath));
+    } catch (error) {
+      console.warn('[Memory ZIP] No se pudo renovar la URL de Storage:', error);
+    }
+  }
+
+  if (!urls.length) {
+    throw new Error('La fotografía no tiene una URL ni una ruta de Storage válida.');
+  }
+
+  return urls;
+};
+
+const fetchPhotoResponse = async (ev: any): Promise<Response> => {
+  const urls = await resolvePhotoUrls(ev);
+  let lastStatus = 0;
+  let lastError: unknown = null;
+
+  for (const url of urls) {
+    try {
+      const direct = await fetch(url, { mode: 'cors', cache: 'no-store' });
+      if (direct.ok) return direct;
+      lastStatus = direct.status;
+
+      // Igual que el exportador de Excel: si Firebase bloquea la descarga
+      // directa (por ejemplo 403), usamos el proxy de Storage de Netlify.
+      if (typeof window !== 'undefined') {
+        const proxyUrl = `${window.location.origin}/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
+        const proxied = await fetch(proxyUrl, { cache: 'no-store' });
+        if (proxied.ok) return proxied;
+        lastStatus = proxied.status;
+      }
+    } catch (error) {
+      lastError = error;
+
+      if (typeof window !== 'undefined') {
+        try {
+          const proxyUrl = `${window.location.origin}/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
+          const proxied = await fetch(proxyUrl, { cache: 'no-store' });
+          if (proxied.ok) return proxied;
+          lastStatus = proxied.status;
+        } catch (proxyError) {
+          lastError = proxyError;
+        }
+      }
+    }
+  }
+
+  if (lastStatus) {
+    throw new Error(`No se pudo descargar una fotografía (${lastStatus}).`);
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('No se pudo descargar una fotografía.');
 };
 
 export async function generateMemoryPhotosZip(
@@ -257,14 +322,10 @@ export async function generateMemoryPhotosZip(
 
     for (let index = 0; index < group.items.length; index++) {
       const ev = group.items[index];
-      const url = await resolvePhotoUrl(ev);
-      const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`No se pudo descargar una fotografía (${response.status}).`);
-      }
+      const response = await fetchPhotoResponse(ev);
 
       const bytes = new Uint8Array(await response.arrayBuffer());
-      const extension = getExtension(response, url);
+      const extension = getExtension(response, response.url);
       const photoNumber = getPhotoNumber(ev, index + 1);
       const fileBase = `${String(photoNumber).padStart(2, '0')}`;
       const photoName = `${folder}/${fileBase}.${extension}`;
