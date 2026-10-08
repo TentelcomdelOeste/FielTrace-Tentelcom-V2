@@ -250,7 +250,10 @@ export async function generateMemoryPhotosZip(
         : `SET ${String(group.number || 0).padStart(2, '0')}`;
 
     const groupFolder = sanitizeName(groupLabel, 'SET');
-    const folder = `${section}/${groupFolder}`;
+    // Estructura: SECCIÓN / NOMBRE DEL SET (o NAP/MUFA) / SET XX / fotografías.
+    // Esto evita mezclar sets cuando un proyecto contiene múltiples registros.
+    const setFolder = `SET ${String(group.number || 0).padStart(2, '0')}`;
+    const folder = `${section}/${groupFolder}/${setFolder}`;
 
     for (let index = 0; index < group.items.length; index++) {
       const ev = group.items[index];
