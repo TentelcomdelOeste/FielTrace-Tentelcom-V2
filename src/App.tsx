@@ -3304,19 +3304,36 @@ export default function App() {
       };
     }
     if (category.id === 'MUFA') {
-      const mufaIds = Array.from(new Set(categoryEvidences.map(ev => ev.mufaId).filter(Boolean))) as string[];
-      const mufaGroups = mufaIds.map(mufaId => {
-        const group = categoryEvidences.filter(ev => ev.mufaId === mufaId);
+      const mufaKeys = Array.from(new Set(
+        categoryEvidences.map(ev =>
+          ev.mufaId ||
+          'mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase()
+        )
+      ));
+      const mufaGroups = mufaKeys.map(mufaKey => {
+        const group = categoryEvidences.filter(ev => (
+          (ev.mufaId || ('mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase())) === mufaKey
+        ));
         const first = group[0];
-        return { mufaNumber: Number(first?.mufaNumber || 0), mufaName: first?.mufaName || '', count: group.length };
+        const capturedSlots = new Set(
+          group
+            .filter(ev => Boolean(String(ev.photoUrl || ev.photo?.uri || ev.photo?.url || '').trim()))
+            .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+        );
+        return {
+          mufaNumber: Number(first?.mufaNumber || 0),
+          mufaName: first?.mufaName || '',
+          count: capturedSlots.size
+        };
       }).sort((a, b) => a.mufaNumber - b.mufaNumber);
-      const completedMufas = mufaGroups.filter(nap => nap.count >= 9).length;
-      const pendingMufaLabels = mufaGroups.filter(nap => nap.count < 9)
-        .map(nap => 'MUFA ' + String(nap.mufaNumber).padStart(2, '0') + ' · ' + (nap.mufaName || 'SIN NOMBRE') + ': ' + nap.count + '/9 FOTOS');
+      const completedMufas = mufaGroups.filter(mufa => mufa.count >= 9).length;
+      const pendingMufaLabels = mufaGroups.filter(mufa => mufa.count < 9)
+        .map(mufa => 'MUFA ' + String(mufa.mufaNumber).padStart(2, '0') + ' · ' + (mufa.mufaName || 'SIN NOMBRE') + ': ' + mufa.count + '/9 FOTOS');
       return {
         ...category,
-        count: categoryEvidences.length,
-        completed: mufaGroups.length > 0 && mufaGroups.every(nap => nap.count >= 9),
+        count: categoryEvidences.filter(ev => Boolean(String(ev.photoUrl || ev.photo?.uri || ev.photo?.url || '').trim())).length,
+        completed: mufaGroups.length > 0 && mufaGroups.every(mufa => mufa.count >= 9),
         mufaCount: mufaGroups.length,
         mufaCompletedCount: completedMufas,
         pendingMufaLabels,
