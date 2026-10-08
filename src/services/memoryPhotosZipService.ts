@@ -35,8 +35,26 @@ const normalizeCategory = (value: unknown): string => {
   return category || 'SIN CATEGORIA';
 };
 
+const getPhotoSourceUrls = (ev: any): string[] => {
+  const values = [
+    ev?.photoUrl,
+    ev?.photo?.uri,
+    ev?.photo?.url,
+    ev?.imageUrl,
+    ev?.image?.url,
+    ev?.storageUrl,
+    ev?.url,
+    ev?.photoPath,
+  ];
+  return Array.from(new Set(
+    values
+      .map(value => String(value || '').trim())
+      .filter(Boolean)
+  ));
+};
+
 const hasPhoto = (ev: any): boolean =>
-  Boolean(String(ev?.photoUrl || ev?.photo?.uri || ev?.photo?.url || ev?.photoStoragePath || '').trim());
+  getPhotoSourceUrls(ev).length > 0 || Boolean(String(ev?.photoStoragePath || '').trim());
 
 const getGroupKey = (ev: any, category: string, index: number): string => {
   if (category === 'NAPS') return String(ev?.napId || ('nap_' + (ev?.napNumber ?? 0) + '_' + (ev?.napName || '')) || index);
@@ -197,19 +215,20 @@ const resolvePhotoUrls = async (ev: any): Promise<string[]> => {
     if (url && !urls.includes(url)) urls.push(url);
   };
 
-  // Primero usamos la URL guardada en Firestore. Si es una URL antigua,
-  // Firebase Storage puede responder 403; en ese caso se intenta generar
-  // una URL fresca directamente desde la ruta de Storage.
-  add(ev?.photoUrl);
-  add(ev?.photo?.uri);
-  add(ev?.photo?.url);
+  // Usar exactamente las mismas fuentes que el exportador de Excel.
+  // Algunas evidencias históricas no tienen photoUrl, pero sí imageUrl,
+  // storageUrl, url o photoPath con la URL real.
+  getPhotoSourceUrls(ev).forEach(add);
 
   const storagePath = String(ev?.photoStoragePath || '').trim();
-  if (storagePath) {
+  if (storagePath && !storagePath.startsWith('http')) {
     try {
       add(await firebaseService.getEvidencePhotoUrl(storagePath));
     } catch (error) {
-      console.warn('[Memory ZIP] No se pudo renovar la URL de Storage:', error);
+      console.warn('[Memory ZIP] No se pudo renovar la URL de Storage:', {
+        storagePath,
+        error,
+      });
     }
   }
 
@@ -255,10 +274,10 @@ const getStoragePathCandidates = (ev: any): string[] => {
     if (path && !candidates.includes(path)) candidates.push(path);
   };
 
-  // PRIORIDAD MÁXIMA: si Firestore conserva una photoUrl válida, extraemos
-  // de ella la ruta exacta del objeto. Esto permite descargar fotografías
-  // históricas aunque photoStoragePath/photoPath hayan quedado mal formados.
-  for (const url of [ev?.photoUrl, ev?.photo?.uri, ev?.photo?.url]) {
+  // PRIORIDAD MÁXIMA: si cualquier campo contiene la URL real que utiliza
+  // Memoria Fotográfica/Excel, extraemos de ella la ruta exacta del objeto.
+  // Esto cubre también evidencias históricas con imageUrl/storageUrl/url.
+  for (const url of getPhotoSourceUrls(ev)) {
     extractStoragePathFromUrl(url).forEach(add);
   }
 
@@ -360,6 +379,7 @@ const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extensi
     const diagnostic = [
       'No se pudo descargar una fotografía para el ZIP.',
       getEvidenceDiagnosticLabel(ev),
+      `URLS DE FOTO DETECTADAS: ${getPhotoSourceUrls(ev).length ? getPhotoSourceUrls(ev).join(' || ') : 'NINGUNA'}`,
       `RUTAS STORAGE PROBADAS: ${storagePaths.length ? storagePaths.join(' || ') : 'NINGUNA'}`,
       `ERRORES STORAGE: ${storageErrors.length ? storageErrors.join(' || ') : 'NINGUNO'}`,
       `URL/PROXY: ${urlError}`,
