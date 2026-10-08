@@ -1209,7 +1209,10 @@ async function addEvidenceSheet(
 
         sheet.mergeCells(boxBottom, startCol, boxBottom, startCol + 2);
         const caption = sheet.getCell(boxBottom, startCol);
-        caption.value = label;
+        const meterage = ev?.reserveMeterage != null && String(ev.reserveMeterage).trim() !== ''
+          ? String(ev.reserveMeterage).trim()
+          : '';
+        caption.value = meterage ? `${label}: ${meterage} M` : label;
         caption.font = { name: 'Arial', size: 10, bold: true };
         caption.alignment = { vertical: 'middle', horizontal: 'center' };
         caption.border = {
