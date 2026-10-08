@@ -305,6 +305,34 @@ const styleBody = (cell: ExcelJS.Cell) => {
   cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
 };
 
+
+/**
+ * Aplica el marco sobre el perímetro real de un rango combinado.
+ * ExcelJS puede dejar incompletos algunos bordes cuando el formato se aplica
+ * únicamente a la celda superior izquierda de una celda combinada.
+ */
+const applyMergedPhotoFrame = (
+  sheet: ExcelJS.Worksheet,
+  top: number,
+  left: number,
+  bottom: number,
+  right: number,
+) => {
+  const edge = { style: 'medium' as const, color: { argb: '222222' } };
+
+  for (let row = top; row <= bottom; row++) {
+    for (let col = left; col <= right; col++) {
+      const cell = sheet.getCell(row, col);
+      const border = { ...cell.border };
+      if (row === top) border.top = edge;
+      if (row === bottom) border.bottom = edge;
+      if (col === left) border.left = edge;
+      if (col === right) border.right = edge;
+      cell.border = border;
+    }
+  }
+};
+
 const DATA_SHEET_LABELS = [
   'País/Div:',
   'Área/Cd:',
@@ -1465,6 +1493,10 @@ async function addEvidenceSheet(
             bottom: { style: 'thin', color: { argb: '222222' } },
             right: { style: 'medium', color: { argb: '222222' } },
           };
+          // En el primer bloque NAPS, Excel puede omitir segmentos del borde
+          // superior/izquierdo si el marco solo se asigna a la celda ancla
+          // del rango combinado. Aplicamos el borde a todo el perímetro real.
+          applyMergedPhotoFrame(sheet, blockTop, col, blockBottom - 1, col + 2);
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
