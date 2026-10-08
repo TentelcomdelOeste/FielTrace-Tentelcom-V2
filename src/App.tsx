@@ -1216,11 +1216,12 @@ export default function App() {
       let key = ev.uuid || String(evidences.indexOf(ev));
       if (category === 'NAPS') key = ev.napId || key;
       if (category === 'MUFA') {
-        key = ev.mufaId || (
-          ev.mufaNumber != null || String(ev.mufaName || '').trim()
-            ? 'mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase()
-            : key
-        );
+        const mufaNumber = Number(ev.mufaNumber || 0);
+        const mufaName = String(ev.mufaName || '').trim().toUpperCase();
+        const isLegacyPlaceholder = mufaNumber === 0 && (!mufaName || mufaName === 'MUFA');
+        key = isLegacyPlaceholder
+          ? 'mufa_legacy_placeholder'
+          : (ev.mufaId || 'mufa_' + mufaNumber + '_' + mufaName);
       }
       if (category === 'PUNTAS_FIBRA') key = ev.fiberPairId || key;
       if (category === 'RESERVA') key = ev.reserveId || key;
@@ -3304,16 +3305,17 @@ export default function App() {
       };
     }
     if (category.id === 'MUFA') {
-      const mufaKeys = Array.from(new Set(
-        categoryEvidences.map(ev =>
-          ev.mufaId ||
-          'mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase()
-        )
-      ));
+      const getMufaKey = (ev: any) => {
+        const mufaNumber = Number(ev.mufaNumber || 0);
+        const mufaName = String(ev.mufaName || '').trim().toUpperCase();
+        const isLegacyPlaceholder = mufaNumber === 0 && (!mufaName || mufaName === 'MUFA');
+        return isLegacyPlaceholder
+          ? 'mufa_legacy_placeholder'
+          : (ev.mufaId || 'mufa_' + mufaNumber + '_' + mufaName);
+      };
+      const mufaKeys = Array.from(new Set(categoryEvidences.map(getMufaKey)));
       const mufaGroups = mufaKeys.map(mufaKey => {
-        const group = categoryEvidences.filter(ev => (
-          (ev.mufaId || ('mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase())) === mufaKey
-        ));
+        const group = categoryEvidences.filter(ev => getMufaKey(ev) === mufaKey);
         const first = group[0];
         const capturedSlots = new Set(
           group
@@ -7726,9 +7728,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'MUFA' ? (() => {
                     const mufaPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA' && (
-                        ev.mufaId || ev.mufaNumber != null || String(ev.mufaName || '').trim()
-                      ))
+                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA')
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.mufaNumber || 0) - Number(b.mufaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7737,8 +7737,12 @@ export default function App() {
 
                     const groups = Array.from(
                       mufaPhotos.reduce((map: Map<string, any[]>, ev: any) => {
-                        const key = ev.mufaId ||
-                          'mufa_' + (ev.mufaNumber || 0) + '_' + String(ev.mufaName || '').trim().toUpperCase();
+                        const mufaNumber = Number(ev.mufaNumber || 0);
+                        const mufaName = String(ev.mufaName || '').trim().toUpperCase();
+                        const isLegacyPlaceholder = mufaNumber === 0 && (!mufaName || mufaName === 'MUFA');
+                        const key = isLegacyPlaceholder
+                          ? 'mufa_legacy_placeholder'
+                          : (ev.mufaId || 'mufa_' + mufaNumber + '_' + mufaName);
                         if (!map.has(key)) map.set(key, []);
                         map.get(key)!.push(ev);
                         return map;
@@ -7765,7 +7769,8 @@ export default function App() {
                           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 lg:gap-2.5">
                             {Array.from({ length: 9 }, (_, slotIndex) => {
                               const photoNumber = slotIndex + 1;
-                              const ev = group.find((item: any) => Number(item.mufaPhotoNumber) === photoNumber);
+                              const ev = group.find((item: any) => Number(item.mufaPhotoNumber ?? item.photoNumber) === photoNumber)
+                                || group[slotIndex];
 
                               if (ev) {
                                 return (
