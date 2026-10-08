@@ -3336,7 +3336,7 @@ export default function App() {
       }).sort((a, b) => a.mufaNumber - b.mufaNumber);
       const completedMufas = mufaGroups.filter(mufa => mufa.count >= 9).length;
       const pendingMufaLabels = mufaGroups.filter(mufa => mufa.count < 9)
-        .map(mufa => 'MUFA ' + String(mufa.mufaNumber).padStart(2, '0') + ' · ' + (mufa.mufaName || 'SIN NOMBRE') + ': ' + mufa.count + '/9 FOTOS');
+        .map(mufa => 'MUFA ' + String(mufa.mufaNumber).padStart(2, '0') + (mufa.mufaName ? ' · ' + mufa.mufaName : '') + ': ' + mufa.count + '/9 FOTOS');
       return {
         ...category,
         count: categoryEvidences.filter(ev => Boolean(String(ev.photoUrl || ev.photo?.uri || ev.photo?.url || '').trim())).length,
