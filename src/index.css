@@ -94,8 +94,12 @@ html.native-camera-active, html.native-camera-active body, html.native-camera-ac
   background-color: transparent !important;
 }
 
+/* Fondo global blanco para que las vistas de contenido no dejen
+ * un bloque negro cuando la altura del contenido es menor que el viewport.
+ * La cámara nativa conserva su transparencia mediante la regla anterior
+ * para html.native-camera-active. */
 body {
-  background-color: #000000;
+  background-color: #FFFFFF;
 }
 
 /*
