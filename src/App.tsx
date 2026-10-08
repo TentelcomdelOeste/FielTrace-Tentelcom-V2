@@ -230,7 +230,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
 import { firebaseService } from './services/firebaseService';
 import { exportService } from './services/exportService';
-import { generateMemoryExcel } from './services/memoryExcelService';
+import { generateMemoryExcel, MEMORY_EXCEL_SECTIONS } from './services/memoryExcelService';
 import { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
@@ -252,6 +252,8 @@ export default function App() {
   const [memorySelectedCategory, setMemorySelectedCategory] = useState<string | null>(null);
   const [memorySelectedPhoto, setMemorySelectedPhoto] = useState<any | null>(null);
   const [memoryExcelLoading, setMemoryExcelLoading] = useState(false);
+  const [memoryExcelModalOpen, setMemoryExcelModalOpen] = useState(false);
+  const [memoryExcelSelectedSections, setMemoryExcelSelectedSections] = useState<string[]>(MEMORY_EXCEL_SECTIONS.map(section => section.id));
   const [memoryZipLoading, setMemoryZipLoading] = useState(false);
   const [memoryZipProgress, setMemoryZipProgress] = useState('');
   const [memorySectionZipLoading, setMemorySectionZipLoading] = useState<string | null>(null);
@@ -1323,11 +1325,30 @@ export default function App() {
     };
   };
 
+  const openMemoryExcelModal = () => {
+    if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading || memorySectionZipLoading) return;
+    setMemoryExcelSelectedSections(MEMORY_EXCEL_SECTIONS.map(section => section.id));
+    setMemoryExcelModalOpen(true);
+  };
+
+  const toggleMemoryExcelSection = (sectionId: string) => {
+    setMemoryExcelSelectedSections(current =>
+      current.includes(sectionId)
+        ? current.filter(id => id !== sectionId)
+        : [...current, sectionId]
+    );
+  };
+
   const handleGenerateMemoryExcel = async () => {
-    if (!memorySelectedProject || memoryExcelLoading) return;
+    if (!memorySelectedProject || memoryExcelLoading || memoryExcelSelectedSections.length === 0) return;
+    setMemoryExcelModalOpen(false);
     setMemoryExcelLoading(true);
     try {
-      await generateMemoryExcel(memorySelectedProject, memorySelectedProject._evidences || []);
+      await generateMemoryExcel(
+        memorySelectedProject,
+        memorySelectedProject._evidences || [],
+        memoryExcelSelectedSections,
+      );
     } catch (error: any) {
       console.error('[Memory Excel] Error generando:', error);
       alert(error?.message || 'No se pudo generar el Excel de memoria fotográfica.');
@@ -3809,7 +3830,7 @@ export default function App() {
                         <div className="grid grid-cols-2 gap-3">
                           <button
                             type="button"
-                            onClick={() => { void handleGenerateMemoryExcel(); }}
+                            onClick={openMemoryExcelModal}
                             disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null}
                             className="bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]"
                           >
