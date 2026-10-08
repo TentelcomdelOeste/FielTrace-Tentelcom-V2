@@ -15,6 +15,7 @@ import {
   History,
   CheckCircle2,
   FileSpreadsheet,
+  Archive,
   Search,
   Filter,
   Trash2,
