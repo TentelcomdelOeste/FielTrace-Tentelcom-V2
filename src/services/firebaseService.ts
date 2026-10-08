@@ -71,7 +71,11 @@ export const firebaseService = {
 
     const blob = image instanceof Blob ? image : await (await fetch(image)).blob();
     const extension = blob.type === 'image/png' ? 'png' : 'jpg';
-    const safeName = (fileName || `FT_${evidenceUuid}`).replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\\.(jpeg|jpg|png)$/i, '');
+    // Normalizar la extensión correctamente para no generar nombres como
+    // "FT_uuid.jpg.jpg" ni referencias inconsistentes al eliminar.
+    const safeName = (fileName || `FT_${evidenceUuid}`)
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\\.(jpeg|jpg|png)$/i, '');
     const storagePath = `projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`;
     const storageRef = ref(storage, storagePath);
     await uploadBytes(storageRef, blob, { contentType: blob.type || 'image/jpeg', cacheControl: 'public,max-age=31536000,immutable' });
@@ -93,8 +97,53 @@ export const firebaseService = {
     const uid = await ensureAuthenticated();
     if (!uid) throw new Error('No fue posible autenticar la sesión para eliminar la evidencia.');
 
-    if (evidence?.photoStoragePath) {
-      await deleteObject(ref(storage, evidence.photoStoragePath));
+    // Algunas evidencias históricas pueden conservar una photoStoragePath
+    // antigua/mal formada. Intentamos primero la ruta persistida, luego la
+    // URL real de Storage y finalmente variantes conocidas de la extensión.
+    // Así la eliminación no queda bloqueada por una referencia antigua.
+    const storageCandidates: string[] = [];
+    const addCandidate = (value: unknown) => {
+      const candidate = String(value || '').trim();
+      if (candidate && !storageCandidates.includes(candidate)) storageCandidates.push(candidate);
+    };
+
+    addCandidate(evidence?.photoStoragePath);
+    addCandidate(evidence?.photoUrl);
+
+    const originalPath = String(evidence?.photoStoragePath || '').trim();
+    if (originalPath) {
+      const variants = [
+        originalPath.replace(/\\.(jpeg|jpg|png)\\1$/i, '.$1'),
+        originalPath.replace(/\\.(jpeg|jpg|png)\\.(jpeg|jpg|png)$/i, '.$2'),
+        originalPath.replace(/(jpeg|jpg|png)\\1$/i, '.$1'),
+        originalPath.replace(/\\.(jpeg|jpg|png)\\.(jpeg|jpg|png)$/i, '.$1'),
+      ];
+      variants.forEach(addCandidate);
+    }
+
+    let storageDeleted = false;
+    let lastStorageError: any = null;
+
+    for (const candidate of storageCandidates) {
+      try {
+        await deleteObject(ref(storage, candidate));
+        storageDeleted = true;
+        console.log(`[Firebase Storage] ✓ Fotografía eliminada: ${candidate}`);
+        break;
+      } catch (error: any) {
+        lastStorageError = error;
+        if (error?.code === 'storage/object-not-found') {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    // Si ninguna referencia apunta ya a un objeto, no bloqueamos la eliminación
+    // del registro: object-not-found significa precisamente que ese objeto no
+    // existe en la referencia consultada.
+    if (!storageDeleted && lastStorageError && lastStorageError?.code !== 'storage/object-not-found') {
+      throw lastStorageError;
     }
 
     const projectUuid = evidence?.projectUuid || `legacy_project_${evidence?.projectId || 'default'}`;
