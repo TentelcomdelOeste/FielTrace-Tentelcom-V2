@@ -1648,7 +1648,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   if (typeof console !== 'undefined') {
     const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
-    console.info(\`[MemoryExcel] Exportación completada en \${(elapsed / 1000).toFixed(1)}s — \${evidences.length} evidencias\`);
+    console.info(`[MemoryExcel] Exportación completada en ${(elapsed / 1000).toFixed(1)}s — ${evidences.length} evidencias`);
   }
 
   return fileName;
