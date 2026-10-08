@@ -1242,18 +1242,40 @@ export default function App() {
     const groupList = Array.from(groups.entries()).map(([id, items]) => {
       let normalizedItems = items;
       if (category === 'MUFA') {
-        // MUFA admite exactamente 9 posiciones. Si existen registros históricos
-        // duplicados, no deben convertirlos en una décima fotografía del set.
-        const seenSlots = new Set<number>();
-        normalizedItems = [...items]
-          .sort((a, b) => Number(a.mufaPhotoNumber ?? a.photoNumber ?? 0) - Number(b.mufaPhotoNumber ?? b.photoNumber ?? 0))
-          .filter(ev => {
-            const slot = Number(ev.mufaPhotoNumber ?? ev.photoNumber ?? 0);
-            if (!Number.isInteger(slot) || slot < 1 || slot > 9) return false;
-            if (seenSlots.has(slot)) return false;
-            seenSlots.add(slot);
-            return true;
+        // MUFA admite exactamente 9 posiciones. En registros históricos puede
+        // faltar mufaPhotoNumber aunque la fotografía sí exista en Firebase.
+        // En ese caso asignamos las posiciones libres de forma secuencial para
+        // que la foto no desaparezca del visor ni del estado de completitud.
+        const photoItems = [...items]
+          .filter(hasPhoto)
+          .sort((a, b) => {
+            const slotA = Number(a.mufaPhotoNumber ?? a.photoNumber ?? 0);
+            const slotB = Number(b.mufaPhotoNumber ?? b.photoNumber ?? 0);
+            if (slotA > 0 && slotB === 0) return -1;
+            if (slotA === 0 && slotB > 0) return 1;
+            return slotA - slotB;
+          });
+
+        const usedSlots = new Set<number>();
+        let nextFallbackSlot = 1;
+
+        normalizedItems = photoItems
+          .map(ev => {
+            let slot = Number(ev.mufaPhotoNumber ?? ev.photoNumber ?? 0);
+            if (!Number.isInteger(slot) || slot < 1 || slot > 9 || usedSlots.has(slot)) {
+              while (usedSlots.has(nextFallbackSlot) && nextFallbackSlot <= 9) {
+                nextFallbackSlot += 1;
+              }
+              slot = nextFallbackSlot;
+            }
+            if (slot >= 1 && slot <= 9) {
+              usedSlots.add(slot);
+              nextFallbackSlot = Math.max(nextFallbackSlot, slot + 1);
+              return { ...ev, mufaPhotoNumber: slot };
+            }
+            return null;
           })
+          .filter((ev): ev is any => ev !== null)
           .slice(0, 9);
       }
       return {
