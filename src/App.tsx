@@ -3837,7 +3837,7 @@ export default function App() {
                             <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
                             <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
                           </div>
-                          <div className="flex flex-col gap-3">
+                          <div className="hidden xl:flex flex-col gap-3">
                             <button type="button" onClick={openMemoryExcelModal} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]">
                               <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
                               <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryExcelLoading ? 'GENERANDO...' : 'GENERAR EXCEL'}</span>
