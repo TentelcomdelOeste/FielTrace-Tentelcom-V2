@@ -31,6 +31,10 @@ const getGroupId = (ev: MemoryEvidence, category: string) => {
   if (category === 'MUFA') {
     const number = Number(ev.mufaNumber || 0);
     const name = String(ev.mufaName || '').trim().toUpperCase();
+    const isLegacyPlaceholder = number === 0 && (!name || name === 'MUFA');
+    // Registros históricos pueden tener un mufaId distinto por foto pero solo
+    // conservar "MUFA/00". No debemos convertir cada foto en un set diferente.
+    if (isLegacyPlaceholder) return 'MUFA|LEGACY_PLACEHOLDER';
     if (number || name) return `MUFA|${number}|${name}`;
   }
 
@@ -1433,7 +1437,11 @@ async function addEvidenceSheet(
           sheet.mergeCells(blockBottom, col, blockBottom, col + 2);
           const caption = sheet.getCell(blockBottom, col);
           const mufaName = String(group.name ?? '').trim().toUpperCase();
-          caption.value = mufaName ? `MUFA ${mufaName}` : 'MUFA';
+          const captionName = !mufaName || mufaName === 'MUFA' || mufaName === '—' ? '' : mufaName;
+          const mufaNumber = Number(group.number || 0);
+          caption.value = captionName
+            ? `MUFA ${String(mufaNumber).padStart(2, '0')} · ${captionName}`
+            : (mufaNumber > 0 ? `MUFA ${String(mufaNumber).padStart(2, '0')}` : 'MUFA');
           caption.font = { name: 'Arial', size: 10, bold: true };
           caption.alignment = { vertical: 'middle', horizontal: 'center' };
           caption.border = {
