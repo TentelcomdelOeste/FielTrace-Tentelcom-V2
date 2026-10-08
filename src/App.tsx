@@ -895,10 +895,18 @@ export default function App() {
     };
     void syncNow();
     window.addEventListener('online', syncNow);
-    const interval = window.setInterval(() => { void refreshSyncSummary(); }, 2500);
+    const summaryInterval = window.setInterval(() => { void refreshSyncSummary(); }, 2500);
+
+    // Respaldo automático: cualquier dato que haya quedado pendiente por
+    // una caída/transitorio de red se reintenta periódicamente sin intervención.
+    const syncInterval = window.setInterval(() => {
+      void storageService.syncAllLocalData().then(() => refreshSyncSummary());
+    }, 10000);
+
     return () => {
       window.removeEventListener('online', syncNow);
-      window.clearInterval(interval);
+      window.clearInterval(summaryInterval);
+      window.clearInterval(syncInterval);
     };
   }, [refreshSyncSummary]);
 
