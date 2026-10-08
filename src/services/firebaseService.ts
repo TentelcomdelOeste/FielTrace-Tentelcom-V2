@@ -104,6 +104,18 @@ export const firebaseService = {
     }
   },
 
+  /**
+   * Verifica que una fotografía ya subida a Storage siga disponible y recupera
+   * su download URL. Sirve para recuperar el caso en que Storage terminó la
+   * subida pero la app se cerró antes de guardar la URL localmente.
+   */
+  async getEvidencePhotoUrl(storagePath: string): Promise<string> {
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión para consultar la fotografía.');
+    if (!storagePath) throw new Error('No hay ruta de Storage para verificar.');
+    return getDownloadURL(ref(storage, storagePath));
+  },
+
   async syncEvidenceToCloud(evidence: any): Promise<boolean> {
     try {
       if (!navigator.onLine) {
@@ -119,9 +131,33 @@ export const firebaseService = {
 
       const evidenceUuid = evidence.uuid || `ev_${Date.now()}`;
       const projectUuid = evidence.projectUuid || `legacy_project_${evidence.projectId || 'default'}`;
+      const evidenceRequiresPhoto = Boolean(
+        evidence.photoPath || evidence.photoUrl || evidence.photoStoragePath || evidence.photo?.uri
+      );
+
+      // Una evidencia fotográfica NO puede declararse sincronizada si no existe
+      // una referencia verificable a Firebase Storage.
+      if (evidenceRequiresPhoto && !evidence.photoUrl && !evidence.photoStoragePath) {
+        console.warn(
+          `[Firebase] Evidencia ${evidenceUuid} pendiente: no existe referencia confirmada a Storage.`
+        );
+        return false;
+      }
+
+      let verifiedPhotoUrl = evidence.photoUrl || '';
+      if (evidenceRequiresPhoto && !verifiedPhotoUrl && evidence.photoStoragePath) {
+        try {
+          verifiedPhotoUrl = await getDownloadURL(ref(storage, evidence.photoStoragePath));
+        } catch (storageError) {
+          console.warn(
+            `[Firebase] La fotografía ${evidenceUuid} no está disponible en Storage; no se marcará como sincronizada.`,
+            storageError
+          );
+          return false;
+        }
+      }
 
       // La nube usa UUID permanentes, no los IDs numéricos locales del dispositivo.
-      // Esto permite que varios dispositivos puedan referirse al mismo proyecto.
       // projects/{projectUuid}/evidences/{evidenceUuid}
       const docRef = doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid);
 
@@ -134,7 +170,7 @@ export const firebaseService = {
         projectName: evidence.projectName || '',
         photoPath: evidence.photoPath || '',
         photoStoragePath: evidence.photoStoragePath || '',
-        photoUrl: evidence.photoUrl || '',
+        photoUrl: verifiedPhotoUrl || evidence.photoUrl || '',
 
         category: evidence.category || 'OTROS',
         categoryLabel: evidence.categoryLabel || 'Otros',
@@ -230,7 +266,16 @@ export const firebaseService = {
       };
 
       await setDoc(docRef, cloudPayload, { merge: true });
-      console.log(`[Firebase] ✓ Evidencia ${evidenceUuid} sincronizada exitosamente a Firestore.`);
+
+      // Confirmación de lectura: no consideramos el registro "sincronizado"
+      // hasta comprobar que Firestore realmente contiene el documento.
+      const confirmation = await getDoc(docRef);
+      if (!confirmation.exists()) {
+        console.error(`[Firebase] ✗ Firestore no confirmó la evidencia ${evidenceUuid}.`);
+        return false;
+      }
+
+      console.log(`[Firebase] ✓ Evidencia ${evidenceUuid} confirmada en Firestore + Storage.`);
       return true;
     } catch (error) {
       console.error('[Firebase] ✗ Error sincronizando evidencia a Firestore:', error);
@@ -351,6 +396,16 @@ export const firebaseService = {
       };
 
       await setDoc(docRef, projectPayload, { merge: true });
+
+      // Confirmación de lectura para que el estado local "synced" solo se
+      // establezca después de comprobar que el proyecto existe en Firestore.
+      const confirmation = await getDoc(docRef);
+      if (!confirmation.exists()) {
+        console.error(`[Firebase] ✗ Firestore no confirmó el proyecto ${projectUuid}.`);
+        return false;
+      }
+
+      console.log(`[Firebase] ✓ Proyecto ${projectUuid} confirmado en Firestore.`);
       return true;
     } catch (e) {
       console.error('[Firebase] Error sincronizando proyecto:', e);
