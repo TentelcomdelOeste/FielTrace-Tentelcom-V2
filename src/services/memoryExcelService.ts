@@ -980,7 +980,10 @@ const addFiberTipsSheet = async (
 
       sheet.mergeCells(boxBottom, startCol, boxBottom, startCol + 2);
       const caption = sheet.getCell(boxBottom, startCol);
-      caption.value = label;
+      const meterage = ev?.fiberMeterage != null && String(ev.fiberMeterage).trim() !== ''
+        ? String(ev.fiberMeterage).trim()
+        : '';
+      caption.value = meterage ? `${label}: ${meterage} M` : label;
       caption.font = { name: 'Arial', size: 10, bold: true };
       caption.alignment = { vertical: 'middle', horizontal: 'center' };
       caption.border = {
