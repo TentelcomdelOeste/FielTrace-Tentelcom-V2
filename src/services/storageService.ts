@@ -193,6 +193,41 @@ class StorageManager {
 
 const manager = new StorageManager();
 
+async function syncProjectImmediately(project: Project): Promise<boolean> {
+  if (!navigator.onLine || project.id == null || !project.uuid) return false;
+
+  try {
+    const success = await firebaseService.syncProjectToCloud(project);
+    if (success) {
+      const syncedProject: Project = {
+        ...project,
+        syncStatus: 'synced',
+        lastSyncedAt: new Date(),
+        syncError: undefined,
+        retryCount: 0,
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION
+      };
+      await manager.put(STORE_PROJECTS, syncedProject);
+      return true;
+    }
+
+    await manager.put(STORE_PROJECTS, {
+      ...project,
+      syncStatus: 'pending',
+      syncError: 'Sincronización inmediata pendiente; se reintentará automáticamente.'
+    });
+  } catch (error) {
+    console.warn('[StorageService] Sincronización inmediata del proyecto pendiente:', error);
+    await manager.put(STORE_PROJECTS, {
+      ...project,
+      syncStatus: 'pending',
+      syncError: 'Sincronización inmediata pendiente; se reintentará automáticamente.'
+    });
+  }
+
+  return false;
+}
+
 export const storageService = {
   async createProject(project: Project): Promise<number> {
     const uuid = crypto.randomUUID ? crypto.randomUUID() : 'proj_' + Date.now() + Math.random().toString(36).substr(2, 9);
@@ -201,9 +236,17 @@ export const storageService = {
       uuid,
       createdAt: new Date(),
       updatedAt: new Date(),
-      syncStatus: 'pending'
+      syncStatus: 'pending',
+      retryCount: 0,
+      syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION
     };
-    return manager.add(STORE_PROJECTS, projectToSave);
+
+    const id = await manager.add(STORE_PROJECTS, projectToSave);
+    const savedProject = await manager.get<Project>(STORE_PROJECTS, id);
+
+    // Guardado local primero; con conexión disponible, sincronización inmediata.
+    await syncProjectImmediately(savedProject);
+    return id;
   },
 
   async getAllProjects(): Promise<Project[]> {
@@ -222,14 +265,20 @@ export const storageService = {
 
   async updateProject(id: number, project: Project): Promise<void> {
     const existing = await this.getProject(id);
-    const updated = {
+    const updated: Project = {
       ...existing,
       ...project,
       id,
+      uuid: project.uuid || existing.uuid,
       updatedAt: new Date(),
-      syncStatus: 'pending'
+      syncStatus: 'pending',
+      retryCount: existing.retryCount ?? 0,
+      syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION
     };
     await manager.put(STORE_PROJECTS, updated);
+
+    // Los cambios de configuración también se sincronizan inmediatamente.
+    await syncProjectImmediately(updated);
   },
 
   /**
@@ -240,6 +289,13 @@ export const storageService = {
    */
   async addEvidence(evidence: Evidence, imageBase64: string): Promise<number> {
     const project = await this.getProject(evidence.projectId);
+
+    // Garantiza que el proyecto padre exista/esté actualizado en Firestore
+    // antes de iniciar la sincronización de la evidencia.
+    if (navigator.onLine && project) {
+      await syncProjectImmediately(project);
+    }
+
     const evidenceToSave: Evidence = {
       ...evidence,
       projectUuid: evidence.projectUuid || project?.uuid,
@@ -744,3 +800,10 @@ export const storageService = {
     return manager.getAll<Template>(STORE_TEMPLATES);
   }
 };
+
+
+
+
+
+
+
