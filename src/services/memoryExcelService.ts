@@ -921,7 +921,7 @@ const addFiberTipsSheet = async (
         const url = getPhotoUrl(ev);
         if (url) {
           try {
-            const image = await imageToBase64(url);
+            const image = await getExcelImage(url);
             const photoBoxWidthPx = 600;
             const photoBoxHeightPx = 450;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
@@ -1136,7 +1136,7 @@ async function addEvidenceSheet(
           const url = getPhotoUrl(ev);
           if (url) {
             try {
-              const image = await imageToBase64(url);
+              const image = await getExcelImage(url);
               const photoBoxWidthPx = 600;
               const photoBoxHeightPx = 450;
               const scale = Math.min(
@@ -1253,7 +1253,7 @@ async function addEvidenceSheet(
             const url = getPhotoUrl(ev);
             if (url) {
               try {
-                const image = await imageToBase64(url);
+                const image = await getExcelImage(url);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1371,7 +1371,7 @@ async function addEvidenceSheet(
             const url = getPhotoUrl(ev);
             if (url) {
               try {
-                const image = await imageToBase64(url);
+                const image = await getExcelImage(url);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1483,7 +1483,7 @@ async function addEvidenceSheet(
           try {
             // Cada fotografía se descarga, reduce y agrega individualmente.
             // No se acumulan las fotos originales en memoria.
-            const image = await imageToBase64(url);
+            const image = await getExcelImage(url);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
             const scale = Math.min(
