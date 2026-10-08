@@ -13,6 +13,8 @@ const CATEGORY_CONFIG = [
   { id: 'MEJORAS', label: 'MEJORAS', required: 2 },
 ] as const;
 
+export const MEMORY_EXCEL_SECTIONS = CATEGORY_CONFIG.map(({ id, label }) => ({ id, label }));
+
 const clean = (value: unknown) => {
   const text = String(value ?? '').trim();
   return text || '—';
@@ -1828,7 +1830,7 @@ async function addEvidenceSheet(
   }
 }
 
-export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[]) {
+export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[]) {
   const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
   // Preparar un pequeño pipeline de descargas paralelas. No se almacenan todas
@@ -1846,7 +1848,12 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   // los datos específicos del proyecto/sitio.
   addDataSheet(workbook, project);
 
+  const selectedCategories = selectedCategoryIds?.length
+    ? new Set(selectedCategoryIds.map(id => normalizeMemoryCategory(id)))
+    : null;
+
   for (const category of CATEGORY_CONFIG) {
+    if (selectedCategories && !selectedCategories.has(category.id)) continue;
     if (category.id === 'PUNTAS_FIBRA') {
       await addFiberTipsSheet(workbook, project, evidences);
       continue;
