@@ -997,8 +997,7 @@ export default function App() {
     restoreSession(sortedProjects);
 
     // Si ya existen proyectos locales, el usuario puede trabajar inmediatamente.
-    // Firebase solo refresca la caché en segundo plano.
-    const refreshFromFirebase = async () => {
+    // Firebase solo refresca la caché en segundo plano.    const refreshFromFirebase = async () => {
       if (!navigator.onLine) {
         if (sortedProjects.length === 0) {
           await createDemoProject();
@@ -1997,7 +1996,6 @@ export default function App() {
     const reserveEvidence = evidences.filter(ev =>
       ev.category === 'RESERVA' && ev.reserveId === reserveId
     );
-
     const storedValue =
       reserveEvidence
         .map(ev => ev.reserveReelNumber?.trim() || ev.fiberReelNumber?.trim() || '')
@@ -2997,7 +2995,6 @@ export default function App() {
 
           // 3. Guardar Evidence en IndexedDB para que aparezca inmediatamente en el proyecto
           await storageService.addEvidence(evidenceObject, finalImage);
-
           // 4. Actualizar estado de UI
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
           setEvidences(evs);
@@ -3757,7 +3754,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6 pt-4"
+                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4"
               >
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0">
@@ -3830,11 +3827,23 @@ export default function App() {
                           <ChevronLeft className="w-4 h-4" /> Volver a proyectos
                         </button>
 
-                        <div className="bg-gray-900 text-white rounded-[2rem] p-6">
-                          <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
-                          <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
-                          <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
-                          <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
+                        <div className="xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
+                          <div className="bg-gray-900 text-white rounded-[2rem] p-6 xl:p-5">
+                            <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
+                            <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
+                            <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
+                            <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
+                          </div>
+                          <div className="flex flex-col gap-3">
+                            <button type="button" onClick={openMemoryExcelModal} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]">
+                              <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
+                              <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryExcelLoading ? 'GENERANDO...' : 'GENERAR EXCEL'}</span>
+                            </button>
+                            <button type="button" onClick={() => { void handleGenerateMemoryPhotosZip(); }} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99]">
+                              <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
+                              <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryZipLoading ? (memoryZipProgress || 'PREPARANDO ZIP...') : 'DESCARGAR FOTOS ZIP'}</span>
+                            </button>
+                          </div>
                         </div>
 
                         <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
@@ -3842,33 +3851,20 @@ export default function App() {
                           <p className="text-[8px] text-blue-500 font-bold uppercase mt-1">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            type="button"
-                            onClick={openMemoryExcelModal}
-                            disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null}
-                            className="bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]"
-                          >
-                            <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-center">
-                              {memoryExcelLoading ? 'GENERANDO...' : 'GENERAR EXCEL'}
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => { void handleGenerateMemoryPhotosZip(); }}
-                            disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null}
-                            className="bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99]"
-                          >
-                            <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
-                            <span className="text-[9px] font-black uppercase tracking-widest text-center">
-                              {memoryZipLoading ? (memoryZipProgress || 'PREPARANDO ZIP...') : 'DESCARGAR FOTOS ZIP'}
-                            </span>
-                          </button>
+                        <div className="xl:hidden">
+                          <div className="grid grid-cols-2 gap-3">
+                            <button type="button" onClick={openMemoryExcelModal} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]">
+                              <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
+                              <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryExcelLoading ? 'GENERANDO...' : 'GENERAR EXCEL'}</span>
+                            </button>
+                            <button type="button" onClick={() => { void handleGenerateMemoryPhotosZip(); }} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99]">
+                              <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
+                              <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryZipLoading ? (memoryZipProgress || 'PREPARANDO ZIP...') : 'DESCARGAR FOTOS ZIP'}</span>
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-3 xl:grid xl:grid-cols-4 xl:gap-3 xl:space-y-0">
                           {memoryCategories.map((category) => {
                             const summary = memoryCategorySummary(memorySelectedProject, category.id);
                             const status = summary.groupCount === 0 ? 'SIN REGISTROS' : summary.completeAll ? 'COMPLETO' : 'FALTAN ' + summary.missing;
@@ -3877,7 +3873,7 @@ export default function App() {
                                 key={category.id}
                                 type="button"
                                 onClick={() => { setMemorySelectedCategory(category.id); setMemorySelectedPhoto(null); }}
-                                className="w-full text-left bg-white border border-gray-100 rounded-[1.75rem] p-5 shadow-sm active:scale-[0.99] transition-transform"
+                                className="w-full text-left bg-white border border-gray-100 rounded-[1.75rem] p-5 xl:p-4 shadow-sm active:scale-[0.99] transition-transform"
                               >
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="min-w-0">
@@ -3997,8 +3993,7 @@ export default function App() {
                                                 {category.id === 'NAPS'
                                                   ? 'NAP' + (group.name ? ' · ' + String(group.name).toUpperCase() : '')
                                                   : (ev.categoryLabel || ev.category || category.label)}
-                                              </p>
-                                            </div>
+                                              </p>                                            </div>
                                           </button>
                                         );
                                       })}
@@ -4997,7 +4992,6 @@ export default function App() {
               )}
             </div>
           </div>
-
           {/* Real-time Camera Bridge */}
           <div id="camera-viewfinder" className="relative flex-1 bg-transparent overflow-hidden" onTouchStart={onCameraTouchStart} onTouchMove={onCameraTouchMove} onTouchEnd={onCameraTouchEnd}>
             {!isNativeCamera && (
@@ -5997,8 +5991,7 @@ export default function App() {
                 className="w-full py-4 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase disabled:opacity-40">
                 {mufaCaptureDraft.photoNumber === 1 ? 'GUARDAR NOMBRE Y ABRIR CÁMARA' : 'ABRIR CÁMARA'}
               </button>
-              <button type="button" onClick={() => { setShowMufaCaptureModal(false); setMufaCaptureDraft(null); }}
-                className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
+              <button type="button" onClick={() => { setShowMufaCaptureModal(false); setMufaCaptureDraft(null); }}                className="w-full py-4 rounded-2xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase">Cancelar</button>
             </motion.div>
           </motion.div>
         )}
@@ -6997,8 +6990,7 @@ export default function App() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Reserva de fibra</p>
                     <h3 className="text-xl font-black uppercase tracking-tight text-gray-950 mt-1">
                       RESERVA {String(reserveCaptureDraft.reserveNumber).padStart(2, '0')}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-2">
+                    </h3>                    <p className="text-xs text-gray-500 mt-2">
                       {reserveCaptureDraft.side === 'initial'
                         ? 'Ingrese los datos una sola vez. Se reutilizarán en las 3 fotos de esta reserva.'
                         : (reserveCaptureDraft.side === 'final'
@@ -7997,8 +7989,7 @@ export default function App() {
                                     setShowStorageEvidenceViewer(false);
                                     setStorageEvidenceCategory(null);
                                     setEvidenceCategory('MUFA');
-                                    // Captura puntual: al volver de la cámara se regresa
-                                    // al visor después de completar únicamente esta foto.
+                                    // Captura puntual: al volver de la cámara se regresa                                    // al visor después de completar únicamente esta foto.
                                     setMufaCaptureDraft({
                                       mufaId,
                                       mufaNumber,
