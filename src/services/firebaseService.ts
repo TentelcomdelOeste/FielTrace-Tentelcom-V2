@@ -75,7 +75,7 @@ export const firebaseService = {
     // "FT_uuid.jpg.jpg" ni referencias inconsistentes al eliminar.
     const safeName = (fileName || `FT_${evidenceUuid}`)
       .replace(/[^a-zA-Z0-9._-]/g, '_')
-      .replace(/\\.(jpeg|jpg|png)$/i, '');
+      .replace(/\.(jpeg|jpg|png)$/i, '');
     const storagePath = `projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`;
     const storageRef = ref(storage, storagePath);
     await uploadBytes(storageRef, blob, { contentType: blob.type || 'image/jpeg', cacheControl: 'public,max-age=31536000,immutable' });
@@ -113,11 +113,11 @@ export const firebaseService = {
     const originalPath = String(evidence?.photoStoragePath || '').trim();
     if (originalPath) {
       const variants = [
-        originalPath.replace(/\\.(jpeg|jpg|png)\\1$/i, '.$1'),
-        originalPath.replace(/\\.(jpeg|jpg|png)\\.(jpeg|jpg|png)$/i, '.$2'),
+        originalPath.replace(/\.(jpeg|jpg|png)\1$/i, '.$1'),
+        originalPath.replace(/\.(jpeg|jpg|png)\.(jpeg|jpg|png)$/i, '.$2'),
         originalPath.replace(/(jpeg|jpg|png)\\1$/i, '.$1'),
         originalPath.replace(/(jpeg|jpg|png)\\1$/i, '.$1.$1'),
-        originalPath.replace(/\\.(jpeg|jpg|png)\\.(jpeg|jpg|png)$/i, '.$1'),
+        originalPath.replace(/\.(jpeg|jpg|png)\.(jpeg|jpg|png)$/i, '.$1'),
       ];
       variants.forEach(addCandidate);
     }
