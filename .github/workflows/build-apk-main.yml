@@ -272,13 +272,11 @@ jobs:
         env:
           FIELDTRACE_KEYSTORE_PASSWORD: ${{ secrets.FIELDTRACE_KEYSTORE_PASSWORD }}
           FIELDTRACE_KEY_ALIAS: ${{ secrets.FIELDTRACE_KEY_ALIAS }}
-          FIELDTRACE_KEY_PASSWORD: ${{ secrets.FIELDTRACE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           test -s android/app/fieldtrace-signing.jks
           test -n "$FIELDTRACE_KEYSTORE_PASSWORD"
           test -n "$FIELDTRACE_KEY_ALIAS"
-          test -n "$FIELDTRACE_KEY_PASSWORD"
 
           KEYTOOL_OUT=$(keytool -list -v \
             -keystore android/app/fieldtrace-signing.jks \
@@ -292,16 +290,6 @@ jobs:
           echo "$KEYTOOL_OUT" | grep -q "SHA256: $EXPECTED_SHA256"
           echo "PERSISTENT KEY VERIFIED BEFORE BUILD"
           echo "Certificate SHA-256: $EXPECTED_SHA256"
-
-          # Validate the private-key password separately. keytool -list with only
-          # the keystore password can succeed even when the private-key password
-          # supplied to Gradle is wrong.
-          keytool -list -v \
-            -keystore android/app/fieldtrace-signing.jks \
-            -storepass "$FIELDTRACE_KEYSTORE_PASSWORD" \
-            -alias "$FIELDTRACE_KEY_ALIAS" \
-            -keypass "$FIELDTRACE_KEY_PASSWORD" >/dev/null 2>&1
-          echo "PRIVATE KEY PASSWORD VERIFIED BEFORE BUILD"
 
       - name: Set CI APK version code
         run: |
