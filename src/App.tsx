@@ -3554,7 +3554,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-7 pt-4"
+                className="space-y-7 pt-4 xl:-mt-4 xl:space-y-4"
               >
                 <div className="flex justify-between items-center">
                    <div>
@@ -3563,7 +3563,8 @@ export default function App() {
                    <div className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100"><UserCircle className="w-6 h-6 text-gray-400"/></div>
                 </div>
 
-                <div className="bg-gray-900 rounded-[2.5rem] p-7 text-white shadow-2xl relative overflow-hidden">
+                <div className="xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
+                <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-4 text-white shadow-2xl relative overflow-hidden">
                    <div className="relative z-10">
                      <p className="text-[10px] font-black uppercase opacity-40 mb-2 tracking-widest">Estado de Sincronización</p>
                      <h3 className="text-xl font-bold leading-tight mb-3">{syncRunning ? 'Sincronizando...' : syncSummary.failed > 0 ? 'Atención requerida' : syncSummary.pending > 0 ? 'Registros pendientes' : 'Todo sincronizado'}</h3>
@@ -3587,7 +3588,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => { void loadMemoryDashboard(); }}
-                  className="w-full p-5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform"
+                  className="w-full p-5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform xl:ml-0"
                 >
                   <div className="flex items-center gap-3 text-left">
                     <FileSpreadsheet className="w-6 h-6" />
@@ -3598,6 +3599,7 @@ export default function App() {
                   </div>
                   <ChevronRight className="w-5 h-5" />
                 </button>
+                </div>
 
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative">
@@ -3688,6 +3690,7 @@ export default function App() {
                       </span>
                     </button>
                   )}
+                  <div className="xl:flex xl:flex-wrap xl:items-stretch xl:gap-3 xl:space-y-0">
                   {projects
                     .filter(p => {
                       const term = searchTerm.toLowerCase();
@@ -3710,9 +3713,9 @@ export default function App() {
                           handleSelectProject(p);
                         }
                       }}
-                      className={`p-5 bg-white border rounded-[2rem] flex justify-between items-center hover:shadow-xl hover:shadow-blue-600/5 transition-all cursor-pointer group shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-100'}`}
+                      className={`p-5 bg-white border rounded-[2rem] flex justify-between items-center hover:shadow-xl hover:shadow-blue-600/5 transition-all cursor-pointer group shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-100'} xl:w-fit xl:min-w-[280px] xl:max-w-[430px] xl:flex-none`}
                     >
-                      <div className="flex gap-4 items-center min-w-0">
+                      <div className="flex gap-4 items-center min-w-0 xl:max-w-[350px]">
                         {projectSelectMode ? (
                           <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'}`}>
                             {isSelected && <CheckCircle2 className="w-4 h-4" />}
@@ -3746,6 +3749,7 @@ export default function App() {
                     </motion.div>
                     );
                   })}
+                  </div>
                 </div>
               </motion.div>
             )}
