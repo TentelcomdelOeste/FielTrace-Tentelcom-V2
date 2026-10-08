@@ -268,21 +268,43 @@ jobs:
           test -n "${{ secrets.FIELDTRACE_KEYSTORE_B64 }}" || { echo "FIELDTRACE_KEYSTORE_B64 is required"; exit 1; }
           echo "${{ secrets.FIELDTRACE_KEYSTORE_B64 }}" | base64 --decode > android/app/fieldtrace-signing.jks
           test -s android/app/fieldtrace-signing.jks
-      - name: Verify persistent signing key before APK
+      - name: Verify and normalize persistent APK signing credentials
         env:
-          FIELDTRACE_KEYSTORE_PASSWORD: ${{ secrets.FIELDTRACE_KEYSTORE_PASSWORD }}
-          FIELDTRACE_KEY_ALIAS: ${{ secrets.FIELDTRACE_KEY_ALIAS }}
+          RAW_FIELDTRACE_KEYSTORE_PASSWORD: ${{ secrets.FIELDTRACE_KEYSTORE_PASSWORD }}
+          RAW_FIELDTRACE_KEY_ALIAS: ${{ secrets.FIELDTRACE_KEY_ALIAS }}
         run: |
           set -euo pipefail
           test -s android/app/fieldtrace-signing.jks
+          test -n "$RAW_FIELDTRACE_KEYSTORE_PASSWORD"
+          test -n "$RAW_FIELDTRACE_KEY_ALIAS"
+
+          # The bootstrap password is generated as hexadecimal text and the alias
+          # is "fieldtrace". Strip only accidental whitespace introduced while
+          # copying the one-line secret values into GitHub.
+          FIELDTRACE_KEYSTORE_PASSWORD="$(printf '%s' "$RAW_FIELDTRACE_KEYSTORE_PASSWORD" | tr -d '[:space:]')"
+          FIELDTRACE_KEY_ALIAS="$(printf '%s' "$RAW_FIELDTRACE_KEY_ALIAS" | tr -d '[:space:]')"
           test -n "$FIELDTRACE_KEYSTORE_PASSWORD"
           test -n "$FIELDTRACE_KEY_ALIAS"
 
-          KEYTOOL_OUT=$(keytool -list -v \
+          echo "::add-mask::$FIELDTRACE_KEYSTORE_PASSWORD"
+          printf 'FIELDTRACE_KEYSTORE_PASSWORD=%s\n' "$FIELDTRACE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          printf 'FIELDTRACE_KEY_ALIAS=%s\n' "$FIELDTRACE_KEY_ALIAS" >> "$GITHUB_ENV"
+
+          if ! KEYTOOL_OUT=$(keytool -list -v \
+            -storetype PKCS12 \
             -keystore android/app/fieldtrace-signing.jks \
             -storepass "$FIELDTRACE_KEYSTORE_PASSWORD" \
             -alias "$FIELDTRACE_KEY_ALIAS" \
-            2>&1)
+            2>&1); then
+            echo "ERROR: persistent signing key could not be opened with the configured GitHub secret."
+            echo "Safe keytool diagnostic:"
+            keytool -list \
+              -storetype PKCS12 \
+              -keystore android/app/fieldtrace-signing.jks \
+              -storepass "$FIELDTRACE_KEYSTORE_PASSWORD" \
+              2>&1 || true
+            exit 1
+          fi
 
           EXPECTED_SHA256=$(echo "$KEYTOOL_OUT" | awk -F': ' '/SHA256:/ {print $2; exit}')
           test -n "$EXPECTED_SHA256"
@@ -337,10 +359,6 @@ jobs:
         run: chmod +x gradlew
       - name: Build debug APK
         working-directory: android
-        env:
-          FIELDTRACE_KEYSTORE_PASSWORD: ${{ secrets.FIELDTRACE_KEYSTORE_PASSWORD }}
-          FIELDTRACE_KEY_ALIAS: ${{ secrets.FIELDTRACE_KEY_ALIAS }}
-          FIELDTRACE_KEY_PASSWORD: ${{ secrets.FIELDTRACE_KEY_PASSWORD }}
         run: ./gradlew assembleDebug --no-daemon
       - name: Rename APK to FieldTrace.apk
         run: |
@@ -375,6 +393,7 @@ jobs:
           echo "$VERIFY_OUT"
 
           KEY_SHA256=$(keytool -list -v \
+            -storetype PKCS12 \
             -keystore android/app/fieldtrace-signing.jks \
             -storepass "$FIELDTRACE_KEYSTORE_PASSWORD" \
             -alias "$FIELDTRACE_KEY_ALIAS" \
