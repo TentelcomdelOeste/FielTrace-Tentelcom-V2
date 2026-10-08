@@ -630,6 +630,116 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   sheet.getRow(10).height = 8;
 };
 
+const addRepeatedProjectDataBox = (sheet: ExcelJS.Worksheet, project: any, startRow: number) => {
+  const data = (key: typeof DATA_SHEET_LABELS[number]) => getProjectDataValue(project, key);
+
+  sheet.mergeCells(startRow, 2, startRow, 4);
+  const section = sheet.getCell(startRow, 2);
+  section.value = 'DATOS DE LA OBRA:';
+  section.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  section.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFF' } };
+  section.alignment = { vertical: 'middle', horizontal: 'left' };
+  sheet.getRow(startRow).height = 24;
+
+  // Marco exterior del bloque repetido.
+  for (let col = 2; col <= 10; col++) {
+    sheet.getCell(startRow, col).border = {
+      ...sheet.getCell(startRow, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(startRow + 4, col).border = {
+      ...sheet.getCell(startRow + 4, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+
+  for (let r = startRow; r <= startRow + 4; r++) {
+    sheet.getCell(r, 2).border = {
+      ...sheet.getCell(r, 2).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(r, 10).border = {
+      ...sheet.getCell(r, 10).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+
+  const topRows: Array<{
+    labelRange: [number, number, number, number];
+    label: string;
+    valueRange: [number, number, number, number];
+    dataLabel: typeof DATA_SHEET_LABELS[number];
+  }> = [
+    { labelRange: [startRow + 1, 2, startRow + 1, 2], label: 'País/Div:', valueRange: [startRow + 1, 3, startRow + 1, 3], dataLabel: 'País/Div:' },
+    { labelRange: [startRow + 2, 2, startRow + 2, 3], label: 'Nombre del Supervisor/Insp.:', valueRange: [startRow + 2, 4, startRow + 2, 5], dataLabel: 'Nombre del Supervisor/Insp.:' },
+    { labelRange: [startRow + 3, 2, startRow + 3, 3], label: 'Nombre del Contratista:', valueRange: [startRow + 3, 4, startRow + 3, 5], dataLabel: 'Nombre del Contratista:' },
+    { labelRange: [startRow + 1, 4, startRow + 1, 4], label: 'Área/Cd:', valueRange: [startRow + 1, 5, startRow + 1, 5], dataLabel: 'Área/Cd:' },
+    { labelRange: [startRow + 1, 6, startRow + 1, 6], label: 'Nom. Proy.:', valueRange: [startRow + 1, 7, startRow + 1, 7], dataLabel: 'Nom. Proy.:' },
+    { labelRange: [startRow + 1, 8, startRow + 1, 8], label: 'Producto:', valueRange: [startRow + 1, 9, startRow + 1, 9], dataLabel: 'Producto:' },
+    { labelRange: [startRow + 2, 8, startRow + 2, 8], label: 'Fecha Inicio:', valueRange: [startRow + 2, 9, startRow + 2, 10], dataLabel: 'Fecha Inicio:' },
+    { labelRange: [startRow + 3, 8, startRow + 3, 8], label: 'Fecha Fin:', valueRange: [startRow + 3, 9, startRow + 3, 10], dataLabel: 'Fecha Fin:' },
+  ];
+
+  sheet.mergeCells(startRow, 6, startRow, 8);
+  const identificationLabel = sheet.getCell(startRow, 6);
+  identificationLabel.value = 'Identificación (OB; DTTO; ID; OT; SISA):';
+  identificationLabel.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
+  identificationLabel.alignment = { vertical: 'middle', horizontal: 'right' };
+
+  sheet.mergeCells(startRow, 9, startRow, 10);
+  const identificationValue = sheet.getCell(startRow, 9);
+  identificationValue.value = {
+    formula: 'Datos!C14',
+    result: data('Identificación (OB; DTTO; ID; OT; SISA:')
+  };
+  identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
+  identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
+  identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
+
+  for (const item of topRows) {
+    sheet.mergeCells(...item.labelRange);
+    sheet.mergeCells(...item.valueRange);
+
+    const labelCell = sheet.getCell(item.labelRange[0], item.labelRange[1]);
+    labelCell.value = item.label;
+    labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
+    labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
+    const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
+    const valueCell = sheet.getCell(item.valueRange[0], item.valueRange[1]);
+    valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
+    valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
+    valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
+  }
+
+  sheet.getCell(startRow, 9).border = {
+    ...sheet.getCell(startRow, 9).border,
+    top: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow, 10).border = {
+    ...sheet.getCell(startRow, 10).border,
+    top: { style: 'thin', color: { argb: '222222' } },
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow + 2, 10).border = {
+    ...sheet.getCell(startRow + 2, 10).border,
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow + 3, 10).border = {
+    ...sheet.getCell(startRow + 3, 10).border,
+    right: { style: 'thin', color: { argb: '222222' } },
+  };
+
+  for (let r = startRow; r <= startRow + 3; r++) {
+    sheet.getRow(r).height = 21;
+  }
+  sheet.getRow(startRow + 4).height = 8;
+  sheet.getRow(startRow + 5).height = 8;
+  sheet.getRow(startRow + 6).height = 8;
+};
+
 const addFiberTipsSheet = async (
   workbook: ExcelJS.Workbook,
   project: any,
@@ -1235,6 +1345,17 @@ async function addEvidenceSheet(
     // etiqueta semántica y el nombre del NAP registrado por el usuario.
     if (category.id === 'NAPS') {
       const photoRows = Math.ceil(category.required / 3);
+
+      // Entre sets se conservan las dos filas divisorias existentes.
+      // A partir del segundo NAP se repite el mismo recuadro DATOS DE LA OBRA
+      // utilizado al inicio de la hoja y, después de dos filas de separación,
+      // comienza el nuevo set de 9 fotografías.
+      const napsGroupIndex = orderedGroups.indexOf(group);
+      if (napsGroupIndex > 0) {
+        addRepeatedProjectDataBox(sheet, project, row);
+        row += 7;
+      }
+
       const imageRowStart = row;
       const blockHeight = 7;
       const imageHeightRows = 6;
