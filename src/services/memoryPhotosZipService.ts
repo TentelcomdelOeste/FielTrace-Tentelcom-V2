@@ -85,7 +85,7 @@ const getExtension = (response: Response, url: string): string => {
   if (contentType.includes('png')) return 'png';
   if (contentType.includes('webp')) return 'webp';
   if (contentType.includes('heic')) return 'heic';
-  const match = url.match(/\\.([a-z0-9]{2,5})(?:[?#]|$)/i);
+  const match = url.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i);
   return match?.[1]?.toLowerCase() || 'jpg';
 };
 
