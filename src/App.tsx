@@ -3543,7 +3543,7 @@ export default function App() {
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-6 py-8 no-scrollbar">
+        <div className="flex-1 overflow-y-auto px-6 py-8 xl:pt-4 xl:pb-8 no-scrollbar">
           <input ref={memoryUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleMemoryUploadFile(e.target.files?.[0])} />
 
           <AnimatePresence mode="wait">
