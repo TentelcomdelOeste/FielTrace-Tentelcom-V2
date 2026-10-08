@@ -9,7 +9,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL, getBytes, deleteObject } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -164,6 +164,13 @@ export const firebaseService = {
     if (!uid) throw new Error('No fue posible autenticar la sesión para consultar la fotografía.');
     if (!storagePath) throw new Error('No hay ruta de Storage para verificar.');
     return getDownloadURL(ref(storage, storagePath));
+  },
+
+  async getEvidencePhotoBytes(storagePath: string): Promise<Uint8Array> {
+    const uid = await ensureAuthenticated();
+    if (!uid) throw new Error('No fue posible autenticar la sesión para descargar la fotografía.');
+    if (!storagePath) throw new Error('No hay ruta de Storage para descargar.');
+    return getBytes(ref(storage, storagePath));
   },
 
   async syncEvidenceToCloud(evidence: any): Promise<boolean> {
