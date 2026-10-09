@@ -340,6 +340,18 @@ const getEvidenceDiagnosticLabel = (ev: any): string => {
   ].filter(Boolean).join(' · ');
 };
 
+const detectImageFormat = (bytes: Uint8Array): string => {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+      bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'png';
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'webp';
+  if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70 &&
+      (String.fromCharCode(...bytes.slice(8, 12)) === 'heic' || String.fromCharCode(...bytes.slice(8, 12)) === 'heix' ||
+       String.fromCharCode(...bytes.slice(8, 12)) === 'hevc' || String.fromCharCode(...bytes.slice(8, 12)) === 'mif1')) return 'heic';
+  throw new Error('Los bytes descargados no corresponden a una imagen válida (posible respuesta HTML/error de Firebase).');
+};
+
 const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extension: string }> => {
   const storagePaths = getStoragePathCandidates(ev);
   const storageErrors: string[] = [];
@@ -350,7 +362,9 @@ const downloadPhotoBytes = async (ev: any): Promise<{ bytes: Uint8Array; extensi
   try {
     const response = await fetchPhotoResponse(ev);
     const bytes = new Uint8Array(await response.arrayBuffer());
-    return { bytes, extension: getExtension(response, response.url) };
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const extension = detectImageFormat(bytes);
+    return { bytes, extension };
   } catch (error: any) {
     storageErrors.push(`URL/PROXY => ${describeFirebaseError(error)}`);
   }
@@ -564,8 +578,11 @@ export async function generateMemoryPhotosZip(
         const downloaded = await downloadPhotoBytes(job.ev);
         const crc = await crc32Yielding(downloaded.bytes);
 
+        // La extensión se determina por la firma real del archivo, no por el
+        // nombre/MIME declarado en Firestore, que puede estar desactualizado.
+        const correctedName = job.photoName.replace(/\.[^.\/]+$/, `. ${downloaded.extension}`.replace(' ', ''));
         results[jobIndex] = {
-          name: job.photoName,
+          name: correctedName,
           data: downloaded.bytes,
           crc,
         };
