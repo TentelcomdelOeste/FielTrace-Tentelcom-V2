@@ -98,30 +98,57 @@ const getStoragePathCandidates = (ev: MemoryEvidence, urls: string[] = []): stri
     const path = String(value ?? '').trim();
     if (!path || candidates.includes(path) || /^(https?:\/\/|blob:|data:image\/)/i.test(path)) return;
     if (path.startsWith('gs://')) {
-      const value = path.slice(5);
-      const slash = value.indexOf('/');
-      if (slash > 0) candidates.push(value.slice(slash + 1));
+      const withoutScheme = path.slice(5);
+      const slash = withoutScheme.indexOf('/');
+      if (slash > 0) candidates.push(withoutScheme.slice(slash + 1));
       return;
     }
     candidates.push(path);
   };
-  // Los registros antiguos no siempre usan el mismo nombre para la ruta.
+
   add(ev?.photoStoragePath);
   add(ev?.storagePath);
   add(ev?.photoPath);
   add(ev?.photo?.storagePath);
   add(ev?.photo?.path);
-  for (const source of [...urls, ...getPhotoUrls(ev), ev?.photoUrl, ev?.photo?.uri, ev?.photo?.url]) {
-    const value = String(source ?? '').trim();
-    if (value.startsWith('gs://')) {
-      add(value);
+
+  const sources = [
+    ...urls,
+    ev?.photoUrl, ev?.photo?.uri, ev?.photo?.url, ev?.imageUrl,
+    ev?.image?.url, ev?.storageUrl, ev?.url, ev?.photoPath,
+  ];
+  for (const raw of sources) {
+    const source = String(raw ?? '').trim();
+    if (!source) continue;
+    if (source.startsWith('gs://')) {
+      add(source);
       continue;
     }
     try {
-      const match = new URL(value).pathname.match(/\/o\/(.+)$/);
+      const match = new URL(source).pathname.match(/\/o\/(.+)$/);
       if (match?.[1]) add(decodeURIComponent(match[1]));
-    } catch { /* Referencia histórica que no es URL. */ }
+    } catch { /* Puede ser un nombre de archivo o una referencia antigua. */ }
   }
+
+  // En registros históricos photoPath/photo.fileName puede ser solo el nombre.
+  // Reconstruir la ruta canónica que usa uploadEvidencePhoto().
+  const projectUuid = String(ev?.projectUuid ?? '').trim();
+  const evidenceUuid = String(ev?.uuid ?? '').trim();
+  const rawFileName = String(ev?.photoPath || ev?.photo?.fileName || '').trim();
+  if (projectUuid && evidenceUuid && rawFileName) {
+    const safeName = rawFileName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\.(jpeg|jpg|png)$/i, '');
+    const mime = String(ev?.photo?.mimeType || '').toLowerCase();
+    const preferredExtension = mime.includes('png') ? 'png' : 'jpg';
+    const base = 'projects/' + projectUuid + '/evidences/' + evidenceUuid + '/' + safeName;
+    add(base + '.' + preferredExtension);
+    add(base + '.jpg');
+    add(base + '.png');
+    add(base + '.' + preferredExtension + preferredExtension);
+    add(base + '.' + preferredExtension + '.' + preferredExtension);
+  }
+
   return candidates;
 };
 
@@ -1270,7 +1297,7 @@ const addFiberTipsSheet = async (
 
       if (ev) {
         const url = getPhotoUrl(ev);
-        if (url || ev?.photoStoragePath) {
+        if (url || getStoragePathCandidates(ev).length > 0) {
           try {
             const image = await getExcelImage(url, ev);
             const photoBoxWidthPx = 600;
@@ -1494,7 +1521,7 @@ async function addEvidenceSheet(
 
         if (ev) {
           const url = getPhotoUrl(ev);
-          if (url || ev?.photoStoragePath) {
+          if (url || getStoragePathCandidates(ev).length > 0) {
             try {
               const image = await getExcelImage(url, ev);
               const photoBoxWidthPx = 600;
@@ -1637,7 +1664,7 @@ async function addEvidenceSheet(
 
           if (ev) {
             const url = getPhotoUrl(ev);
-            if (url || ev?.photoStoragePath) {
+            if (url || getStoragePathCandidates(ev).length > 0) {
               try {
                 const image = await getExcelImage(url, ev);
 
@@ -1772,7 +1799,7 @@ async function addEvidenceSheet(
 
           if (ev) {
             const url = getPhotoUrl(ev);
-            if (url || ev?.photoStoragePath) {
+            if (url || getStoragePathCandidates(ev).length > 0) {
               try {
                 const image = await getExcelImage(url, ev);
 
@@ -1892,7 +1919,7 @@ async function addEvidenceSheet(
 
       if (ev) {
         const url = getPhotoUrl(ev);
-        if (url || ev?.photoStoragePath) {
+        if (url || getStoragePathCandidates(ev).length > 0) {
           try {
             // Cada fotografía se descarga, reduce y agrega individualmente.
             // No se acumulan las fotos originales en memoria.
