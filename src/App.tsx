@@ -3064,6 +3064,7 @@ export default function App() {
       let napAsyncProcessingStarted = false;
       let mejoraAsyncProcessingStarted = false;
       let setAsyncProcessingStarted = false;
+      let capturePersisted = false;
       setAsyncProcessingStarted = true;
       (async () => {
         napAsyncProcessingStarted = true;
@@ -3108,6 +3109,7 @@ export default function App() {
 
           // 3. Guardar Evidence en IndexedDB para que aparezca inmediatamente en el proyecto
           await storageService.addEvidence(evidenceObject, finalImage);
+          capturePersisted = true;
 
           // 4. Actualizar estado de UI
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
@@ -3115,8 +3117,14 @@ export default function App() {
 
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
+          alert('No se pudo guardar una fotografía. La captura no se registró; vuelva a entrar en la sección para reintentar la posición pendiente.');
         } finally {
-          if (captureLockKey) pendingSetCaptureKeysRef.current.delete(captureLockKey);
+          // Las posiciones guardadas quedan reservadas durante esta sesión para
+          // evitar duplicados si el estado de React tarda en reflejar IndexedDB.
+          // Solo liberamos una posición si el guardado realmente falló.
+          if (captureLockKey && !capturePersisted) {
+            pendingSetCaptureKeysRef.current.delete(captureLockKey);
+          }
           if (captureLockKey && activeSetCaptureLockRef.current === captureLockKey) {
             activeSetCaptureLockRef.current = null;
           }
