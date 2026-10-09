@@ -140,14 +140,10 @@ const getDescription = (ev: MemoryEvidence, index: number, category: string) => 
 
 const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
 
-// Excel no necesita la resolución completa de una foto de cámara.
-// Las imágenes se optimizan individualmente antes de entrar al workbook.
-// Esto evita mantener en memoria los archivos originales gigantes y reduce
-// drásticamente el peso final del XLSX sin modificar las fotos originales
-// almacenadas en Firebase.
-const EXCEL_MAX_IMAGE_WIDTH = 2000;
-const EXCEL_MAX_IMAGE_HEIGHT = 1500;
-const EXCEL_JPEG_QUALITY = 0.90;
+// Las fotografías se insertan en Excel con sus bytes originales, sin
+// redimensionar, recomprimir ni alterar su calidad. Para acelerar el proceso,
+// las dimensiones se leen directamente de las cabeceras JPEG/PNG cuando es
+// posible, evitando decodificar toda la imagen solo para calcular su tamaño.
 // Excel drawing units: 9,525 EMU por píxel a 96 DPI.
 const EMU_PER_PIXEL = 9525;
 const EXCEL_DEFAULT_COL_WIDTH = 9.14285714285714;
@@ -176,11 +172,61 @@ type ExcelImageData = {
   height: number;
 };
 
-const EXCEL_IMAGE_PREFETCH_CONCURRENCY = 4;
+// Un número moderado de descargas paralelas mejora el rendimiento de escritorio.
+// En móvil se limita la concurrencia para no disparar el consumo de memoria.
+const EXCEL_IMAGE_PREFETCH_CONCURRENCY =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(max-width: 767px), (pointer: coarse)').matches
+    ? 3
+    : 6;
 const excelImageCache = new Map<string, Promise<ExcelImageData>>();
 let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
+
+function readImageDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  // PNG: ancho y alto están en los primeros bytes del bloque IHDR.
+  const isPng = bytes.length >= 24 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 &&
+    bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a &&
+    bytes[6] === 0x1a && bytes[7] === 0x0a;
+  if (isPng) {
+    const width = ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0;
+    const height = ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) >>> 0;
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+
+  // JPEG: recorrer segmentos hasta encontrar un marcador SOF con dimensiones.
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  const startOfFrameMarkers = new Set([
+    0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7,
+    0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+  ]);
+  let offset = 2;
+  while (offset + 3 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) break;
+    const marker = bytes[offset++];
+    // Marcadores sin longitud propia.
+    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 ||
+        (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (offset + 1 >= bytes.length) break;
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+    if (startOfFrameMarkers.has(marker) && segmentLength >= 7) {
+      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+    offset += segmentLength;
+  }
+  return null;
+}
 
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   let response: Response;
@@ -206,39 +252,51 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const blob = await response.blob();
+  // Leer los bytes una sola vez permite tanto insertarlos intactos como extraer
+  // dimensiones sin decodificar píxeles en los formatos habituales.
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const dimensions = readImageDimensions(bytes);
 
-  let width = 4;
-  let height = 3;
-  let bitmap: ImageBitmap | null = null;
+  let width = dimensions?.width ?? 4;
+  let height = dimensions?.height ?? 3;
 
-  try {
-    if (typeof createImageBitmap !== 'undefined') {
-      bitmap = await createImageBitmap(blob);
-      width = bitmap.width;
-      height = bitmap.height;
-    } else if (typeof document !== 'undefined') {
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const element = new Image();
-          element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
-          element.src = objectUrl;
-        });
-        width = image.naturalWidth || width;
-        height = image.naturalHeight || height;
-      } finally {
-        URL.revokeObjectURL(objectUrl);
+  // Fallback para imágenes cuyo encabezado no se pudo interpretar.
+  if (!dimensions) {
+    let bitmap: ImageBitmap | null = null;
+    try {
+      if (typeof createImageBitmap !== 'undefined') {
+        bitmap = await createImageBitmap(blob);
+        width = bitmap.width;
+        height = bitmap.height;
+      } else if (typeof document !== 'undefined') {
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const element = new Image();
+            element.onload = () => resolve(element);
+            element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
+            element.src = objectUrl;
+          });
+          width = image.naturalWidth || width;
+          height = image.naturalHeight || height;
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
       }
+    } finally {
+      bitmap?.close();
     }
-  } finally {
-    bitmap?.close();
   }
 
-  // ExcelJS admite JPEG y PNG. Los archivos originales se conservan intactos:
-  // no se redimensionan, no se recomprimen y no pasan por Canvas.
-  const extension = contentType.includes('png') ? 'png' : 'jpeg';
-  const buffer = await blob.arrayBuffer();
+  // El ArrayBuffer enviado a ExcelJS es exactamente el descargado: no se
+  // convierte mediante Canvas ni se aplica compresión con pérdida.
+  const isPng = contentType.includes('png') ||
+    (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
+      bytes[2] === 0x4e && bytes[3] === 0x47 &&
+      bytes[4] === 0x0d && bytes[5] === 0x0a &&
+      bytes[6] === 0x1a && bytes[7] === 0x0a);
+  const extension = isPng ? 'png' : 'jpeg';
 
   return { buffer, extension, width, height };
 }
