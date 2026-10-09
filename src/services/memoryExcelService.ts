@@ -102,39 +102,54 @@ const withExcelTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: st
     new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
   ]);
 
-const fetchNativeImageDataUrl = (url: string): Promise<string> => {
+const fetchNativeImageDataUrl = async (url: string): Promise<string> => {
   const bridge = (window as Window & {
     FieldTraceNative?: { fetchImageDataUrlAsync?: (imageUrl: string, callbackId: string) => void };
     __fieldTraceImageCallbacks?: Record<string, (dataUrl: string) => void>;
   });
   if (typeof bridge.FieldTraceNative?.fetchImageDataUrlAsync !== 'function') {
-    return Promise.reject(new Error('El APK instalado no contiene el descargador de imágenes actualizado.'));
+    throw new Error('El APK instalado no contiene el descargador de imágenes actualizado.');
   }
 
-  const callbackId = `img_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  return new Promise<string>((resolve, reject) => {
-    const callbacks = bridge.__fieldTraceImageCallbacks || (bridge.__fieldTraceImageCallbacks = {});
-    const timer = window.setTimeout(() => {
-      delete callbacks[callbackId];
-      reject(new Error('Android tardó demasiado en descargar una fotografía de Firebase.'));
-    }, 35_000);
-    callbacks[callbackId] = (dataUrl: string) => {
-      window.clearTimeout(timer);
-      delete callbacks[callbackId];
-      if (typeof dataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl)) {
-        reject(new Error('Android no pudo recuperar una imagen válida desde Firebase Storage.'));
-      } else {
-        resolve(dataUrl);
+  const requestNative = (imageUrl: string): Promise<string> => {
+    const callbackId = `img_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    return new Promise<string>((resolve, reject) => {
+      const callbacks = bridge.__fieldTraceImageCallbacks || (bridge.__fieldTraceImageCallbacks = {});
+      const timer = window.setTimeout(() => {
+        delete callbacks[callbackId];
+        reject(new Error('Android tardó demasiado en descargar una fotografía.'));
+      }, 35_000);
+      callbacks[callbackId] = (dataUrl: string) => {
+        window.clearTimeout(timer);
+        delete callbacks[callbackId];
+        if (typeof dataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl)) {
+          reject(new Error(dataUrl?.startsWith('ERROR:') ? dataUrl.slice(6) : 'El servidor no devolvió una imagen válida.'));
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      try {
+        bridge.FieldTraceNative!.fetchImageDataUrlAsync!(imageUrl, callbackId);
+      } catch (error) {
+        window.clearTimeout(timer);
+        delete callbacks[callbackId];
+        reject(error);
       }
-    };
+    });
+  };
+
+  try {
+    return await requestNative(url);
+  } catch (directError) {
+    // Match the working desktop path: ask the deployed Netlify image proxy
+    // to fetch Firebase Storage, then let Android transfer only the image bytes.
+    const proxyUrl = `https://field-trace.netlify.app/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
     try {
-      bridge.FieldTraceNative!.fetchImageDataUrlAsync!(url, callbackId);
-    } catch (error) {
-      window.clearTimeout(timer);
-      delete callbacks[callbackId];
-      reject(error);
+      return await requestNative(proxyUrl);
+    } catch (proxyError: any) {
+      throw new Error(`Descarga directa y proxy fallaron. Directo: ${String((directError as any)?.message || directError)}. Proxy: ${String(proxyError?.message || proxyError)}`);
     }
-  });
+  }
 };
 
 const isDownloadableImageUrl = (value: string) =>
