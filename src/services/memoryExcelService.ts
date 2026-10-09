@@ -87,18 +87,6 @@ const getMufaDisplayName = (items: MemoryEvidence[]) => {
   return name || '';
 };
 
-const getPhotoUrl = (ev: MemoryEvidence) =>
-  String(
-    ev.photoUrl ||
-    ev.photo?.uri ||
-    ev.photo?.url ||
-    ev.imageUrl ||
-    ev.image?.url ||
-    ev.storageUrl ||
-    ev.url ||
-    ev.photoPath ||
-    ''
-  ).trim();
 
 
 /**
@@ -109,7 +97,7 @@ const getPhotoUrl = (ev: MemoryEvidence) =>
 const resolvedExcelPhotoUrls = new WeakMap<object, Promise<string>>();
 
 const isDownloadableImageUrl = (value: string) =>
-  /^(https?:\\/\\/|data:image\\/|blob:)/i.test(value.trim());
+  /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
 
 const getStoragePathCandidatesForExcel = (ev: MemoryEvidence): string[] => {
   const paths: string[] = [];
@@ -134,7 +122,7 @@ const getStoragePathCandidatesForExcel = (ev: MemoryEvidence): string[] => {
   if (projectUuid && evidenceUuid && rawName) {
     const safeName = rawName
       .replace(/[^a-zA-Z0-9._-]/g, '_')
-      .replace(/\\.(jpeg|jpg|png|webp)$/i, '');
+      .replace(/\.(jpeg|jpg|png|webp)$/i, '');
     const mime = String(ev.photo?.mimeType || '').toLowerCase();
     const extension = mime.includes('png') ? 'png' : 'jpg';
     add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`);
@@ -331,7 +319,7 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 
       try {
         const dataUrl = nativeBridge.fetchImageDataUrl(url);
-        if (!/^data:image\\/(?:jpeg|png|webp);base64,/i.test(dataUrl || '')) {
+        if (!/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl || '')) {
           throw new Error('Android no pudo recuperar los bytes de la fotografía desde Firebase Storage.');
         }
         response = await fetchImage(dataUrl, true);
