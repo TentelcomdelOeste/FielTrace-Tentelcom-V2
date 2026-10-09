@@ -308,7 +308,10 @@ type ExcelImageData = {
 
 const getExcelImagePrefetchConcurrency = () => {
   if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
-    return 2;
+    // Android downloads images through independent native HTTPS requests.
+    // Four concurrent transfers reduce waiting between photos without changing
+    // their source resolution or JPEG quality; keep the cap conservative for RAM.
+    return 4;
   }
   return 4;
 };
