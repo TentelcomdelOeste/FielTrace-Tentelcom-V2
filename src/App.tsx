@@ -3154,6 +3154,9 @@ export default function App() {
       if (isNapCapture && !napAsyncProcessingStarted) {
         napCaptureInFlightRef.current = false;
       }
+      if (isMufaCapture && !setAsyncProcessingStarted) {
+        mufaCaptureInFlightRef.current = false;
+      }
       // Re-armar el flash en background (no bloquea)
       if (flashMode === 'on') {
         void ensureFlashArmed('on');
