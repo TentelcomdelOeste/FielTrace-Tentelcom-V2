@@ -1863,7 +1863,7 @@ async function addEvidenceSheet(
   }
 }
 
-export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[]) {
+export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[], downloadTarget?: Window | null) {
   const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
   const selectedCategories = selectedCategoryIds?.length
@@ -1904,7 +1904,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
 
-  await deliverGeneratedFile(blob, fileName);
+  await deliverGeneratedFile(blob, fileName, downloadTarget);
 
   excelImageCache.clear();
   excelImagePrefetchQueue = [];
