@@ -1,4 +1,6 @@
 import ExcelJS from 'exceljs';
+import { Capacitor } from '@capacitor/core';
+import { firebaseService } from './firebaseService';
 import { deliverGeneratedFile } from './fileDownloadService';
 
 type MemoryEvidence = Record<string, any>;
@@ -85,18 +87,146 @@ const getMufaDisplayName = (items: MemoryEvidence[]) => {
   return name || '';
 };
 
-const getPhotoUrl = (ev: MemoryEvidence) =>
-  String(
-    ev.photoUrl ||
-    ev.photo?.uri ||
-    ev.photo?.url ||
-    ev.imageUrl ||
-    ev.image?.url ||
-    ev.storageUrl ||
-    ev.url ||
-    ev.photoPath ||
-    ''
-  ).trim();
+
+
+/**
+ * Excel export must resolve a real download URL, not a local filename/path.
+ * Some historical records contain only photoStoragePath, while others have
+ * an expired/missing download URL but a valid Storage path.
+ */
+const resolvedExcelPhotoUrls = new WeakMap<object, Promise<string>>();
+
+const withExcelTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
+  ]);
+
+const fetchNativeImageDataUrl = async (url: string): Promise<string> => {
+  const bridge = (window as Window & {
+    FieldTraceNative?: { fetchImageDataUrlAsync?: (imageUrl: string, callbackId: string) => void };
+    __fieldTraceImageCallbacks?: Record<string, (dataUrl: string) => void>;
+  });
+  if (typeof bridge.FieldTraceNative?.fetchImageDataUrlAsync !== 'function') {
+    throw new Error('El APK instalado no contiene el descargador de imágenes actualizado.');
+  }
+
+  const requestNative = (imageUrl: string): Promise<string> => {
+    const callbackId = `img_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    return new Promise<string>((resolve, reject) => {
+      const callbacks = bridge.__fieldTraceImageCallbacks || (bridge.__fieldTraceImageCallbacks = {});
+      const timer = window.setTimeout(() => {
+        delete callbacks[callbackId];
+        reject(new Error('Android tardó demasiado en descargar una fotografía.'));
+      }, 35_000);
+      callbacks[callbackId] = (dataUrl: string) => {
+        window.clearTimeout(timer);
+        delete callbacks[callbackId];
+        if (typeof dataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl)) {
+          reject(new Error(dataUrl?.startsWith('ERROR:') ? dataUrl.slice(6) : 'El servidor no devolvió una imagen válida.'));
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      try {
+        bridge.FieldTraceNative!.fetchImageDataUrlAsync!(imageUrl, callbackId);
+      } catch (error) {
+        window.clearTimeout(timer);
+        delete callbacks[callbackId];
+        reject(error);
+      }
+    });
+  };
+
+  try {
+    return await requestNative(url);
+  } catch (directError) {
+    // Match the working desktop path: ask the deployed Netlify image proxy
+    // to fetch Firebase Storage, then let Android transfer only the image bytes.
+    const proxyUrl = `https://field-trace.netlify.app/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
+    try {
+      return await requestNative(proxyUrl);
+    } catch (proxyError: any) {
+      throw new Error(`Descarga directa y proxy fallaron. Directo: ${String((directError as any)?.message || directError)}. Proxy: ${String(proxyError?.message || proxyError)}`);
+    }
+  }
+};
+
+const isDownloadableImageUrl = (value: string) =>
+  /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
+
+const getStoragePathCandidatesForExcel = (ev: MemoryEvidence): string[] => {
+  const paths: string[] = [];
+  const add = (value: unknown) => {
+    const path = String(value ?? '').trim();
+    if (path && !paths.includes(path)) paths.push(path);
+  };
+
+  add(ev.photoStoragePath);
+  add(ev.storagePath);
+  add(ev.photo?.storagePath);
+
+  for (const value of [ev.photoPath, ev.photo?.fileName]) {
+    const raw = String(value ?? '').trim();
+    if (raw.startsWith('gs://') || raw.startsWith('projects/')) add(raw);
+  }
+
+  const projectUuid = String(ev.projectUuid ?? '').trim();
+  const evidenceUuid = String(ev.uuid ?? '').trim();
+  const rawName = String(ev.photoPath || ev.photo?.fileName || (evidenceUuid ? `FT_${evidenceUuid}` : '')).trim();
+
+  if (projectUuid && evidenceUuid && rawName) {
+    const safeName = rawName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\.(jpeg|jpg|png|webp)$/i, '');
+    const mime = String(ev.photo?.mimeType || '').toLowerCase();
+    const extension = mime.includes('png') ? 'png' : 'jpg';
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.jpg`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.png`);
+  }
+
+  return paths;
+};
+
+const resolveExcelPhotoUrl = async (ev: MemoryEvidence): Promise<string> => {
+  if (!ev || typeof ev !== 'object') return '';
+  const cached = resolvedExcelPhotoUrls.get(ev);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const directCandidates = [
+      ev.photoUrl, ev.photo?.uri, ev.photo?.url, ev.imageUrl,
+      ev.image?.url, ev.storageUrl, ev.url, ev.photoPath,
+    ]
+      .map(value => String(value ?? '').trim())
+      .filter(isDownloadableImageUrl);
+
+    if (directCandidates.length) return directCandidates[0];
+
+    const storagePaths = getStoragePathCandidatesForExcel(ev);
+    for (const storagePath of storagePaths) {
+      try {
+        return await withExcelTimeout(
+          firebaseService.getEvidencePhotoUrl(storagePath),
+          12_000,
+          'Se agotó el tiempo buscando la fotografía en Firebase Storage.'
+        );
+      } catch (error: any) {
+        console.warn('[Memory Excel] No se pudo resolver la URL de Storage para una evidencia.', {
+          evidenceUuid: String(ev.uuid || ''),
+          storagePath,
+          error: String(error?.message || error || 'Error desconocido'),
+        });
+      }
+    }
+
+    return '';
+  })();
+
+  resolvedExcelPhotoUrls.set(ev, pending);
+  return pending;
+};
 
 // Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
 // pero en Memoria Fotográfica representan un único set de 2 fotografías.
@@ -178,7 +308,10 @@ type ExcelImageData = {
 
 const getExcelImagePrefetchConcurrency = () => {
   if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
-    return 2;
+    // Android downloads images through independent native HTTPS requests.
+    // Four concurrent transfers reduce waiting between photos without changing
+    // their source resolution or JPEG quality; keep the cap conservative for RAM.
+    return 4;
   }
   return 4;
 };
@@ -196,12 +329,14 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     let response: Response;
     let blob: Blob;
     try {
-      response = await fetch(target, proxy
-        ? { cache: 'force-cache', signal: controller.signal }
-        : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+      const request = target.startsWith('data:')
+        ? fetch(target)
+        : fetch(target, proxy
+          ? { cache: 'force-cache', signal: controller.signal }
+          : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+      response = await request;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      // Mantener activo el timeout hasta leer el cuerpo completo; en móviles
-      // algunas respuestas entregan cabeceras y luego se quedan sin terminar.
+      // Mantener activo el timeout hasta leer el cuerpo completo.
       blob = await response.blob();
     } catch (error: any) {
       if (error?.name === 'AbortError') {
@@ -213,16 +348,14 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     }
 
     if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
-
     const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
     const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
     const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
     const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
       bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
     if (!isJpeg && !isPng && !isWebp) {
-      throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+      throw new Error('La respuesta no contiene una imagen JPEG, PNG o WebP válida.');
     }
-
     const mime = isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp';
     return new Response(blob, { status: 200, headers: { 'content-type': mime } });
   };
@@ -234,9 +367,26 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   let response: Response;
   try {
     response = await fetchImage(url);
-  } catch (directError) {
-    if (proxyUrl === url) throw directError;
-    response = await fetchImage(proxyUrl, true);
+  } catch (directError: any) {
+    if (Capacitor.isNativePlatform()) {
+      // A WebView fetch can be blocked by CORS even when the same Firebase
+      // URL works as an <img>. Netlify functions are not served from the APK's
+      // local origin, so use an Android-side HTTPS download as the fallback.
+      try {
+        const dataUrl = await fetchNativeImageDataUrl(url);
+        response = await fetchImage(dataUrl, true);
+      } catch (nativeError: any) {
+        const reason = String(nativeError?.message || nativeError || directError?.message || 'Error de red');
+        console.error('[Memory Excel] Falló la descarga nativa de una fotografía.', {
+          sourceHost: (() => { try { return new URL(url).host; } catch { return 'URL no válida'; } })(),
+          reason,
+        });
+        throw new Error(`No se pudo recuperar la fotografía desde Firebase en Android: ${reason}`);
+      }
+    } else {
+      if (proxyUrl === url) throw directError;
+      response = await fetchImage(proxyUrl, true);
+    }
   }
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
@@ -278,9 +428,6 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 
     if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
 
-    // Las fotos originales de móvil pueden ser muy grandes. Reducirlas antes
-    // de incorporarlas a Excel evita picos de RAM que dejan el botón en
-    // "GENERANDO..." sin completar en Android/WebView.
     const scale = Math.min(1, EXCEL_MAX_IMAGE_WIDTH / width, EXCEL_MAX_IMAGE_HEIGHT / height);
     const isWebp = contentType.includes('webp');
     if (scale < 1 || isWebp) {
@@ -352,7 +499,7 @@ function configureExcelImagePrefetch(urls: string[]) {
   primeExcelImagePrefetch();
 }
 
-async function getExcelImage(url: string): Promise<ExcelImageData> {
+async function getExcelImage(url: string, evidence?: MemoryEvidence): Promise<ExcelImageData> {
   let promise = excelImageCache.get(url);
 
   if (!promise) {
@@ -362,8 +509,34 @@ async function getExcelImage(url: string): Promise<ExcelImageData> {
 
   try {
     return await promise;
+  } catch (firstError: any) {
+    // A historical download URL may have an expired token. Refresh it through
+    // the authenticated Firebase SDK and retry once before declaring failure.
+    const storagePaths = evidence ? getStoragePathCandidatesForExcel(evidence) : [];
+    let lastError: any = firstError;
+    for (const storagePath of storagePaths) {
+      try {
+        const refreshedUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+        if (!refreshedUrl || refreshedUrl === url) continue;
+        console.info('[Memory Excel] Reintentando fotografía con URL renovada de Firebase Storage.', {
+          evidenceUuid: String(evidence?.uuid || ''),
+          storagePath,
+        });
+        return await fetchOriginalImage(refreshedUrl);
+      } catch (refreshError: any) {
+        lastError = refreshError;
+      }
+    }
+
+    console.error('[Memory Excel] No se pudo cargar una fotografía.', {
+      category: String(evidence?.category || ''),
+      evidenceUuid: String(evidence?.uuid || ''),
+      storagePath: String(evidence?.photoStoragePath || ''),
+      sourceHost: (() => { try { return new URL(url).host; } catch { return 'URL no válida'; } })(),
+      reason: String(lastError?.message || lastError || 'Error desconocido'),
+    });
+    throw lastError;
   } finally {
-    // Mantener un máximo pequeño de fotografías adelantadas en memoria.
     if (excelImageCache.get(url) === promise) {
       excelImageCache.delete(url);
     }
@@ -1228,10 +1401,10 @@ const addFiberTipsSheet = async (
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
-        const url = getPhotoUrl(ev);
+        const url = await resolveExcelPhotoUrl(ev);
         if (url) {
           try {
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const photoBoxWidthPx = 600;
             const photoBoxHeightPx = 450;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
@@ -1446,10 +1619,10 @@ async function addEvidenceSheet(
         imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
         if (ev) {
-          const url = getPhotoUrl(ev);
+          const url = await resolveExcelPhotoUrl(ev);
           if (url) {
             try {
-              const image = await getExcelImage(url);
+              const image = await getExcelImage(url, ev);
               const photoBoxWidthPx = 600;
               const photoBoxHeightPx = 450;
               const scale = Math.min(
@@ -1583,10 +1756,10 @@ async function addEvidenceSheet(
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
-            const url = getPhotoUrl(ev);
+            const url = await resolveExcelPhotoUrl(ev);
             if (url) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(url, ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1712,10 +1885,10 @@ async function addEvidenceSheet(
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
-            const url = getPhotoUrl(ev);
+            const url = await resolveExcelPhotoUrl(ev);
             if (url) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(url, ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1826,12 +1999,12 @@ async function addEvidenceSheet(
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
-        const url = getPhotoUrl(ev);
+        const url = await resolveExcelPhotoUrl(ev);
         if (url) {
           try {
             // Cada fotografía se descarga, reduce y agrega individualmente.
             // No se acumulan las fotos originales en memoria.
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
             const scale = Math.min(
@@ -1954,10 +2127,14 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   // Preparar el pipeline de descargas únicamente para las secciones elegidas.
   // Así, al desmarcar libros, tampoco se descargan sus fotografías.
-  const imageUrls = evidences
-    .filter(ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category)))
-    .map(getPhotoUrl)
-    .filter(Boolean);
+  const selectedEvidences = evidences.filter(
+    ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category))
+  );
+  const imageUrls = (await withExcelTimeout(
+    Promise.all(selectedEvidences.map(ev => resolveExcelPhotoUrl(ev))),
+    30_000,
+    'La consulta de fotografías tardó demasiado. Verifique la conexión y vuelva a intentar.'
+  )).filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
   const workbook = new ExcelJS.Workbook();
