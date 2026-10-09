@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { deliverGeneratedFile } from './fileDownloadService';
+import { firebaseService } from './firebaseService';
 
 type MemoryEvidence = Record<string, any>;
 
@@ -85,18 +86,32 @@ const getMufaDisplayName = (items: MemoryEvidence[]) => {
   return name || '';
 };
 
-const getPhotoUrl = (ev: MemoryEvidence) =>
-  String(
-    ev.photoUrl ||
-    ev.photo?.uri ||
-    ev.photo?.url ||
-    ev.imageUrl ||
-    ev.image?.url ||
-    ev.storageUrl ||
-    ev.url ||
-    ev.photoPath ||
-    ''
-  ).trim();
+const getPhotoUrls = (ev: MemoryEvidence): string[] => {
+  const candidates = [ev?.photoUrl, ev?.photo?.uri, ev?.photo?.url, ev?.imageUrl, ev?.image?.url, ev?.storageUrl, ev?.url, ev?.photoPath];
+  return Array.from(new Set(candidates.map(value => String(value ?? '').trim())
+    .filter(value => /^(https?:\/\/|blob:|data:image\/)/i.test(value))));
+};
+const getPhotoUrl = (ev: MemoryEvidence) => getPhotoUrls(ev)[0] || '';
+const getStoragePathCandidates = (ev: MemoryEvidence, urls: string[] = []): string[] => {
+  const candidates: string[] = [];
+  const add = (value: unknown) => {
+    const path = String(value ?? '').trim();
+    if (path && !/^https?:\/\//i.test(path) && !candidates.includes(path)) candidates.push(path);
+  };
+  add(ev?.photoStoragePath);
+  for (const source of [...urls, ...getPhotoUrls(ev)]) {
+    if (source.startsWith('gs://')) {
+      const value = source.slice(5);
+      const slash = value.indexOf('/');
+      if (slash > 0) add(value.slice(slash + 1));
+    }
+    try {
+      const match = new URL(source).pathname.match(/\/o\/(.+)$/);
+      if (match?.[1]) add(decodeURIComponent(match[1]));
+    } catch { /* Referencia histórica que no es URL. */ }
+  }
+  return candidates;
+};
 
 // Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
 // pero en Memoria Fotográfica representan un único set de 2 fotografías.
@@ -298,23 +313,64 @@ function configureExcelImagePrefetch(urls: string[]) {
   primeExcelImagePrefetch();
 }
 
-async function getExcelImage(url: string): Promise<ExcelImageData> {
-  let promise = excelImageCache.get(url);
+async function getExcelImage(url: string, evidence?: MemoryEvidence): Promise<ExcelImageData> {
+  const failures: string[] = [];
+  const urls = Array.from(new Set([url, ...getPhotoUrls(evidence || {})].filter(Boolean)));
 
-  if (!promise) {
-    promise = fetchOriginalImage(url);
-    excelImageCache.set(url, promise);
-  }
-
-  try {
-    return await promise;
-  } finally {
-    // Mantener un máximo pequeño de fotografías adelantadas en memoria.
-    if (excelImageCache.get(url) === promise) {
-      excelImageCache.delete(url);
+  // Probar todas las URLs guardadas antes de declarar la fotografía perdida.
+  for (const candidate of urls) {
+    let promise = excelImageCache.get(candidate);
+    if (!promise) {
+      promise = fetchOriginalImage(candidate);
+      excelImageCache.set(candidate, promise);
     }
-    primeExcelImagePrefetch();
+    try {
+      const image = await promise;
+      if (excelImageCache.get(candidate) === promise) excelImageCache.delete(candidate);
+      primeExcelImagePrefetch();
+      return image;
+    } catch (error: any) {
+      failures.push(`URL ${candidate.slice(0, 180)}: ${error?.message || String(error)}`);
+      if (excelImageCache.get(candidate) === promise) excelImageCache.delete(candidate);
+    }
   }
+
+  // Recuperar por el SDK autenticado de Firebase Storage si fallan URL y proxy.
+  for (const storagePath of getStoragePathCandidates(evidence || {}, urls)) {
+    let objectUrl = '';
+    try {
+      const bytes = await firebaseService.getEvidencePhotoBytes(storagePath);
+      if (!bytes?.byteLength) throw new Error('Firebase Storage devolvió cero bytes.');
+      const signature = bytes.subarray(0, 12);
+      const isPng = signature[0] === 0x89 && signature[1] === 0x50 && signature[2] === 0x4e && signature[3] === 0x47;
+      const isJpeg = signature[0] === 0xff && signature[1] === 0xd8 && signature[2] === 0xff;
+      const isWebp = signature[0] === 0x52 && signature[1] === 0x49 && signature[2] === 0x46 &&
+        signature[8] === 0x57 && signature[9] === 0x45 && signature[10] === 0x42 && signature[11] === 0x50;
+      if (!isPng && !isJpeg && !isWebp) throw new Error('Los bytes recuperados no son JPEG, PNG ni WebP.');
+      const mime = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      objectUrl = URL.createObjectURL(new Blob([buffer], { type: mime }));
+      const image = await fetchOriginalImage(objectUrl);
+      console.info('[MemoryExcel] Fotografía recuperada desde Firebase Storage:', {
+        evidence: evidence?.uuid || evidence?.id || 'sin-id', storagePath, bytes: bytes.byteLength,
+      });
+      return image;
+    } catch (error: any) {
+      failures.push(`Storage ${storagePath}: ${error?.message || String(error)}`);
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  const diagnostic = failures.length ? failures.join(' || ') : 'La evidencia no contiene URL ni ruta de Firebase Storage.';
+  console.error('[MemoryExcel] Falló la carga de fotografía:', {
+    evidence: evidence?.uuid || evidence?.id || 'sin-id',
+    category: evidence?.category || evidence?.categoryLabel || 'sin-categoría',
+    urlsTried: urls,
+    storagePathsTried: getStoragePathCandidates(evidence || {}, urls),
+    errors: diagnostic,
+  });
+  throw new Error(diagnostic);
 }
 
 
@@ -1175,9 +1231,9 @@ const addFiberTipsSheet = async (
 
       if (ev) {
         const url = getPhotoUrl(ev);
-        if (url) {
+        if (url || ev?.photoStoragePath) {
           try {
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const photoBoxWidthPx = 600;
             const photoBoxHeightPx = 450;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
@@ -1210,7 +1266,11 @@ const addFiberTipsSheet = async (
               },
               ext: { width: imageWidth, height: imageHeight },
             } as any);
-          } catch {
+          } catch (error) {
+            console.error('[MemoryExcel] Falló la inserción de fotografía:', {
+              category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
+              error: error instanceof Error ? error.message : String(error),
+            });
             imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
           }
         } else {
@@ -1393,9 +1453,9 @@ async function addEvidenceSheet(
 
         if (ev) {
           const url = getPhotoUrl(ev);
-          if (url) {
+          if (url || ev?.photoStoragePath) {
             try {
-              const image = await getExcelImage(url);
+              const image = await getExcelImage(url, ev);
               const photoBoxWidthPx = 600;
               const photoBoxHeightPx = 450;
               const scale = Math.min(
@@ -1439,8 +1499,12 @@ async function addEvidenceSheet(
                 },
                 ext: { width: imageWidth, height: imageHeight },
               } as any);
-            } catch {
-              imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            } catch (error) {
+            console.error('[MemoryExcel] Falló la inserción de fotografía:', {
+              category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
+              error: error instanceof Error ? error.message : String(error),
+            });
+            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
             }
           } else {
             imageCell.value = 'SIN FOTO';
@@ -1530,9 +1594,9 @@ async function addEvidenceSheet(
 
           if (ev) {
             const url = getPhotoUrl(ev);
-            if (url) {
+            if (url || ev?.photoStoragePath) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(url, ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1581,8 +1645,12 @@ async function addEvidenceSheet(
                   },
                   ext: { width: imageWidth, height: imageHeight },
                 } as any);
-              } catch {
-                imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+              } catch (error) {
+            console.error('[MemoryExcel] Falló la inserción de fotografía:', {
+              category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
+              error: error instanceof Error ? error.message : String(error),
+            });
+            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
               }
             } else {
               imageCell.value = 'SIN FOTO';
@@ -1659,9 +1727,9 @@ async function addEvidenceSheet(
 
           if (ev) {
             const url = getPhotoUrl(ev);
-            if (url) {
+            if (url || ev?.photoStoragePath) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(url, ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1710,8 +1778,12 @@ async function addEvidenceSheet(
                   },
                   ext: { width: imageWidth, height: imageHeight },
                 } as any);
-              } catch {
-                imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+              } catch (error) {
+            console.error('[MemoryExcel] Falló la inserción de fotografía:', {
+              category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
+              error: error instanceof Error ? error.message : String(error),
+            });
+            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
               }
             } else {
               imageCell.value = 'SIN FOTO';
@@ -1773,11 +1845,11 @@ async function addEvidenceSheet(
 
       if (ev) {
         const url = getPhotoUrl(ev);
-        if (url) {
+        if (url || ev?.photoStoragePath) {
           try {
             // Cada fotografía se descarga, reduce y agrega individualmente.
             // No se acumulan las fotos originales en memoria.
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
             const scale = Math.min(
@@ -1826,6 +1898,10 @@ async function addEvidenceSheet(
               },
             } as any);
           } catch (error) {
+            console.error('[MemoryExcel] Falló la inserción de fotografía:', {
+              category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
+              error: error instanceof Error ? error.message : String(error),
+            });
             imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
             imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
           }
