@@ -197,8 +197,8 @@ const makeEndRecord = (entryCount: number, centralSize: number, centralOffset: n
   return end;
 };
 
-const triggerDownload = async (blob: Blob, fileName: string) => {
-  await deliverGeneratedFile(blob, fileName);
+const triggerDownload = async (blob: Blob, fileName: string, downloadTarget?: Window | null) => {
+  await deliverGeneratedFile(blob, fileName, downloadTarget);
 };
 
 const resolvePhotoUrls = async (ev: any): Promise<string[]> => {
@@ -474,6 +474,7 @@ export async function generateMemoryPhotosZip(
   evidences: any[],
   onProgress?: (completed: number, total: number, phase: 'download' | 'pack' | 'ready') => void,
   sectionCategory?: string,
+  downloadTarget?: Window | null,
 ): Promise<void> {
   const projectName = sanitizeName(project?.name, 'PROYECTO');
   const normalizedSection = sectionCategory ? normalizeCategory(sectionCategory) : '';
@@ -628,5 +629,5 @@ export async function generateMemoryPhotosZip(
   const downloadLabel = normalizedSection
     ? sanitizeName(SECTION_LABELS[normalizedSection] || normalizedSection, normalizedSection)
     : 'FOTOS';
-  await triggerDownload(blob, `${projectName} - ${downloadLabel}.zip`);
+  await triggerDownload(blob, `${projectName} - ${downloadLabel}.zip`, downloadTarget);
 }
