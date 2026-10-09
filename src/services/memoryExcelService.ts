@@ -176,18 +176,41 @@ type ExcelImageData = {
   height: number;
 };
 
-const EXCEL_IMAGE_PREFETCH_CONCURRENCY = 4;
+const getExcelImagePrefetchConcurrency = () => {
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
+    return 2;
+  }
+  return 4;
+};
 const excelImageCache = new Map<string, Promise<ExcelImageData>>();
 let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 
+const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 25_000;
+
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   const fetchImage = async (target: string, proxy = false): Promise<Response> => {
-    const response = await fetch(target, proxy ? { cache: 'force-cache' } : { mode: 'cors', cache: 'force-cache' });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(target, proxy
+        ? { cache: 'force-cache', signal: controller.signal }
+        : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error(`Tiempo de espera agotado al descargar una fotografía (${EXCEL_IMAGE_FETCH_TIMEOUT_MS / 1000} s).`);
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
+
     const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
     const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
     const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
@@ -196,12 +219,15 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     if (!isJpeg && !isPng && !isWebp) {
       throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
     }
-    return new Response(blob, { status: 200, headers: { 'content-type': isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp' } });
+
+    const mime = isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp';
+    return new Response(blob, { status: 200, headers: { 'content-type': mime } });
   };
 
   const proxyUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
+
   let response: Response;
   try {
     response = await fetchImage(url);
@@ -213,67 +239,92 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const sourceBlob = await response.blob();
   let bitmap: ImageBitmap | null = null;
-  let width = 0;
-  let height = 0;
+  let fallbackImage: HTMLImageElement | null = null;
+  let objectUrl: string | null = null;
+
   try {
+    let width = 0;
+    let height = 0;
+
     if (typeof createImageBitmap !== 'undefined') {
       bitmap = await createImageBitmap(sourceBlob);
       width = bitmap.width;
       height = bitmap.height;
     } else {
-      const objectUrl = URL.createObjectURL(sourceBlob);
-      try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const element = new Image();
-          element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
-          element.src = objectUrl;
-        });
-        width = image.naturalWidth;
-        height = image.naturalHeight;
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      objectUrl = URL.createObjectURL(sourceBlob);
+      fallbackImage = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        const timer = window.setTimeout(() => {
+          element.onload = null;
+          element.onerror = null;
+          reject(new Error('Tiempo de espera agotado al procesar una fotografía para Excel.'));
+        }, EXCEL_IMAGE_FETCH_TIMEOUT_MS);
+        element.onload = () => {
+          window.clearTimeout(timer);
+          resolve(element);
+        };
+        element.onerror = () => {
+          window.clearTimeout(timer);
+          reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
+        };
+        element.src = objectUrl!;
+      });
+      width = fallbackImage.naturalWidth;
+      height = fallbackImage.naturalHeight;
     }
+
+    if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
+
+    // Las fotos originales de móvil pueden ser muy grandes. Reducirlas antes
+    // de incorporarlas a Excel evita picos de RAM que dejan el botón en
+    // "GENERANDO..." sin completar en Android/WebView.
+    const scale = Math.min(1, EXCEL_MAX_IMAGE_WIDTH / width, EXCEL_MAX_IMAGE_HEIGHT / height);
+    const isWebp = contentType.includes('webp');
+    if (scale < 1 || isWebp) {
+      const targetWidth = Math.max(1, Math.round(width * scale));
+      const targetHeight = Math.max(1, Math.round(height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('No se pudo preparar la fotografía para Excel.');
+
+      if (bitmap) context.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+      else if (fallbackImage) context.drawImage(fallbackImage, 0, 0, targetWidth, targetHeight);
+      else throw new Error('No se pudo decodificar la fotografía para Excel.');
+
+      const converted = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob(
+          blob => blob ? resolve(blob) : reject(new Error('No se pudo optimizar la fotografía para Excel.')),
+          'image/jpeg',
+          EXCEL_JPEG_QUALITY,
+        )
+      );
+      canvas.width = 1;
+      canvas.height = 1;
+      return {
+        buffer: await converted.arrayBuffer(),
+        extension: 'jpeg',
+        width: targetWidth,
+        height: targetHeight,
+      };
+    }
+
+    return {
+      buffer: await sourceBlob.arrayBuffer(),
+      extension: contentType.includes('png') ? 'png' : 'jpeg',
+      width,
+      height,
+    };
   } finally {
     bitmap?.close();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
   }
-  if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
-
-  // ExcelJS solo admite JPEG/PNG. Convertimos WebP a JPEG de alta calidad
-  // mediante el decodificador nativo del navegador, nunca incrustamos bytes
-  // WebP etiquetados erróneamente como JPEG (causa de fotos corruptas en Excel).
-  if (contentType.includes('webp')) {
-    const image = await createImageBitmap(sourceBlob);
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const context = canvas.getContext('2d', { alpha: false });
-    if (!context) {
-      image.close();
-      throw new Error('No se pudo preparar la fotografía para Excel.');
-    }
-    context.drawImage(image, 0, 0);
-    image.close();
-    const converted = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('No se pudo convertir WebP para Excel.')), 'image/jpeg', 0.96)
-    );
-    canvas.width = 1;
-    canvas.height = 1;
-    return { buffer: await converted.arrayBuffer(), extension: 'jpeg', width, height };
-  }
-
-  return {
-    buffer: await sourceBlob.arrayBuffer(),
-    extension: contentType.includes('png') ? 'png' : 'jpeg',
-    width,
-    height,
-  };
 }
 
 function primeExcelImagePrefetch() {
   while (
-    excelImagePrefetchActive < EXCEL_IMAGE_PREFETCH_CONCURRENCY &&
+    excelImagePrefetchActive < getExcelImagePrefetchConcurrency() &&
     excelImagePrefetchCursor < excelImagePrefetchQueue.length
   ) {
     const url = excelImagePrefetchQueue[excelImagePrefetchCursor++];
