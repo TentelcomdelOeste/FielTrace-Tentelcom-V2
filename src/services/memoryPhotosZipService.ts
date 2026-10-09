@@ -1,4 +1,5 @@
 import { firebaseService } from './firebaseService';
+import { deliverGeneratedFile } from './fileDownloadService';
 
 type ZipEntry = {
   name: string;
@@ -196,16 +197,8 @@ const makeEndRecord = (entryCount: number, centralSize: number, centralOffset: n
   return end;
 };
 
-const triggerDownload = (blob: Blob, fileName: string) => {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.style.display = 'none';
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+const triggerDownload = async (blob: Blob, fileName: string) => {
+  await deliverGeneratedFile(blob, fileName);
 };
 
 const resolvePhotoUrls = async (ev: any): Promise<string[]> => {
@@ -635,5 +628,5 @@ export async function generateMemoryPhotosZip(
   const downloadLabel = normalizedSection
     ? sanitizeName(SECTION_LABELS[normalizedSection] || normalizedSection, normalizedSection)
     : 'FOTOS';
-  triggerDownload(blob, `${projectName} - ${downloadLabel}.zip`);
+  await triggerDownload(blob, `${projectName} - ${downloadLabel}.zip`);
 }
