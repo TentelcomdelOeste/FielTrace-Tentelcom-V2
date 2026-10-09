@@ -457,15 +457,33 @@ async function getExcelImage(url: string, evidence?: MemoryEvidence): Promise<Ex
 
   try {
     return await promise;
-  } catch (error: any) {
+  } catch (firstError: any) {
+    // A historical download URL may have an expired token. Refresh it through
+    // the authenticated Firebase SDK and retry once before declaring failure.
+    const storagePaths = evidence ? getStoragePathCandidatesForExcel(evidence) : [];
+    let lastError: any = firstError;
+    for (const storagePath of storagePaths) {
+      try {
+        const refreshedUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+        if (!refreshedUrl || refreshedUrl === url) continue;
+        console.info('[Memory Excel] Reintentando fotografía con URL renovada de Firebase Storage.', {
+          evidenceUuid: String(evidence?.uuid || ''),
+          storagePath,
+        });
+        return await fetchOriginalImage(refreshedUrl);
+      } catch (refreshError: any) {
+        lastError = refreshError;
+      }
+    }
+
     console.error('[Memory Excel] No se pudo cargar una fotografía.', {
       category: String(evidence?.category || ''),
       evidenceUuid: String(evidence?.uuid || ''),
       storagePath: String(evidence?.photoStoragePath || ''),
       sourceHost: (() => { try { return new URL(url).host; } catch { return 'URL no válida'; } })(),
-      reason: String(error?.message || error || 'Error desconocido'),
+      reason: String(lastError?.message || lastError || 'Error desconocido'),
     });
-    throw error;
+    throw lastError;
   } finally {
     if (excelImageCache.get(url) === promise) {
       excelImageCache.delete(url);
