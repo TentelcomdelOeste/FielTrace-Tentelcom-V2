@@ -1311,6 +1311,8 @@ const addFiberTipsSheet = async (
               error: error instanceof Error ? error.message : String(error),
             });
             imageCell.value = formatPhotoError(error);
+            imageCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
           }
         } else {
           imageCell.value = 'SIN FOTO';
@@ -1544,6 +1546,8 @@ async function addEvidenceSheet(
               error: error instanceof Error ? error.message : String(error),
             });
             imageCell.value = formatPhotoError(error);
+            imageCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
             }
           } else {
             imageCell.value = 'SIN FOTO';
@@ -1690,6 +1694,8 @@ async function addEvidenceSheet(
               error: error instanceof Error ? error.message : String(error),
             });
             imageCell.value = formatPhotoError(error);
+            imageCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
               }
             } else {
               imageCell.value = 'SIN FOTO';
@@ -1823,6 +1829,8 @@ async function addEvidenceSheet(
               error: error instanceof Error ? error.message : String(error),
             });
             imageCell.value = formatPhotoError(error);
+            imageCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
               }
             } else {
               imageCell.value = 'SIN FOTO';
@@ -1942,6 +1950,8 @@ async function addEvidenceSheet(
               error: error instanceof Error ? error.message : String(error),
             });
             imageCell.value = formatPhotoError(error);
+            imageCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
             imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
           }
         } else {
