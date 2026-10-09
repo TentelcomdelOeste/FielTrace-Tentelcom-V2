@@ -96,21 +96,60 @@ const getStoragePathCandidates = (ev: MemoryEvidence, urls: string[] = []): stri
   const candidates: string[] = [];
   const add = (value: unknown) => {
     const path = String(value ?? '').trim();
-    if (path && !/^https?:\/\//i.test(path) && !candidates.includes(path)) candidates.push(path);
-  };
-  add(ev?.photoStoragePath);
-  for (const source of [...urls, ...getPhotoUrls(ev)]) {
-    if (source.startsWith('gs://')) {
-      const value = source.slice(5);
+    if (!path || candidates.includes(path) || /^(https?:\/\/|blob:|data:image\/)/i.test(path)) return;
+    if (path.startsWith('gs://')) {
+      const value = path.slice(5);
       const slash = value.indexOf('/');
-      if (slash > 0) add(value.slice(slash + 1));
+      if (slash > 0) candidates.push(value.slice(slash + 1));
+      return;
+    }
+    candidates.push(path);
+  };
+  // Los registros antiguos no siempre usan el mismo nombre para la ruta.
+  add(ev?.photoStoragePath);
+  add(ev?.storagePath);
+  add(ev?.photoPath);
+  add(ev?.photo?.storagePath);
+  add(ev?.photo?.path);
+  for (const source of [...urls, ...getPhotoUrls(ev), ev?.photoUrl, ev?.photo?.uri, ev?.photo?.url]) {
+    const value = String(source ?? '').trim();
+    if (value.startsWith('gs://')) {
+      add(value);
+      continue;
     }
     try {
-      const match = new URL(source).pathname.match(/\/o\/(.+)$/);
+      const match = new URL(value).pathname.match(/\/o\/(.+)$/);
       if (match?.[1]) add(decodeURIComponent(match[1]));
     } catch { /* Referencia histórica que no es URL. */ }
   }
   return candidates;
+};
+
+const formatPhotoError = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error ?? 'Error desconocido');
+  const normalized = raw.toLowerCase();
+  if (/storage\/object-not-found|object-not-found|http 404|not found/.test(normalized))
+    return 'ERROR FOTO: archivo inexistente en Firebase Storage (ruta no encontrada).';
+  if (/storage\/unauthorized|storage\/unauthenticated|http 401|http 403|permission-denied|insufficient permissions/.test(normalized))
+    return 'ERROR FOTO: acceso denegado por permisos o sesión no autenticada.';
+  if (/no hay ruta de storage|no contiene url ni ruta/.test(normalized))
+    return 'ERROR FOTO: la evidencia no tiene URL ni ruta de almacenamiento.';
+  if (/failed to fetch|networkerror|err_network|cors|http 0/.test(normalized))
+    return 'ERROR FOTO: no se pudo acceder a la URL (red, CORS o proxy).';
+  if (/no devolvió una imagen|no son jpeg|formato.*no compatible|válida/.test(normalized))
+    return 'ERROR FOTO: el archivo descargado no tiene un formato de imagen compatible.';
+  if (/respuesta de la fotografía está vacía|cero bytes|empty response/.test(normalized))
+    return 'ERROR FOTO: el archivo existe como referencia, pero se descargó vacío.';
+  if (/no pudo decodificar|dimensiones válidas|createimagebitmap/.test(normalized))
+    return 'ERROR FOTO: el navegador no pudo decodificar la imagen.';
+  if (/http 5\d\d/.test(normalized))
+    return 'ERROR FOTO: el servidor de almacenamiento/proxy devolvió un error. ' + (raw.match(/HTTP 5\d\d/i)?.[0] || '');
+  const cleaned = raw
+    .replace(/https?:\/\/[^\s:|]+/gi, '[URL]')
+    .replace(/\s*\|\|\s*/g, ' / ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return ('ERROR FOTO: ' + (cleaned || 'causa no especificada')).slice(0, 190);
 };
 
 // Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
@@ -1271,7 +1310,7 @@ const addFiberTipsSheet = async (
               category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
               error: error instanceof Error ? error.message : String(error),
             });
-            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            imageCell.value = formatPhotoError(error);
           }
         } else {
           imageCell.value = 'SIN FOTO';
@@ -1504,7 +1543,7 @@ async function addEvidenceSheet(
               category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
               error: error instanceof Error ? error.message : String(error),
             });
-            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            imageCell.value = formatPhotoError(error);
             }
           } else {
             imageCell.value = 'SIN FOTO';
@@ -1650,7 +1689,7 @@ async function addEvidenceSheet(
               category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
               error: error instanceof Error ? error.message : String(error),
             });
-            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            imageCell.value = formatPhotoError(error);
               }
             } else {
               imageCell.value = 'SIN FOTO';
@@ -1783,7 +1822,7 @@ async function addEvidenceSheet(
               category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
               error: error instanceof Error ? error.message : String(error),
             });
-            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            imageCell.value = formatPhotoError(error);
               }
             } else {
               imageCell.value = 'SIN FOTO';
@@ -1902,7 +1941,7 @@ async function addEvidenceSheet(
               category: category.id, evidence: ev?.uuid || ev?.id || 'sin-id',
               error: error instanceof Error ? error.message : String(error),
             });
-            imageCell.value = 'NO SE PUDO CARGAR LA FOTO';
+            imageCell.value = formatPhotoError(error);
             imageCell.font = { name: 'Arial', size: 7, bold: true, color: { argb: 'B91C1C' } };
           }
         } else {
