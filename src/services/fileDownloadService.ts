@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
 
 /**
  * Delivers generated files in a way that works in Android/iOS WebViews as well
