@@ -68,6 +68,9 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string, downloa
   }
 
   if (Capacitor.isNativePlatform()) {
+    // Si la interfaz nativa específica no está disponible, guardar el archivo
+    // en almacenamiento persistente de la aplicación. No abrir Share: el usuario
+    // pidió una descarga directa, no un flujo de compartir.
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = '';
     const chunkSize = 0x8000;
@@ -78,14 +81,10 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string, downloa
     const saved = await Filesystem.writeFile({
       path: fileName,
       data: base64,
-      directory: Directory.Cache,
+      directory: Directory.Documents,
       recursive: true,
     });
-    await Share.share({
-      title: fileName,
-      dialogTitle: 'Guardar o compartir archivo',
-      files: [saved.uri],
-    });
+    console.info('[FileDownload] Archivo guardado en documentos de la aplicación:', saved.uri);
     return;
   }
 
