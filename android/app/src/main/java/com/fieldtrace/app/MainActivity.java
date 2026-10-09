@@ -743,10 +743,13 @@ public class MainActivity extends BridgeActivity {
           // firebasestorage.googleapis.com endpoint or the newer bucket-specific
           // firebasestorage.app domain. Google Cloud Storage can also redirect
           // to storage.googleapis.com. Accept only these exact trusted suffixes.
-          boolean allowedHost = "firebasestorage.googleapis.com".equals(host) ||
+          boolean firebaseHost = "firebasestorage.googleapis.com".equals(host) ||
               "storage.googleapis.com".equals(host) ||
               (host.endsWith(".firebasestorage.app") && host.length() > ".firebasestorage.app".length()) ||
               (host.endsWith(".appspot.com") && host.length() > ".appspot.com".length());
+          boolean netlifyImageProxy = "field-trace.netlify.app".equals(host) &&
+              "/.netlify/functions/storage-image".equals(current.getPath());
+          boolean allowedHost = firebaseHost || netlifyImageProxy;
           if (!"https".equalsIgnoreCase(current.getProtocol()) || !allowedHost ||
               current.getUserInfo() != null) {
             throw new IllegalArgumentException("Host de fotografía no permitido");
@@ -848,9 +851,9 @@ public class MainActivity extends BridgeActivity {
         }
         throw new IllegalStateException("Demasiadas redirecciones al descargar fotografía");
       } catch (Exception error) {
-        android.util.Log.w("FieldTraceImage", "Descarga nativa de imagen falló: " +
-            error.getClass().getSimpleName() + " - " + String.valueOf(error.getMessage()));
-        return "";
+        String reason = error.getClass().getSimpleName() + ": " + String.valueOf(error.getMessage());
+        android.util.Log.w("FieldTraceImage", "Descarga nativa de imagen falló: " + reason);
+        return "ERROR:" + reason;
       } finally {
         if (connection != null) connection.disconnect();
       }
