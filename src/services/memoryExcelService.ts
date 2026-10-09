@@ -183,50 +183,54 @@ let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
+  const fetchImage = async (target: string, proxy = false): Promise<Response> => {
+    const response = await fetch(target, proxy ? { cache: 'force-cache' } : { mode: 'cors', cache: 'force-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
+    const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+    if (!isJpeg && !isPng && !isWebp) {
+      throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+    }
+    return new Response(blob, { status: 200, headers: { 'content-type': isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp' } });
+  };
+
+  const proxyUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
   let response: Response;
   try {
-    // Preferir Firebase Storage directamente elimina un salto por Netlify.
-    response = await fetch(url, { mode: 'cors', cache: 'force-cache' });
-  } catch {
-    const proxyUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
-      : url;
-    response = await fetch(proxyUrl, { cache: 'force-cache' });
+    response = await fetchImage(url);
+  } catch (directError) {
+    if (proxyUrl === url) throw directError;
+    response = await fetchImage(proxyUrl, true);
   }
-
-  if (!response.ok) {
-    const proxyUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
-      : url;
-    if (response.url !== proxyUrl) {
-      response = await fetch(proxyUrl, { cache: 'force-cache' });
-    }
-  }
-  if (!response.ok) throw new Error(`No se pudo descargar la fotografía (${response.status})`);
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
-  const blob = await response.blob();
-
-  let width = 4;
-  let height = 3;
+  const sourceBlob = await response.blob();
   let bitmap: ImageBitmap | null = null;
-
+  let width = 0;
+  let height = 0;
   try {
     if (typeof createImageBitmap !== 'undefined') {
-      bitmap = await createImageBitmap(blob);
+      bitmap = await createImageBitmap(sourceBlob);
       width = bitmap.width;
       height = bitmap.height;
-    } else if (typeof document !== 'undefined') {
-      const objectUrl = URL.createObjectURL(blob);
+    } else {
+      const objectUrl = URL.createObjectURL(sourceBlob);
       try {
         const image = await new Promise<HTMLImageElement>((resolve, reject) => {
           const element = new Image();
           element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
+          element.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
           element.src = objectUrl;
         });
-        width = image.naturalWidth || width;
-        height = image.naturalHeight || height;
+        width = image.naturalWidth;
+        height = image.naturalHeight;
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
@@ -234,13 +238,37 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   } finally {
     bitmap?.close();
   }
+  if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
 
-  // ExcelJS admite JPEG y PNG. Los archivos originales se conservan intactos:
-  // no se redimensionan, no se recomprimen y no pasan por Canvas.
-  const extension = contentType.includes('png') ? 'png' : 'jpeg';
-  const buffer = await blob.arrayBuffer();
+  // ExcelJS solo admite JPEG/PNG. Convertimos WebP a JPEG de alta calidad
+  // mediante el decodificador nativo del navegador, nunca incrustamos bytes
+  // WebP etiquetados erróneamente como JPEG (causa de fotos corruptas en Excel).
+  if (contentType.includes('webp')) {
+    const image = await createImageBitmap(sourceBlob);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) {
+      image.close();
+      throw new Error('No se pudo preparar la fotografía para Excel.');
+    }
+    context.drawImage(image, 0, 0);
+    image.close();
+    const converted = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('No se pudo convertir WebP para Excel.')), 'image/jpeg', 0.96)
+    );
+    canvas.width = 1;
+    canvas.height = 1;
+    return { buffer: await converted.arrayBuffer(), extension: 'jpeg', width, height };
+  }
 
-  return { buffer, extension, width, height };
+  return {
+    buffer: await sourceBlob.arrayBuffer(),
+    extension: contentType.includes('png') ? 'png' : 'jpeg',
+    width,
+    height,
+  };
 }
 
 function primeExcelImagePrefetch() {
