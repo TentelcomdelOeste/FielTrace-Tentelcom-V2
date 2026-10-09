@@ -194,10 +194,15 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
     let response: Response;
+    let blob: Blob;
     try {
       response = await fetch(target, proxy
         ? { cache: 'force-cache', signal: controller.signal }
         : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      // Mantener activo el timeout hasta leer el cuerpo completo; en móviles
+      // algunas respuestas entregan cabeceras y luego se quedan sin terminar.
+      blob = await response.blob();
     } catch (error: any) {
       if (error?.name === 'AbortError') {
         throw new Error(`Tiempo de espera agotado al descargar una fotografía (${EXCEL_IMAGE_FETCH_TIMEOUT_MS / 1000} s).`);
@@ -207,8 +212,6 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
       window.clearTimeout(timeout);
     }
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
     if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
 
     const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
