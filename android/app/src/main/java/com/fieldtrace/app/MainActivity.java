@@ -708,6 +708,27 @@ public class MainActivity extends BridgeActivity {
      * Only HTTPS Firebase/Google Storage hosts and image bytes are accepted.
      * The byte limit avoids returning an unbounded Base64 string to JavaScript.
      */
+    /**
+     * Non-blocking JavaScript bridge for image downloads. Never make WebView's
+     * JavaScript thread wait synchronously on network I/O during Excel export.
+     */
+    @JavascriptInterface
+    public void fetchImageDataUrlAsync(String imageUrl, String callbackId) {
+      if (callbackId == null || !callbackId.matches("[A-Za-z0-9_]+")) return;
+      new Thread(() -> {
+        String dataUrl = fetchImageDataUrl(imageUrl);
+        final String safeResult = dataUrl == null ? "" : dataUrl;
+        final WebView webView = MainActivity.this.bridge == null
+            ? null : MainActivity.this.bridge.getWebView();
+        if (webView == null) return;
+        webView.post(() -> {
+          String script = "window.__fieldTraceImageCallbacks && " +
+              "window.__fieldTraceImageCallbacks['" + callbackId + "']('" + safeResult + "');";
+          webView.evaluateJavascript(script, null);
+        });
+      }, "FieldTraceImageDownload").start();
+    }
+
     @JavascriptInterface
     public String fetchImageDataUrl(String imageUrl) {
       if (imageUrl == null || imageUrl.trim().isEmpty()) return "";
