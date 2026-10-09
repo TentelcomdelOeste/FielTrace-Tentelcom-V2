@@ -704,6 +704,12 @@ public class MainActivity extends BridgeActivity {
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Excel descargado");
     }
 
+    @JavascriptInterface
+    public String saveZipToDownloads(String base64Data, String fileName) {
+      return saveDocumentToDownloads(base64Data, fileName,
+          "application/zip", "ZIP de fotografías descargado");
+    }
+
     private String saveDocumentToDownloads(String base64Data, String fileName, String mimeType, String notificationTitle) {
       if (base64Data == null || base64Data.trim().isEmpty()) return "";
       String safeName = fileName == null || fileName.trim().isEmpty() ? "FieldTrace_Report.xlsx" : fileName.trim();
