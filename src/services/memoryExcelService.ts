@@ -186,7 +186,7 @@ let excelImagePrefetchActive = 0;
 const getStoragePathFromDownloadUrl = (url: string): string | null => {
   try {
     const parsed = new URL(url);
-    const match = parsed.pathname.match(/\\/o\\/(.+)$/);
+    const match = parsed.pathname.match(/\/o\/(.+)$/);
     if (match?.[1]) return decodeURIComponent(match[1]);
     if (url.startsWith('gs://')) {
       const value = url.slice(5);
