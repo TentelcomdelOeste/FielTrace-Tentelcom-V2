@@ -580,7 +580,7 @@ export async function generateMemoryPhotosZip(
 
         // La extensión se determina por la firma real del archivo, no por el
         // nombre/MIME declarado en Firestore, que puede estar desactualizado.
-        const correctedName = job.photoName.replace(/\.[^.\/]+$/, `. ${downloaded.extension}`.replace(' ', ''));
+        const correctedName = job.photoName.replace(/\.[^.\/]+$/, `.${downloaded.extension}`);
         results[jobIndex] = {
           name: correctedName,
           data: downloaded.bytes,
