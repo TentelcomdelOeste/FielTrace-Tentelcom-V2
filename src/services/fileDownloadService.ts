@@ -37,6 +37,36 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string, downloa
     throw new Error('El archivo generado está vacío. Inténtelo nuevamente.');
   }
 
+  // APK Android: use the native bridge to write directly into Downloads/Field Trace.
+  // MainActivity publishes the file through MediaStore and raises a completion notification.
+  const nativeBridge = typeof window !== 'undefined'
+    ? (window as Window & { FieldTraceNative?: {
+        saveExcelToDownloads?: (base64: string, name: string) => string;
+        saveZipToDownloads?: (base64: string, name: string) => string;
+      } }).FieldTraceNative
+    : undefined;
+
+  if (Capacitor.isNativePlatform() && nativeBridge) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+    }
+    const base64 = btoa(binary);
+    const isZip = /\\.zip$/i.test(fileName) || blob.type.toLowerCase().includes('zip');
+    const save = isZip ? nativeBridge.saveZipToDownloads : nativeBridge.saveExcelToDownloads;
+    if (typeof save !== 'function') {
+      throw new Error('La función nativa de descarga no está disponible. Actualice la aplicación Field Trace.');
+    }
+    const savedPath = save.call(nativeBridge, base64, fileName);
+    if (!savedPath) {
+      throw new Error('Android no pudo guardar el archivo en Descargas. Revise el espacio disponible e inténtelo nuevamente.');
+    }
+    console.info('[FileDownload] Archivo guardado por Android:', savedPath);
+    return;
+  }
+
   if (Capacitor.isNativePlatform()) {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = '';
