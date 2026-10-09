@@ -182,21 +182,39 @@ let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 
+const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 15000;
+
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   const fetchImage = async (target: string, proxy = false): Promise<Response> => {
-    const response = await fetch(target, proxy ? { cache: 'force-cache' } : { mode: 'cors', cache: 'force-cache' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
-    const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
-    const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-    if (!isJpeg && !isPng && !isWebp) {
-      throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(
+        target,
+        proxy
+          ? { cache: 'force-cache', signal: controller.signal }
+          : { mode: 'cors', cache: 'force-cache', signal: controller.signal },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
+      const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+      const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+      const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+      const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+        bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+      if (!isJpeg && !isPng && !isWebp) {
+        throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+      }
+      return new Response(blob, { status: 200, headers: { 'content-type': isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp' } });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('Tiempo agotado al descargar una fotografía para el Excel.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return new Response(blob, { status: 200, headers: { 'content-type': isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp' } });
   };
 
   const proxyUrl = typeof window !== 'undefined'
@@ -210,65 +228,85 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     response = await fetchImage(proxyUrl, true);
   }
 
-  const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const sourceBlob = await response.blob();
   let bitmap: ImageBitmap | null = null;
-  let width = 0;
-  let height = 0;
+  let objectUrl: string | null = null;
+  let imageElement: HTMLImageElement | null = null;
+
   try {
+    let source: CanvasImageSource;
+    let sourceWidth = 0;
+    let sourceHeight = 0;
+
     if (typeof createImageBitmap !== 'undefined') {
       bitmap = await createImageBitmap(sourceBlob);
-      width = bitmap.width;
-      height = bitmap.height;
+      source = bitmap;
+      sourceWidth = bitmap.width;
+      sourceHeight = bitmap.height;
     } else {
-      const objectUrl = URL.createObjectURL(sourceBlob);
-      try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const element = new Image();
-          element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
-          element.src = objectUrl;
-        });
-        width = image.naturalWidth;
-        height = image.naturalHeight;
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      objectUrl = URL.createObjectURL(sourceBlob);
+      imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
+        element.src = objectUrl!;
+      });
+      source = imageElement;
+      sourceWidth = imageElement.naturalWidth;
+      sourceHeight = imageElement.naturalHeight;
     }
-  } finally {
-    bitmap?.close();
-  }
-  if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
 
-  // ExcelJS solo admite JPEG/PNG. Convertimos WebP a JPEG de alta calidad
-  // mediante el decodificador nativo del navegador, nunca incrustamos bytes
-  // WebP etiquetados erróneamente como JPEG (causa de fotos corruptas en Excel).
-  if (contentType.includes('webp')) {
-    const image = await createImageBitmap(sourceBlob);
+    if (!sourceWidth || !sourceHeight) {
+      throw new Error('La fotografía no tiene dimensiones válidas.');
+    }
+
+    // Las fotos originales de cámara pueden ser muy grandes para la memoria
+    // disponible en Android. Mantenerlas sin procesar puede dejar writeBuffer()
+    // bloqueado al crear el XLSX. Se conserva una resolución alta (máx. 2000x1500)
+    // y se normalizan todos los formatos a JPEG compatible con ExcelJS.
+    const scale = Math.min(
+      1,
+      EXCEL_MAX_IMAGE_WIDTH / sourceWidth,
+      EXCEL_MAX_IMAGE_HEIGHT / sourceHeight,
+    );
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
     const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height;
+    canvas.width = width;
+    canvas.height = height;
+
     const context = canvas.getContext('2d', { alpha: false });
     if (!context) {
-      image.close();
       throw new Error('No se pudo preparar la fotografía para Excel.');
     }
-    context.drawImage(image, 0, 0);
-    image.close();
-    const converted = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('No se pudo convertir WebP para Excel.')), 'image/jpeg', 0.96)
-    );
+    context.fillStyle = '#FFFFFF';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(source, 0, 0, width, height);
+
+    const optimizedBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        blob => blob
+          ? resolve(blob)
+          : reject(new Error('No se pudo optimizar la fotografía para Excel.')),
+        'image/jpeg',
+        EXCEL_JPEG_QUALITY,
+      );
+    });
+
+    // Liberar el canvas de alta resolución antes de procesar la siguiente foto.
     canvas.width = 1;
     canvas.height = 1;
-    return { buffer: await converted.arrayBuffer(), extension: 'jpeg', width, height };
-  }
 
-  return {
-    buffer: await sourceBlob.arrayBuffer(),
-    extension: contentType.includes('png') ? 'png' : 'jpeg',
-    width,
-    height,
-  };
+    return {
+      buffer: await optimizedBlob.arrayBuffer(),
+      extension: 'jpeg',
+      width,
+      height,
+    };
+  } finally {
+    bitmap?.close();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function primeExcelImagePrefetch() {
@@ -286,6 +324,9 @@ function primeExcelImagePrefetch() {
         primeExcelImagePrefetch();
       });
 
+    // La descarga adelantada puede fallar antes de que la hoja solicite esa foto.
+    // Registrar el rechazo evita rechazos no controlados sin ocultárselo al consumidor.
+    void promise.catch(() => undefined);
     excelImageCache.set(url, promise);
   }
 }
@@ -1906,43 +1947,45 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     .filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'FielTrace';
-  workbook.company = 'Tentelcom del Oeste S.A.';
-  workbook.created = new Date();
+  try {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'FielTrace';
+    workbook.company = 'Tentelcom del Oeste S.A.';
+    workbook.created = new Date();
 
-  // La hoja Datos debe ser siempre la primera pestaña del Excel.
-  // Los valores variables de la columna C se dejan vacíos hasta integrar
-  // los datos específicos del proyecto/sitio.
-  addDataSheet(workbook, project);
+    // La hoja Datos debe ser siempre la primera pestaña del Excel.
+    // Los valores variables de la columna C se dejan vacíos hasta integrar
+    // los datos específicos del proyecto/sitio.
+    addDataSheet(workbook, project);
 
-  for (const category of CATEGORY_CONFIG) {
-    if (selectedCategories && !selectedCategories.has(category.id)) continue;
-    if (category.id === 'PUNTAS_FIBRA') {
-      await addFiberTipsSheet(workbook, project, evidences);
-      continue;
+    for (const category of CATEGORY_CONFIG) {
+      if (selectedCategories && !selectedCategories.has(category.id)) continue;
+      if (category.id === 'PUNTAS_FIBRA') {
+        await addFiberTipsSheet(workbook, project, evidences);
+        continue;
+      }
+      await addEvidenceSheet(workbook, category, project, evidences);
     }
-    await addEvidenceSheet(workbook, category, project, evidences);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
+    await deliverGeneratedFile(blob, fileName, downloadTarget);
+
+    if (typeof console !== 'undefined') {
+      const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
+      console.info(`[MemoryExcel] Exportación completada en ${(elapsed / 1000).toFixed(1)}s — ${evidences.length} evidencias`);
+    }
+
+    return fileName;
+  } finally {
+    // Liberar referencias incluso si falla la generación o la entrega del archivo.
+    excelImageCache.clear();
+    excelImagePrefetchQueue = [];
+    excelImagePrefetchCursor = 0;
+    excelImagePrefetchActive = 0;
   }
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-
-  const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
-
-  await deliverGeneratedFile(blob, fileName, downloadTarget);
-
-  excelImageCache.clear();
-  excelImagePrefetchQueue = [];
-  excelImagePrefetchCursor = 0;
-  excelImagePrefetchActive = 0;
-
-  if (typeof console !== 'undefined') {
-    const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
-    console.info(`[MemoryExcel] Exportación completada en ${(elapsed / 1000).toFixed(1)}s — ${evidences.length} evidencias`);
-  }
-
-  return fileName;
 }
