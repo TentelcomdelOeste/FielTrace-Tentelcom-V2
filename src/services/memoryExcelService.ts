@@ -194,7 +194,7 @@ const getStoragePathFromDownloadUrl = (url: string): string | null => {
 };
 
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
-  let blob: Blob;
+  let blob: Blob | null = null;
   let contentType = '';
   let lastError: unknown = null;
 
@@ -219,7 +219,7 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     }
   }
 
-  if (!blob! || blob.size === 0) {
+  if (!blob || blob.size === 0) {
     const storagePath = getStoragePathFromDownloadUrl(url);
     if (storagePath) {
       try {
