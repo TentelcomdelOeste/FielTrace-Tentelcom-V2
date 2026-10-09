@@ -179,7 +179,7 @@ type ExcelImageData = {
 
 const EXCEL_IMAGE_PREFETCH_CONCURRENCY = 4;
 const excelImageCache = new Map<string, Promise<ExcelImageData>>();
-let excelImagePrefetchQueue: string[] = [];
+let excelImagePrefetchQueue: Array<{ url: string; evidence: MemoryEvidence }> = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 
@@ -313,11 +313,12 @@ function primeExcelImagePrefetch() {
     excelImagePrefetchActive < EXCEL_IMAGE_PREFETCH_CONCURRENCY &&
     excelImagePrefetchCursor < excelImagePrefetchQueue.length
   ) {
-    const url = excelImagePrefetchQueue[excelImagePrefetchCursor++];
+    const request = excelImagePrefetchQueue[excelImagePrefetchCursor++];
+    const { url, evidence } = request;
     if (excelImageCache.has(url)) continue;
 
     excelImagePrefetchActive += 1;
-    const promise = fetchOriginalImage(url)
+    const promise = fetchOriginalImage(url, evidence)
       .finally(() => {
         excelImagePrefetchActive -= 1;
         primeExcelImagePrefetch();
@@ -327,9 +328,13 @@ function primeExcelImagePrefetch() {
   }
 }
 
-function configureExcelImagePrefetch(urls: string[]) {
+function configureExcelImagePrefetch(requests: Array<{ url: string; evidence: MemoryEvidence }>) {
   excelImageCache.clear();
-  excelImagePrefetchQueue = Array.from(new Set(urls.filter(Boolean)));
+  const uniqueRequests = new Map<string, { url: string; evidence: MemoryEvidence }>();
+  requests.filter(request => request.url).forEach(request => {
+    if (!uniqueRequests.has(request.url)) uniqueRequests.set(request.url, request);
+  });
+  excelImagePrefetchQueue = Array.from(uniqueRequests.values());
   excelImagePrefetchCursor = 0;
   excelImagePrefetchActive = 0;
   primeExcelImagePrefetch();
@@ -1937,11 +1942,11 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   // Preparar el pipeline de descargas únicamente para las secciones elegidas.
   // Así, al desmarcar libros, tampoco se descargan sus fotografías.
-  const imageUrls = evidences
+  const imageRequests = evidences
     .filter(ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category)))
-    .map(getPhotoUrl)
-    .filter(Boolean);
-  configureExcelImagePrefetch(imageUrls);
+    .map(evidence => ({ url: getPhotoUrl(evidence), evidence }))
+    .filter(request => Boolean(request.url));
+  configureExcelImagePrefetch(imageRequests);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FielTrace';
