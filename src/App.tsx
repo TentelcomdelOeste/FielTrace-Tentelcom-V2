@@ -3001,7 +3001,7 @@ export default function App() {
             .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
         );
         for (const key of pendingSetCaptureKeysRef.current) {
-          const match = key.match(/^NAPS\\|(.+)\\|(\\d+)$/);
+          const match = key.match(/^NAPS\|(.+)\|(\d+)$/);
           if (match && match[1] === napCaptureDraft.napId) capturedSlots.add(Number(match[2]));
         }
         capturedSlots.add(napCaptureDraft.photoNumber);
@@ -3029,7 +3029,7 @@ export default function App() {
             .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
         );
         for (const key of pendingSetCaptureKeysRef.current) {
-          const match = key.match(/^MUFA\\|(.+)\\|(\\d+)$/);
+          const match = key.match(/^MUFA\|(.+)\|(\d+)$/);
           if (match && match[1] === mufaCaptureDraft.mufaId) capturedSlots.add(Number(match[2]));
         }
         capturedSlots.add(mufaCaptureDraft.photoNumber);
