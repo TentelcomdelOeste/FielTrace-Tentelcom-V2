@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { deliverGeneratedFile } from './fileDownloadService';
+import { firebaseService } from './firebaseService';
 
 type MemoryEvidence = Record<string, any>;
 
@@ -182,64 +183,101 @@ let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 
-async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
-  let response: Response;
+const getStoragePathFromDownloadUrl = (url: string): string | null => {
   try {
-    // Preferir Firebase Storage directamente elimina un salto por Netlify.
-    response = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/\\/o\\/(.+)$/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
   } catch {
-    const proxyUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
-      : url;
-    response = await fetch(proxyUrl, { cache: 'force-cache' });
+    return null;
+  }
+};
+
+async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
+  let blob: Blob;
+  let contentType = '';
+  let lastError: unknown = null;
+
+  // Intentar URL directa y proxy web. En Android WebView, el proxy de Netlify
+  // puede no estar disponible bajo capacitor://localhost; por eso no es la
+  // única vía para obtener las fotografías.
+  const candidates = [url];
+  if (typeof window !== 'undefined' && /^https?:/i.test(window.location.origin)) {
+    candidates.push(`${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`);
   }
 
-  if (!response.ok) {
-    const proxyUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
-      : url;
-    if (response.url !== proxyUrl) {
-      response = await fetch(proxyUrl, { cache: 'force-cache' });
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(candidate, { mode: 'cors', cache: 'force-cache' });
+      if (!response.ok) throw new Error(`HTTP ${response.status} al descargar fotografía`);
+      contentType = (response.headers.get('content-type') || '').toLowerCase();
+      blob = await response.blob();
+      if (blob.size > 0) break;
+      throw new Error('La descarga de la fotografía llegó vacía.');
+    } catch (error) {
+      lastError = error;
     }
   }
-  if (!response.ok) throw new Error(`No se pudo descargar la fotografía (${response.status})`);
 
-  const contentType = (response.headers.get('content-type') || '').toLowerCase();
-  const blob = await response.blob();
-
-  let width = 4;
-  let height = 3;
-  let bitmap: ImageBitmap | null = null;
-
-  try {
-    if (typeof createImageBitmap !== 'undefined') {
-      bitmap = await createImageBitmap(blob);
-      width = bitmap.width;
-      height = bitmap.height;
-    } else if (typeof document !== 'undefined') {
-      const objectUrl = URL.createObjectURL(blob);
+  if (!blob! || blob.size === 0) {
+    const storagePath = getStoragePathFromDownloadUrl(url);
+    if (storagePath) {
       try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const element = new Image();
-          element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
-          element.src = objectUrl;
-        });
-        width = image.naturalWidth || width;
-        height = image.naturalHeight || height;
-      } finally {
-        URL.revokeObjectURL(objectUrl);
+        const bytes = await firebaseService.getEvidencePhotoBytes(storagePath);
+        blob = new Blob([bytes]);
+        contentType = '';
+      } catch (error) {
+        lastError = error;
       }
     }
-  } finally {
-    bitmap?.close();
   }
 
-  // ExcelJS admite JPEG y PNG. Los archivos originales se conservan intactos:
-  // no se redimensionan, no se recomprimen y no pasan por Canvas.
-  const extension = contentType.includes('png') ? 'png' : 'jpeg';
-  const buffer = await blob.arrayBuffer();
+  if (!blob! || blob.size === 0) {
+    throw new Error(`No se pudo descargar la fotografía desde URL ni Firebase Storage: ${lastError instanceof Error ? lastError.message : 'error desconocido'}`);
+  }
 
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const dimensions = readImageDimensions(bytes);
+  let width = dimensions?.width ?? 4;
+  let height = dimensions?.height ?? 3;
+
+  if (!dimensions) {
+    let bitmap: ImageBitmap | null = null;
+    try {
+      if (typeof createImageBitmap !== 'undefined') {
+        bitmap = await createImageBitmap(blob);
+        width = bitmap.width;
+        height = bitmap.height;
+      } else if (typeof document !== 'undefined') {
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const element = new Image();
+            element.onload = () => resolve(element);
+            element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
+            element.src = objectUrl;
+          });
+          width = image.naturalWidth || width;
+          height = image.naturalHeight || height;
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      }
+    } finally {
+      bitmap?.close();
+    }
+  }
+
+  // Detectar PNG por su firma, incluso si Storage devuelve un content-type genérico.
+  const isPng = contentType.includes('png') ||
+    (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
+      bytes[2] === 0x4e && bytes[3] === 0x47 &&
+      bytes[4] === 0x0d && bytes[5] === 0x0a &&
+      bytes[6] === 0x1a && bytes[7] === 0x0a);
+  const extension = isPng ? 'png' : 'jpeg';
+
+  // Los bytes originales se insertan sin recomprimir ni redimensionar.
   return { buffer, extension, width, height };
 }
 
