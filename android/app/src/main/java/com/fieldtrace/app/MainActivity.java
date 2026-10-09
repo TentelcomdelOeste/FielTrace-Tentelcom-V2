@@ -698,6 +698,124 @@ public class MainActivity extends BridgeActivity {
       }
     }
 
+    private File documentSaveTempFile;
+    private FileOutputStream documentSaveOutput;
+    private String documentSaveName;
+    private String documentSaveMime;
+    private String documentSaveNotification;
+
+    @JavascriptInterface
+    public synchronized String beginDocumentSave(String fileName, String mimeType) {
+      try {
+        if (documentSaveOutput != null) {
+          try { documentSaveOutput.close(); } catch (Exception ignored) {}
+        }
+        if (documentSaveTempFile != null) {
+          try { documentSaveTempFile.delete(); } catch (Exception ignored) {}
+        }
+        File dir = new File(getCacheDir(), "generated-documents");
+        if (!dir.exists() && !dir.mkdirs()) return "";
+        documentSaveTempFile = File.createTempFile("fieldtrace-", ".tmp", dir);
+        documentSaveOutput = new FileOutputStream(documentSaveTempFile, false);
+        documentSaveName = fileName == null || fileName.trim().isEmpty() ? "FieldTrace_Report.bin" : fileName.trim();
+        documentSaveName = documentSaveName.replaceAll("[\\\\/:*?\"<>|]+", "_");
+        documentSaveMime = mimeType == null || mimeType.trim().isEmpty() ? "application/octet-stream" : mimeType.trim();
+        documentSaveNotification = documentSaveMime.contains("zip") ? "ZIP de fotografías descargado" : "Excel descargado";
+        return "READY";
+      } catch (Exception e) {
+        android.util.Log.e("FieldTraceDownload", "Begin chunked document save failed", e);
+        cleanupDocumentSave();
+        return "";
+      }
+    }
+
+    @JavascriptInterface
+    public synchronized String appendDocumentSaveChunk(String base64Chunk) {
+      try {
+        if (documentSaveOutput == null || base64Chunk == null) return "";
+        byte[] bytes = Base64.decode(base64Chunk, Base64.DEFAULT);
+        documentSaveOutput.write(bytes);
+        return "OK";
+      } catch (Exception e) {
+        android.util.Log.e("FieldTraceDownload", "Append chunk failed", e);
+        cleanupDocumentSave();
+        return "";
+      }
+    }
+
+    @JavascriptInterface
+    public synchronized String finishDocumentSave() {
+      File temp = documentSaveTempFile;
+      String name = documentSaveName;
+      String mime = documentSaveMime;
+      String notification = documentSaveNotification;
+      try {
+        if (documentSaveOutput == null || temp == null) return "";
+        documentSaveOutput.flush();
+        documentSaveOutput.close();
+        documentSaveOutput = null;
+        Uri savedUri = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          ContentValues values = new ContentValues();
+          values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+          values.put(MediaStore.Downloads.MIME_TYPE, mime);
+          values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + ALBUM_NAME + "/");
+          values.put(MediaStore.Downloads.IS_PENDING, 1);
+          savedUri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+          if (savedUri == null) throw new IllegalStateException("No se pudo crear el archivo en Descargas.");
+          try (InputStream in = new FileInputStream(temp); java.io.OutputStream out = getContentResolver().openOutputStream(savedUri)) {
+            if (out == null) throw new IllegalStateException("DOCUMENT_OUTPUT_STREAM_NULL");
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            out.flush();
+          }
+          ContentValues published = new ContentValues();
+          published.put(MediaStore.Downloads.IS_PENDING, 0);
+          getContentResolver().update(savedUri, published, null, null);
+        } else {
+          File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), ALBUM_NAME);
+          if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("No se pudo crear la carpeta Descargas.");
+          File destination = new File(dir, name);
+          try (InputStream in = new FileInputStream(temp); FileOutputStream out = new FileOutputStream(destination)) {
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            out.flush();
+          }
+          savedUri = Uri.fromFile(destination);
+          Intent scan = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+          scan.setData(savedUri);
+          sendBroadcast(scan);
+        }
+        notifyFileDownload(notification, name, savedUri, mime);
+        return savedUri == null ? "" : savedUri.toString();
+      } catch (Exception e) {
+        android.util.Log.e("FieldTraceDownload", "Finish chunked document save failed", e);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          // Remove incomplete pending MediaStore item if one was created.
+        }
+        return "";
+      } finally {
+        cleanupDocumentSave();
+      }
+    }
+
+    @JavascriptInterface
+    public synchronized void cancelDocumentSave() {
+      cleanupDocumentSave();
+    }
+
+    private synchronized void cleanupDocumentSave() {
+      try { if (documentSaveOutput != null) documentSaveOutput.close(); } catch (Exception ignored) {}
+      documentSaveOutput = null;
+      try { if (documentSaveTempFile != null) documentSaveTempFile.delete(); } catch (Exception ignored) {}
+      documentSaveTempFile = null;
+      documentSaveName = null;
+      documentSaveMime = null;
+      documentSaveNotification = null;
+    }
+
     @JavascriptInterface
     public String saveExcelToDownloads(String base64Data, String fileName) {
       return saveDocumentToDownloads(base64Data, fileName,
