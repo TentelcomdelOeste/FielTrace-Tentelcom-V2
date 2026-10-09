@@ -718,8 +718,14 @@ public class MainActivity extends BridgeActivity {
 
         for (int redirects = 0; redirects <= 3; redirects++) {
           String host = current.getHost() == null ? "" : current.getHost().toLowerCase(Locale.US);
+          // Firebase projects may issue download URLs from the legacy
+          // firebasestorage.googleapis.com endpoint or the newer bucket-specific
+          // firebasestorage.app domain. Google Cloud Storage can also redirect
+          // to storage.googleapis.com. Accept only these exact trusted suffixes.
           boolean allowedHost = "firebasestorage.googleapis.com".equals(host) ||
-              "storage.googleapis.com".equals(host);
+              "storage.googleapis.com".equals(host) ||
+              (host.endsWith(".firebasestorage.app") && host.length() > ".firebasestorage.app".length()) ||
+              (host.endsWith(".appspot.com") && host.length() > ".appspot.com".length());
           if (!"https".equalsIgnoreCase(current.getProtocol()) || !allowedHost ||
               current.getUserInfo() != null) {
             throw new IllegalArgumentException("Host de fotografía no permitido");
