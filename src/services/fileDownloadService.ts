@@ -45,9 +45,11 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string): Promis
         return;
       }
     } catch (error) {
-      // User cancellation is not a download failure; otherwise try normal download.
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      console.warn('[FileDownload] Compartir archivo no disponible; usando descarga web.', error);
+      // In mobile browsers, Web Share can reject after the lengthy file generation
+      // has outlived the original tap's transient user activation. Some WebViews
+      // also report AbortError without showing a visible share sheet. Never treat
+      // that as a successful download: fall through to the browser download path.
+      console.warn('[FileDownload] Compartir archivo no completado; usando descarga web.', error);
     }
   }
 
