@@ -37,34 +37,70 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string, downloa
     throw new Error('El archivo generado está vacío. Inténtelo nuevamente.');
   }
 
-  // APK Android: use the native bridge to write directly into Downloads/Field Trace.
-  // MainActivity publishes the file through MediaStore and raises a completion notification.
+  // APK Android: stream large files to the native bridge in small chunks.
+  // Passing a full ZIP/XLSX as one Base64 string can allocate several copies
+  // of a huge file in the WebView and leave both download buttons apparently stuck.
   const nativeBridge = typeof window !== 'undefined'
     ? (window as Window & { FieldTraceNative?: {
         saveExcelToDownloads?: (base64: string, name: string) => string;
         saveZipToDownloads?: (base64: string, name: string) => string;
+        beginDocumentSave?: (name: string, mime: string) => string;
+        appendDocumentSaveChunk?: (base64: string) => string;
+        finishDocumentSave?: () => string;
+        cancelDocumentSave?: () => void;
       } }).FieldTraceNative
     : undefined;
 
+  if (Capacitor.isNativePlatform() && nativeBridge &&
+      typeof nativeBridge.beginDocumentSave === 'function' &&
+      typeof nativeBridge.appendDocumentSaveChunk === 'function' &&
+      typeof nativeBridge.finishDocumentSave === 'function') {
+    const mimeType = blob.type || (/\\.zip$/i.test(fileName) ? 'application/zip' :
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const started = nativeBridge.beginDocumentSave(fileName, mimeType);
+    if (!started) throw new Error('Android no pudo iniciar el guardado. Libere espacio e inténtelo nuevamente.');
+
+    try {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      // 48 KiB is divisible by 3, so chunks encode independently without padding
+      // corrupting the concatenated byte stream.
+      const chunkSize = 48 * 1024;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        const end = Math.min(offset + chunkSize, bytes.length);
+        let binary = '';
+        for (let i = offset; i < end; i += 1) binary += String.fromCharCode(bytes[i]);
+        const result = nativeBridge.appendDocumentSaveChunk(btoa(binary));
+        if (!result) throw new Error(`Android no pudo guardar el archivo (bloque ${Math.floor(offset / chunkSize) + 1}).`);
+        if (end < bytes.length && Math.floor(end / (1024 * 1024)) !== Math.floor(offset / (1024 * 1024))) {
+          await new Promise<void>(resolve => window.setTimeout(resolve, 0));
+        }
+      }
+      const savedPath = nativeBridge.finishDocumentSave();
+      if (!savedPath) throw new Error('Android no pudo finalizar el archivo en Descargas. Revise el espacio disponible.');
+      console.info('[FileDownload] Archivo guardado por Android:', savedPath, 'bytes:', bytes.byteLength);
+      return;
+    } catch (error) {
+      try { nativeBridge.cancelDocumentSave?.(); } catch {}
+      throw error;
+    }
+  }
+
+  // Compatibility with APK builds that have the older native bridge.
   if (Capacitor.isNativePlatform() && nativeBridge) {
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    let binary = '';
-    const chunkSize = 0x8000;
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+    const legacySave = /\\.zip$/i.test(fileName) || blob.type.toLowerCase().includes('zip')
+      ? nativeBridge.saveZipToDownloads
+      : nativeBridge.saveExcelToDownloads;
+    if (typeof legacySave === 'function') {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+      }
+      const savedPath = legacySave.call(nativeBridge, btoa(binary), fileName);
+      if (!savedPath) throw new Error('Android no pudo guardar el archivo. Actualice Field Trace e inténtelo nuevamente.');
+      return;
     }
-    const base64 = btoa(binary);
-    const isZip = /\\.zip$/i.test(fileName) || blob.type.toLowerCase().includes('zip');
-    const save = isZip ? nativeBridge.saveZipToDownloads : nativeBridge.saveExcelToDownloads;
-    if (typeof save !== 'function') {
-      throw new Error('La función nativa de descarga no está disponible. Actualice la aplicación Field Trace.');
-    }
-    const savedPath = save.call(nativeBridge, base64, fileName);
-    if (!savedPath) {
-      throw new Error('Android no pudo guardar el archivo en Descargas. Revise el espacio disponible e inténtelo nuevamente.');
-    }
-    console.info('[FileDownload] Archivo guardado por Android:', savedPath);
-    return;
   }
 
   if (Capacitor.isNativePlatform()) {
