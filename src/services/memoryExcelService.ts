@@ -186,54 +186,102 @@ let excelImagePrefetchActive = 0;
 const getStoragePathFromDownloadUrl = (url: string): string | null => {
   try {
     const parsed = new URL(url);
-    const match = parsed.pathname.match(/\/o\/(.+)$/);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
+    const match = parsed.pathname.match(/\\/o\\/(.+)$/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+    if (url.startsWith('gs://')) {
+      const value = url.slice(5);
+      const slash = value.indexOf('/');
+      return slash > 0 ? value.slice(slash + 1) : null;
+    }
+    return null;
   } catch {
     return null;
   }
 };
 
-async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
+const getEvidenceStoragePaths = (url: string, evidence?: MemoryEvidence): string[] => {
+  const paths: string[] = [];
+  const add = (value: unknown) => {
+    const path = String(value || '').trim();
+    if (path && !path.startsWith('http') && !paths.includes(path)) paths.push(path);
+  };
+  add(getStoragePathFromDownloadUrl(url));
+  add(evidence?.photoStoragePath);
+  add(evidence?.storagePath);
+  add(evidence?.photo?.storagePath);
+
+  const projectUuid = String(evidence?.projectUuid || '').trim();
+  const evidenceUuid = String(evidence?.uuid || '').trim();
+  const rawName = String(evidence?.photoPath || evidence?.photo?.fileName || (evidenceUuid ? `FT_${evidenceUuid}` : '')).trim();
+  if (projectUuid && evidenceUuid && rawName) {
+    const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\\.(jpeg|jpg|png|webp|heic)$/i, '');
+    const mime = String(evidence?.photo?.mimeType || '').toLowerCase();
+    const extensions = mime.includes('png') ? ['png', 'jpg', 'jpeg'] : mime.includes('webp') ? ['webp', 'jpg', 'jpeg', 'png'] : ['jpg', 'jpeg', 'png', 'webp'];
+    for (const extension of extensions) add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`);
+  }
+  return paths;
+};
+
+const isSupportedExcelImage = (bytes: Uint8Array): 'png' | 'jpeg' | null => {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
+      bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d &&
+      bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg';
+  return null;
+};
+
+async function fetchOriginalImage(url: string, evidence?: MemoryEvidence): Promise<ExcelImageData> {
   let blob: Blob | null = null;
   let contentType = '';
   let lastError: unknown = null;
 
-  // Intentar URL directa y proxy web. En Android WebView, el proxy de Netlify
-  // puede no estar disponible bajo capacitor://localhost; por eso no es la
-  // única vía para obtener las fotografías.
   const candidates = [url];
   if (typeof window !== 'undefined' && /^https?:/i.test(window.location.origin)) {
     candidates.push(`${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`);
   }
 
+  // Primero intentamos las URLs guardadas; un HTTP 200 no garantiza que el
+  // cuerpo sea una imagen (puede ser una página de error o una respuesta proxy).
   for (const candidate of candidates) {
     try {
-      const response = await fetch(candidate, { mode: 'cors', cache: 'force-cache' });
+      const response = await fetch(candidate, { mode: 'cors', cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status} al descargar fotografía`);
-      contentType = (response.headers.get('content-type') || '').toLowerCase();
-      blob = await response.blob();
-      if (blob.size > 0) break;
-      throw new Error('La descarga de la fotografía llegó vacía.');
+      const candidateBlob = await response.blob();
+      const candidateBytes = new Uint8Array(await candidateBlob.arrayBuffer());
+      const detectedFormat = isSupportedExcelImage(candidateBytes);
+      if (!detectedFormat) {
+        throw new Error(`La respuesta no contiene una imagen JPEG/PNG compatible con Excel (content-type: ${response.headers.get('content-type') || 'desconocido'}, bytes: ${candidateBytes.length})`);
+      }
+      blob = candidateBlob;
+      contentType = detectedFormat;
+      break;
     } catch (error) {
       lastError = error;
     }
   }
 
-  if (!blob || blob.size === 0) {
-    const storagePath = getStoragePathFromDownloadUrl(url);
-    if (storagePath) {
+  // En Android WebView, fetch() puede fallar por CORS/origen capacitor://.
+  // Recuperamos el objeto con el SDK autenticado usando la ruta de la evidencia,
+  // no únicamente la URL, y validamos el formato antes de entregarlo a ExcelJS.
+  if (!blob) {
+    for (const storagePath of getEvidenceStoragePaths(url, evidence)) {
       try {
         const bytes = await firebaseService.getEvidencePhotoBytes(storagePath);
-        blob = new Blob([bytes]);
-        contentType = '';
+        const detectedFormat = isSupportedExcelImage(bytes);
+        if (!detectedFormat) {
+          throw new Error(`El objeto de Storage no es JPEG/PNG compatible con Excel: ${storagePath} (${bytes.byteLength} bytes)`);
+        }
+        blob = new Blob([bytes], { type: detectedFormat === 'png' ? 'image/png' : 'image/jpeg' });
+        contentType = detectedFormat;
+        break;
       } catch (error) {
         lastError = error;
       }
     }
   }
 
-  if (!blob! || blob.size === 0) {
-    throw new Error(`No se pudo descargar la fotografía desde URL ni Firebase Storage: ${lastError instanceof Error ? lastError.message : 'error desconocido'}`);
+  if (!blob || blob.size === 0) {
+    throw new Error(`No se pudo recuperar una imagen válida para Excel. URL: ${url || 'vacía'}. ${lastError instanceof Error ? lastError.message : 'Error de descarga desconocido'}`);
   }
 
   const buffer = await blob.arrayBuffer();
@@ -249,35 +297,14 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
         bitmap = await createImageBitmap(blob);
         width = bitmap.width;
         height = bitmap.height;
-      } else if (typeof document !== 'undefined') {
-        const objectUrl = URL.createObjectURL(blob);
-        try {
-          const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-            const element = new Image();
-            element.onload = () => resolve(element);
-            element.onerror = () => reject(new Error('No se pudo decodificar la fotografía.'));
-            element.src = objectUrl;
-          });
-          width = image.naturalWidth || width;
-          height = image.naturalHeight || height;
-        } finally {
-          URL.revokeObjectURL(objectUrl);
-        }
       }
     } finally {
       bitmap?.close();
     }
   }
 
-  // Detectar PNG por su firma, incluso si Storage devuelve un content-type genérico.
-  const isPng = contentType.includes('png') ||
-    (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
-      bytes[2] === 0x4e && bytes[3] === 0x47 &&
-      bytes[4] === 0x0d && bytes[5] === 0x0a &&
-      bytes[6] === 0x1a && bytes[7] === 0x0a);
-  const extension = isPng ? 'png' : 'jpeg';
-
-  // Los bytes originales se insertan sin recomprimir ni redimensionar.
+  const extension = contentType === 'png' ? 'png' : 'jpeg';
+  // Se inserta el ArrayBuffer original sin Canvas, redimensionado ni recompresión.
   return { buffer, extension, width, height };
 }
 
@@ -308,11 +335,11 @@ function configureExcelImagePrefetch(urls: string[]) {
   primeExcelImagePrefetch();
 }
 
-async function getExcelImage(url: string): Promise<ExcelImageData> {
+async function getExcelImage(url: string, evidence?: MemoryEvidence): Promise<ExcelImageData> {
   let promise = excelImageCache.get(url);
 
   if (!promise) {
-    promise = fetchOriginalImage(url);
+    promise = fetchOriginalImage(url, evidence);
     excelImageCache.set(url, promise);
   }
 
@@ -1187,7 +1214,7 @@ const addFiberTipsSheet = async (
         const url = getPhotoUrl(ev);
         if (url) {
           try {
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const photoBoxWidthPx = 600;
             const photoBoxHeightPx = 450;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
