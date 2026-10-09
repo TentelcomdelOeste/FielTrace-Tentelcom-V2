@@ -2529,7 +2529,9 @@ export default function App() {
       activeSetCaptureLockRef.current === lockKey ||
       pendingSetCaptureKeysRef.current.has(lockKey)
     )) {
-      return reject('Esta posición ya fue capturada y se está guardando. No se permite repetirla.');
+      // Rapid taps while React advances to the next slot are expected.
+      // Ignore them quietly rather than showing a blocking alert.
+      return { allowed: false, message: 'CAPTURE_ALREADY_PENDING', lockKey };
     }
 
     if (category === 'NAPS' && napCaptureDraft) {
@@ -2753,11 +2755,11 @@ export default function App() {
       }
       if (!rawImage) throw new Error('No se pudo capturar la imagen con la cámara');
 
-      // MEJORAS mantiene el bloqueo hasta terminar el procesamiento y cerrar
-      // la cámara. Las demás categorías conservan el comportamiento existente.
-      if (!isMejoraCapture) {
-        capturingRef.current = false;
-      }
+      // Mantener el mutex físico durante la reserva de la siguiente posición.
+      // El procesamiento pesado (overlay, galería e IndexedDB) se inicia en segundo
+      // plano más abajo. El mutex se libera en el finally de esta función, después de
+      // actualizar el número/lado siguiente o cerrar la cámara de captura única.
+      // Así un toque inmediato no reutiliza el número anterior mientras React actualiza.
 
       // Re-armar flash en background (no bloquea siguiente disparo)
       if (flashMode === 'on') {
