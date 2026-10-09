@@ -182,21 +182,39 @@ let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 
+const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 15000;
+
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   const fetchImage = async (target: string, proxy = false): Promise<Response> => {
-    const response = await fetch(target, proxy ? { cache: 'force-cache' } : { mode: 'cors', cache: 'force-cache' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
-    const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
-    const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-    if (!isJpeg && !isPng && !isWebp) {
-      throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(
+        target,
+        proxy
+          ? { cache: 'force-cache', signal: controller.signal }
+          : { mode: 'cors', cache: 'force-cache', signal: controller.signal },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
+      const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+      const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+      const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+      const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+        bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+      if (!isJpeg && !isPng && !isWebp) {
+        throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+      }
+      return new Response(blob, { status: 200, headers: { 'content-type': isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp' } });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('Tiempo agotado al descargar una fotografía para el Excel.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return new Response(blob, { status: 200, headers: { 'content-type': isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp' } });
   };
 
   const proxyUrl = typeof window !== 'undefined'
@@ -286,6 +304,9 @@ function primeExcelImagePrefetch() {
         primeExcelImagePrefetch();
       });
 
+    // La descarga adelantada puede fallar antes de que la hoja solicite esa foto.
+    // Registrar el rechazo evita rechazos no controlados sin ocultárselo al consumidor.
+    void promise.catch(() => undefined);
     excelImageCache.set(url, promise);
   }
 }
@@ -1906,43 +1927,45 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     .filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'FielTrace';
-  workbook.company = 'Tentelcom del Oeste S.A.';
-  workbook.created = new Date();
+  try {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'FielTrace';
+    workbook.company = 'Tentelcom del Oeste S.A.';
+    workbook.created = new Date();
 
-  // La hoja Datos debe ser siempre la primera pestaña del Excel.
-  // Los valores variables de la columna C se dejan vacíos hasta integrar
-  // los datos específicos del proyecto/sitio.
-  addDataSheet(workbook, project);
+    // La hoja Datos debe ser siempre la primera pestaña del Excel.
+    // Los valores variables de la columna C se dejan vacíos hasta integrar
+    // los datos específicos del proyecto/sitio.
+    addDataSheet(workbook, project);
 
-  for (const category of CATEGORY_CONFIG) {
-    if (selectedCategories && !selectedCategories.has(category.id)) continue;
-    if (category.id === 'PUNTAS_FIBRA') {
-      await addFiberTipsSheet(workbook, project, evidences);
-      continue;
+    for (const category of CATEGORY_CONFIG) {
+      if (selectedCategories && !selectedCategories.has(category.id)) continue;
+      if (category.id === 'PUNTAS_FIBRA') {
+        await addFiberTipsSheet(workbook, project, evidences);
+        continue;
+      }
+      await addEvidenceSheet(workbook, category, project, evidences);
     }
-    await addEvidenceSheet(workbook, category, project, evidences);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
+    await deliverGeneratedFile(blob, fileName, downloadTarget);
+
+    if (typeof console !== 'undefined') {
+      const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
+      console.info(`[MemoryExcel] Exportación completada en ${(elapsed / 1000).toFixed(1)}s — ${evidences.length} evidencias`);
+    }
+
+    return fileName;
+  } finally {
+    // Liberar referencias incluso si falla la generación o la entrega del archivo.
+    excelImageCache.clear();
+    excelImagePrefetchQueue = [];
+    excelImagePrefetchCursor = 0;
+    excelImagePrefetchActive = 0;
   }
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-
-  const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
-
-  await deliverGeneratedFile(blob, fileName, downloadTarget);
-
-  excelImageCache.clear();
-  excelImagePrefetchQueue = [];
-  excelImagePrefetchCursor = 0;
-  excelImagePrefetchActive = 0;
-
-  if (typeof console !== 'undefined') {
-    const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
-    console.info(`[MemoryExcel] Exportación completada en ${(elapsed / 1000).toFixed(1)}s — ${evidences.length} evidencias`);
-  }
-
-  return fileName;
 }
