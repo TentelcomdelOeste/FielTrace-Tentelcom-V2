@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { deliverGeneratedFile } from './fileDownloadService';
 
 type MemoryEvidence = Record<string, any>;
 
@@ -1903,16 +1904,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
 
-  if (typeof window !== 'undefined') {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }
+  await deliverGeneratedFile(blob, fileName);
 
   excelImageCache.clear();
   excelImagePrefetchQueue = [];
