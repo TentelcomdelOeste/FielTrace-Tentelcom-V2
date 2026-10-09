@@ -375,11 +375,12 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   // Anti doble-tap sin bloquear UI: ref no re-renderiza ni muestra spinner
   const capturingRef = useRef(false);
-  // NAPS se procesa de forma secuencial para impedir una décima captura
-  // mientras la evidencia anterior todavía está guardándose.
+  // Estos bloqueos cubren solo la captura física. El overlay/guardado continúa
+  // en segundo plano y no debe impedir tomar la siguiente posición.
   const napCaptureInFlightRef = useRef(false);
   const mufaCaptureInFlightRef = useRef(false);
   const activeSetCaptureLockRef = useRef<string | null>(null);
+  const pendingSetCaptureKeysRef = useRef<Set<string>>(new Set());
   // MEJORAS: bloqueo lógico de un solo disparo por lado (ANTES/DESPUÉS).
   // Impide duplicados por doble toque mientras la evidencia se procesa.
   const mejoraCaptureInFlightRef = useRef(false);
@@ -2524,8 +2525,11 @@ export default function App() {
       return reject(`No se pudo identificar el SET activo de ${category}. Regrese a la sección y seleccione el SET antes de tomar la fotografía.`);
     }
 
-    if (lockKey && activeSetCaptureLockRef.current === lockKey) {
-      return reject('La fotografía de esta posición ya está siendo procesada. Espere a que termine antes de intentar otra captura.');
+    if (lockKey && (
+      activeSetCaptureLockRef.current === lockKey ||
+      pendingSetCaptureKeysRef.current.has(lockKey)
+    )) {
+      return reject('Esta posición ya fue capturada y se está guardando. No se permite repetirla.');
     }
 
     if (category === 'NAPS' && napCaptureDraft) {
@@ -2626,8 +2630,9 @@ export default function App() {
     // Bloqueo absoluto de SET antes de acceder a la cámara.
     const setValidation = validateActiveSetBeforeCapture();
     if (!setValidation.allowed) return;
-    if (setValidation.lockKey) {
-      activeSetCaptureLockRef.current = setValidation.lockKey;
+    const captureLockKey = setValidation.lockKey ?? null;
+    if (captureLockKey) {
+      activeSetCaptureLockRef.current = captureLockKey;
     }
 
     // NAPS tiene un límite absoluto de 9 fotografías por set.
@@ -2965,7 +2970,97 @@ export default function App() {
         }
       };
 
-      // Procesamiento asíncrono atómico
+      // Reservar la posición antes de iniciar el procesamiento en segundo plano.
+      // Así el siguiente disparo ya tiene un número/lado distinto y no puede duplicar esta foto.
+      if (captureLockKey) pendingSetCaptureKeysRef.current.add(captureLockKey);
+
+      const closeOneShotCamera = () => {
+        setShowReserveCaptureModal(false);
+        setShowAltaCaptureModal(false);
+        setReserveCaptureDraft(null);
+        setAltaCaptureDraft(null);
+        setAceroCaptureDraft(null);
+        setDesechoCaptureDraft(null);
+        setDesechoSetChoice(null);
+        setShowDesechoCaptureModal(false);
+        setDesechoPromptMode(null);
+        setDesechoMeterageDraft('');
+        setMejoraCaptureDraft(null);
+        setMejoraSetChoice(null);
+        setShowMejoraCaptureModal(false);
+        setMejoraPromptMode(null);
+        setFiberCaptureDraft(null);
+        setCurrentStep('history');
+      };
+
+      if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
+        const capturedSlots = new Set<number>(
+          evidences
+            .filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
+            .map(ev => Number(ev.napPhotoNumber))
+            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+        );
+        for (const key of pendingSetCaptureKeysRef.current) {
+          const match = key.match(/^NAPS\\|(.+)\\|(\\d+)$/);
+          if (match && match[1] === napCaptureDraft.napId) capturedSlots.add(Number(match[2]));
+        }
+        capturedSlots.add(napCaptureDraft.photoNumber);
+        const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
+          .find(n => !capturedSlots.has(n));
+        const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
+        napCaptureInFlightRef.current = false;
+        if (!nextPhotoNumber || remainingPhotos <= 0 || napCaptureDraft.photoNumber >= 9) {
+          setNapCaptureDraft(null);
+          setShowNapCaptureModal(false);
+          setCurrentStep('history');
+        } else {
+          setNapCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos } : prev);
+        }
+      } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
+        const capturedSlots = new Set<number>(
+          evidences
+            .filter(ev => ev.category === 'MUFA' && (
+              (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
+              (!ev.mufaId &&
+                Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
+                String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
+            ))
+            .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+        );
+        for (const key of pendingSetCaptureKeysRef.current) {
+          const match = key.match(/^MUFA\\|(.+)\\|(\\d+)$/);
+          if (match && match[1] === mufaCaptureDraft.mufaId) capturedSlots.add(Number(match[2]));
+        }
+        capturedSlots.add(mufaCaptureDraft.photoNumber);
+        const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
+          .find(n => !capturedSlots.has(n));
+        const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
+        mufaCaptureInFlightRef.current = false;
+        if (!nextPhotoNumber || remainingPhotos <= 0 || mufaCaptureDraft.photoNumber >= 9) {
+          setMufaCaptureDraft(null);
+          setShowMufaCaptureModal(false);
+          setCurrentStep('history');
+        } else {
+          setMufaCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos } : prev);
+        }
+      } else if (
+        selectedEvidenceCategory.id === 'RESERVA' ||
+        selectedEvidenceCategory.id === 'ALTAS' ||
+        selectedEvidenceCategory.id === 'ACEROS' ||
+        selectedEvidenceCategory.id === 'DESECHOS' ||
+        selectedEvidenceCategory.id === 'MEJORAS' ||
+        evidenceCategory === 'PUNTAS_FIBRA'
+      ) {
+        closeOneShotCamera();
+      }
+
+      if (captureLockKey && activeSetCaptureLockRef.current === captureLockKey) {
+        activeSetCaptureLockRef.current = null;
+      }
+
+      // Procesamiento asíncrono atómico: overlay, galería e IndexedDB no bloquean
+      // la siguiente captura. Las posiciones ya están reservadas arriba.
       let napAsyncProcessingStarted = false;
       let mejoraAsyncProcessingStarted = false;
       let setAsyncProcessingStarted = false;
@@ -3018,88 +3113,12 @@ export default function App() {
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
           setEvidences(evs);
 
-          // Las reservas son fotografías individuales. Después de cada captura
-          // regresamos al proyecto para evitar que el técnico tome fotos extra.
-          if (selectedEvidenceCategory.id === 'RESERVA' || selectedEvidenceCategory.id === 'ALTAS' || selectedEvidenceCategory.id === 'ACEROS' || selectedEvidenceCategory.id === 'DESECHOS' || selectedEvidenceCategory.id === 'MEJORAS' || evidenceCategory === 'PUNTAS_FIBRA') {
-            setShowReserveCaptureModal(false);
-            setShowAltaCaptureModal(false);
-            setReserveCaptureDraft(null);
-            setAltaCaptureDraft(null);
-            setAceroCaptureDraft(null);
-            setDesechoCaptureDraft(null);
-            setDesechoSetChoice(null);
-            setShowDesechoCaptureModal(false);
-            setDesechoPromptMode(null);
-            setDesechoMeterageDraft('');
-            setMejoraCaptureDraft(null);
-            setMejoraSetChoice(null);
-            setShowMejoraCaptureModal(false);
-            setMejoraPromptMode(null);
-            setFiberCaptureDraft(null);
-            setCurrentStep('history');
-          } else if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
-            // NAPS: exactamente 9 fotos como máximo. La novena captura cierra
-            // la cámara inmediatamente después de quedar guardada.
-            const capturedNapCount = evs.filter(
-              ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId
-            ).length;
-            const remainingAfterCapture = Math.max(0, 9 - capturedNapCount);
-
-            if (capturedNapCount >= 9 || napCaptureDraft.photoNumber >= 9) {
-              napCaptureInFlightRef.current = false;
-              setNapCaptureDraft(null);
-              setShowNapCaptureModal(false);
-              setCurrentStep('history');
-            } else {
-              const capturedSlots = new Set(
-                evs
-                  .filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
-                  .map(ev => Number(ev.napPhotoNumber))
-                  .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
-              );
-              const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
-                .find(n => !capturedSlots.has(n)) || 10;
-
-              if (nextPhotoNumber > 9 || remainingAfterCapture <= 0) {
-                napCaptureInFlightRef.current = false;
-                setNapCaptureDraft(null);
-                setShowNapCaptureModal(false);
-                setCurrentStep('history');
-              } else {
-                setNapCaptureDraft(prev => prev ? {
-                  ...prev,
-                  photoNumber: nextPhotoNumber,
-                  remainingPhotos: remainingAfterCapture
-                } : prev);
-                napCaptureInFlightRef.current = false;
-              }
-            }
-          } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
-            const remainingAfterCapture = Math.max(0, mufaCaptureDraft.remainingPhotos - 1);
-
-            if (mufaCaptureDraft.photoNumber >= 9 || remainingAfterCapture <= 0) {
-              mufaCaptureInFlightRef.current = false;
-              setMufaCaptureDraft(null);
-              setShowMufaCaptureModal(false);
-              setCurrentStep('history');
-            } else {
-              setMufaCaptureDraft(prev => prev ? {
-                ...prev,
-                photoNumber: prev.photoNumber + 1,
-                remainingPhotos: remainingAfterCapture
-              } : prev);
-              mufaCaptureInFlightRef.current = false;
-            }
-          }
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
         } finally {
-          activeSetCaptureLockRef.current = null;
-          if (isNapCapture) {
-            napCaptureInFlightRef.current = false;
-          }
-          if (isMufaCapture) {
-            mufaCaptureInFlightRef.current = false;
+          if (captureLockKey) pendingSetCaptureKeysRef.current.delete(captureLockKey);
+          if (captureLockKey && activeSetCaptureLockRef.current === captureLockKey) {
+            activeSetCaptureLockRef.current = null;
           }
           if (isMejoraCapture) {
             mejoraCaptureInFlightRef.current = false;
