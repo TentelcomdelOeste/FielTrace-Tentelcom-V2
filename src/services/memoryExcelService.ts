@@ -96,6 +96,47 @@ const getMufaDisplayName = (items: MemoryEvidence[]) => {
  */
 const resolvedExcelPhotoUrls = new WeakMap<object, Promise<string>>();
 
+const withExcelTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
+  ]);
+
+const fetchNativeImageDataUrl = (url: string): Promise<string> => {
+  const bridge = (window as Window & {
+    FieldTraceNative?: { fetchImageDataUrlAsync?: (imageUrl: string, callbackId: string) => void };
+    __fieldTraceImageCallbacks?: Record<string, (dataUrl: string) => void>;
+  });
+  if (typeof bridge.FieldTraceNative?.fetchImageDataUrlAsync !== 'function') {
+    return Promise.reject(new Error('El APK instalado no contiene el descargador de imágenes actualizado.'));
+  }
+
+  const callbackId = `img_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return new Promise<string>((resolve, reject) => {
+    const callbacks = bridge.__fieldTraceImageCallbacks || (bridge.__fieldTraceImageCallbacks = {});
+    const timer = window.setTimeout(() => {
+      delete callbacks[callbackId];
+      reject(new Error('Android tardó demasiado en descargar una fotografía de Firebase.'));
+    }, 35_000);
+    callbacks[callbackId] = (dataUrl: string) => {
+      window.clearTimeout(timer);
+      delete callbacks[callbackId];
+      if (typeof dataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl)) {
+        reject(new Error('Android no pudo recuperar una imagen válida desde Firebase Storage.'));
+      } else {
+        resolve(dataUrl);
+      }
+    };
+    try {
+      bridge.FieldTraceNative!.fetchImageDataUrlAsync!(url, callbackId);
+    } catch (error) {
+      window.clearTimeout(timer);
+      delete callbacks[callbackId];
+      reject(error);
+    }
+  });
+};
+
 const isDownloadableImageUrl = (value: string) =>
   /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
 
@@ -151,7 +192,11 @@ const resolveExcelPhotoUrl = async (ev: MemoryEvidence): Promise<string> => {
     const storagePaths = getStoragePathCandidatesForExcel(ev);
     for (const storagePath of storagePaths) {
       try {
-        return await firebaseService.getEvidencePhotoUrl(storagePath);
+        return await withExcelTimeout(
+          firebaseService.getEvidencePhotoUrl(storagePath),
+          12_000,
+          'Se agotó el tiempo buscando la fotografía en Firebase Storage.'
+        );
       } catch (error: any) {
         console.warn('[Memory Excel] No se pudo resolver la URL de Storage para una evidencia.', {
           evidenceUuid: String(ev.uuid || ''),
@@ -309,19 +354,8 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
       // A WebView fetch can be blocked by CORS even when the same Firebase
       // URL works as an <img>. Netlify functions are not served from the APK's
       // local origin, so use an Android-side HTTPS download as the fallback.
-      const nativeBridge = (window as Window & {
-        FieldTraceNative?: { fetchImageDataUrl?: (imageUrl: string) => string };
-      }).FieldTraceNative;
-
-      if (!nativeBridge || typeof nativeBridge.fetchImageDataUrl !== 'function') {
-        throw new Error('La app Android no dispone del descargador nativo de fotografías. Es necesario actualizar el APK.');
-      }
-
       try {
-        const dataUrl = nativeBridge.fetchImageDataUrl(url);
-        if (!/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl || '')) {
-          throw new Error('Android no pudo recuperar los bytes de la fotografía desde Firebase Storage.');
-        }
+        const dataUrl = await fetchNativeImageDataUrl(url);
         response = await fetchImage(dataUrl, true);
       } catch (nativeError: any) {
         const reason = String(nativeError?.message || nativeError || directError?.message || 'Error de red');
@@ -2078,8 +2112,10 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   const selectedEvidences = evidences.filter(
     ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category))
   );
-  const imageUrls = (await Promise.all(
-    selectedEvidences.map(ev => resolveExcelPhotoUrl(ev))
+  const imageUrls = (await withExcelTimeout(
+    Promise.all(selectedEvidences.map(ev => resolveExcelPhotoUrl(ev))),
+    30_000,
+    'La consulta de fotografías tardó demasiado. Verifique la conexión y vuelva a intentar.'
   )).filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
