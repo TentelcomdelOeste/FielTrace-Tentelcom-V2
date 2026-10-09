@@ -816,8 +816,35 @@ public class MainActivity extends BridgeActivity {
             throw new IllegalStateException("La respuesta no contiene una imagen compatible");
           }
 
-          String mime = png ? "image/png" : jpeg ? "image/jpeg" : "image/webp";
-          return "data:" + mime + ";base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
+          // Never pass full-resolution camera files through evaluateJavascript:
+          // large Base64 strings can exceed WebView/Binder limits. Downscale and
+          // JPEG-compress the image before crossing the native bridge.
+          Bitmap decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+          if (decoded == null) {
+            throw new IllegalStateException("No se pudo decodificar la fotografía");
+          }
+          Bitmap outputBitmap = decoded;
+          try {
+            int maxDimension = 1600;
+            int largest = Math.max(decoded.getWidth(), decoded.getHeight());
+            if (largest > maxDimension) {
+              float scale = (float) maxDimension / (float) largest;
+              outputBitmap = Bitmap.createScaledBitmap(
+                  decoded,
+                  Math.max(1, Math.round(decoded.getWidth() * scale)),
+                  Math.max(1, Math.round(decoded.getHeight() * scale)),
+                  true);
+            }
+            ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+            if (!outputBitmap.compress(Bitmap.CompressFormat.JPEG, 78, compressed)) {
+              throw new IllegalStateException("No se pudo optimizar la fotografía");
+            }
+            return "data:image/jpeg;base64," +
+                Base64.encodeToString(compressed.toByteArray(), Base64.NO_WRAP);
+          } finally {
+            if (outputBitmap != decoded) outputBitmap.recycle();
+            decoded.recycle();
+          }
         }
         throw new IllegalStateException("Demasiadas redirecciones al descargar fotografía");
       } catch (Exception error) {
