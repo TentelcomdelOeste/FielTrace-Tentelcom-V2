@@ -7,7 +7,32 @@ import { Share } from '@capacitor/share';
  * as regular mobile and desktop browsers. Native downloads use the OS share
  * sheet instead of relying on an <a download> click inside a WebView.
  */
-export async function deliverGeneratedFile(blob: Blob, fileName: string): Promise<void> {
+/**
+ * Opens a same-origin download surface synchronously from the user's tap.
+ * Mobile browsers can discard transient user activation while a large Excel
+ * or ZIP is being generated; a new tab opened here remains available when the
+ * Blob is finally ready.
+ */
+export function prepareMobileDownloadTarget(): Window | null {
+  if (typeof window === 'undefined' || Capacitor.isNativePlatform()) return null;
+  const isMobile = window.matchMedia('(max-width: 767px), (pointer: coarse)').matches;
+  if (!isMobile) return null;
+
+  try {
+    const target = window.open('', '_blank');
+    if (target && !target.closed) {
+      target.document.open();
+      target.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Field Trace</title></head><body style="font-family:system-ui,sans-serif;padding:24px;color:#172033"><h2>Preparando archivo…</h2><p>No cierre esta pestaña mientras se prepara la descarga.</p></body></html>`);
+      target.document.close();
+      return target;
+    }
+  } catch (error) {
+    console.warn('[FileDownload] No se pudo abrir el destino móvil de descarga.', error);
+  }
+  return null;
+}
+
+export async function deliverGeneratedFile(blob: Blob, fileName: string, downloadTarget?: Window | null): Promise<void> {
   if (!blob || blob.size === 0) {
     throw new Error('El archivo generado está vacío. Inténtelo nuevamente.');
   }
@@ -32,6 +57,31 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string): Promis
       files: [saved.uri],
     });
     return;
+  }
+
+  // Prefer a browsing context opened synchronously by the original tap.
+  // This avoids relying on transient activation after long Excel/ZIP generation.
+  if (downloadTarget && !downloadTarget.closed) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const anchor = downloadTarget.document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.textContent = `Descargar ${fileName}`;
+      anchor.style.cssText = 'display:inline-block;margin-top:16px;padding:12px 16px;background:#215df5;color:white;border-radius:10px;text-decoration:none;font-weight:700';
+      downloadTarget.document.body.replaceChildren();
+      const heading = downloadTarget.document.createElement('h2');
+      heading.textContent = 'Archivo listo';
+      const message = downloadTarget.document.createElement('p');
+      message.textContent = 'Si la descarga no comenzó automáticamente, toque el botón siguiente.';
+      downloadTarget.document.body.append(heading, message, anchor);
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+      return;
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      console.warn('[FileDownload] Descarga en pestaña preparada falló; usando alternativa.', error);
+    }
   }
 
   // On mobile browsers, prefer the native share sheet when sharing files is
