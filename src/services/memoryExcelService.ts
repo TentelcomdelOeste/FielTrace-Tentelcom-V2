@@ -228,65 +228,85 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     response = await fetchImage(proxyUrl, true);
   }
 
-  const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const sourceBlob = await response.blob();
   let bitmap: ImageBitmap | null = null;
-  let width = 0;
-  let height = 0;
+  let objectUrl: string | null = null;
+  let imageElement: HTMLImageElement | null = null;
+
   try {
+    let source: CanvasImageSource;
+    let sourceWidth = 0;
+    let sourceHeight = 0;
+
     if (typeof createImageBitmap !== 'undefined') {
       bitmap = await createImageBitmap(sourceBlob);
-      width = bitmap.width;
-      height = bitmap.height;
+      source = bitmap;
+      sourceWidth = bitmap.width;
+      sourceHeight = bitmap.height;
     } else {
-      const objectUrl = URL.createObjectURL(sourceBlob);
-      try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const element = new Image();
-          element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
-          element.src = objectUrl;
-        });
-        width = image.naturalWidth;
-        height = image.naturalHeight;
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      objectUrl = URL.createObjectURL(sourceBlob);
+      imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => reject(new Error('El navegador no pudo decodificar la imagen descargada.'));
+        element.src = objectUrl!;
+      });
+      source = imageElement;
+      sourceWidth = imageElement.naturalWidth;
+      sourceHeight = imageElement.naturalHeight;
     }
-  } finally {
-    bitmap?.close();
-  }
-  if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
 
-  // ExcelJS solo admite JPEG/PNG. Convertimos WebP a JPEG de alta calidad
-  // mediante el decodificador nativo del navegador, nunca incrustamos bytes
-  // WebP etiquetados erróneamente como JPEG (causa de fotos corruptas en Excel).
-  if (contentType.includes('webp')) {
-    const image = await createImageBitmap(sourceBlob);
+    if (!sourceWidth || !sourceHeight) {
+      throw new Error('La fotografía no tiene dimensiones válidas.');
+    }
+
+    // Las fotos originales de cámara pueden ser muy grandes para la memoria
+    // disponible en Android. Mantenerlas sin procesar puede dejar writeBuffer()
+    // bloqueado al crear el XLSX. Se conserva una resolución alta (máx. 2000x1500)
+    // y se normalizan todos los formatos a JPEG compatible con ExcelJS.
+    const scale = Math.min(
+      1,
+      EXCEL_MAX_IMAGE_WIDTH / sourceWidth,
+      EXCEL_MAX_IMAGE_HEIGHT / sourceHeight,
+    );
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
     const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height;
+    canvas.width = width;
+    canvas.height = height;
+
     const context = canvas.getContext('2d', { alpha: false });
     if (!context) {
-      image.close();
       throw new Error('No se pudo preparar la fotografía para Excel.');
     }
-    context.drawImage(image, 0, 0);
-    image.close();
-    const converted = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('No se pudo convertir WebP para Excel.')), 'image/jpeg', 0.96)
-    );
+    context.fillStyle = '#FFFFFF';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(source, 0, 0, width, height);
+
+    const optimizedBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        blob => blob
+          ? resolve(blob)
+          : reject(new Error('No se pudo optimizar la fotografía para Excel.')),
+        'image/jpeg',
+        EXCEL_JPEG_QUALITY,
+      );
+    });
+
+    // Liberar el canvas de alta resolución antes de procesar la siguiente foto.
     canvas.width = 1;
     canvas.height = 1;
-    return { buffer: await converted.arrayBuffer(), extension: 'jpeg', width, height };
-  }
 
-  return {
-    buffer: await sourceBlob.arrayBuffer(),
-    extension: contentType.includes('png') ? 'png' : 'jpeg',
-    width,
-    height,
-  };
+    return {
+      buffer: await optimizedBlob.arrayBuffer(),
+      extension: 'jpeg',
+      width,
+      height,
+    };
+  } finally {
+    bitmap?.close();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function primeExcelImagePrefetch() {
