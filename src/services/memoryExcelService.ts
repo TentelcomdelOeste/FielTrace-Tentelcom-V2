@@ -674,17 +674,9 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
 
   // Left blank panel, identical two-row height to the title area.
   sheet.mergeCells('B1:C2');
-  for (let row = 1; row <= 2; row++) {
-    for (let col = 2; col <= 3; col++) {
-      const cell = sheet.getCell(row, col);
-      cell.border = {
-        top: row === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        bottom: row === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        left: col === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        right: col === 3 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      };
-    }
-  }
+  // Apply only defined sides of the merged-range perimeter. Do not assign
+  // undefined border properties: ExcelJS can throw while reading .bottom.
+  applyMergedPhotoFrame(sheet, 1, 2, 2, 3);
 
   sheet.mergeCells('D1:J1');
   const title = sheet.getCell('D1');
