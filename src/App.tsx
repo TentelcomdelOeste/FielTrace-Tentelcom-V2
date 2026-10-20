@@ -1383,7 +1383,6 @@ export default function App() {
 
   const handleGenerateMemoryPhotosZip = async () => {
     if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading || memorySectionZipLoading) return;
-    const downloadTarget = prepareMobileDownloadTarget();
     setMemoryZipLoading(true);
     setMemoryZipProgress('INICIANDO...');
     try {
