@@ -653,75 +653,124 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   const sheet = workbook.addWorksheet('Datos');
   sheet.views = [{ showGridLines: false }];
 
+  // Match the header proportions used by the photographic evidence sheets:
+  // blank framed area on the left, black two-line title, and document code at right.
   sheet.columns = [
-    { width: 3 },
-    { width: 48 },
-    { width: 72 },
+    { width: 3 },  // A: outer gutter
+    { width: 15 }, // B
+    { width: 15 }, // C
+    { width: 15 }, // D
+    { width: 15 }, // E
+    { width: 15 }, // F
+    { width: 15 }, // G
+    { width: 15 }, // H
+    { width: 15 }, // I
+    { width: 15 }, // J
+    { width: 10 }, // K
+    { width: 10 }, // L
+    { width: 10 }, // M
+    { width: 10 }, // N
   ];
 
-  sheet.mergeCells('B1:C1');
+  // Left blank panel, identical two-row height to the title area.
+  sheet.mergeCells('B1:C2');
+  for (let row = 1; row <= 2; row++) {
+    for (let col = 2; col <= 3; col++) {
+      const cell = sheet.getCell(row, col);
+      cell.border = {
+        top: row === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        bottom: row === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        left: col === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+        right: col === 3 ? { style: 'thin', color: { argb: '222222' } } : undefined,
+      };
+    }
+  }
+
+  sheet.mergeCells('D1:J1');
   const title = sheet.getCell('D1');
-  title.value = 'MEMORIA FOTOGRÁFICA — ESPH';
-  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
-  title.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFF' } };
+  title.value = 'MEMORIA FOTOGRÁFICA';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  title.font = { name: 'Arial', size: 18, color: { argb: 'FFFFFF' } };
   title.alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('D1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('E1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('F1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('G1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('H1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getRow(1).height = 42;
+  sheet.getRow(1).height = 30;
 
-  sheet.mergeCells('B2:C2');
-  const subtitle = sheet.getCell('B2');
-  subtitle.value = 'DATOS DEL PROYECTO  ·  FR-PE-15  REV. 02';
-  subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
-  subtitle.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFF' } };
+  sheet.mergeCells('D2:J2');
+  const subtitle = sheet.getCell('D2');
+  subtitle.value = 'DATOS DEL PROYECTO';
+  subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  subtitle.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
   subtitle.alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('D2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('E2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('F2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('G2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('H2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getRow(2).height = 34;
+  sheet.getRow(2).height = 30;
 
+  // Document-control cells on the right, merged vertically as in the reference.
+  sheet.mergeCells('K1:L2');
+  sheet.mergeCells('M1:N2');
+  const formCode = sheet.getCell('K1');
+  formCode.value = 'FR-PE-15';
+  formCode.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
+  formCode.alignment = { vertical: 'middle', horizontal: 'center' };
+  const revision = sheet.getCell('M1');
+  revision.value = 'REV. 02';
+  revision.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
+  revision.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  for (let row = 1; row <= 2; row++) {
+    for (let col = 4; col <= 14; col++) {
+      const cell = sheet.getCell(row, col);
+      cell.border = {
+        ...cell.border,
+        top: row === 1 ? { style: 'thin', color: { argb: '222222' } } : cell.border.top,
+        bottom: row === 2 ? { style: 'thin', color: { argb: '222222' } } : cell.border.bottom,
+      };
+    }
+  }
+  for (const col of [11, 13]) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  for (const col of [12, 14]) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
   sheet.getRow(3).height = 18;
-
+  sheet.getRow(4).height = 20;
   sheet.mergeCells('B4:C4');
   const section = sheet.getCell('B4');
   section.value = 'DATOS:';
-  section.font = { name: 'Arial', size: 16, bold: true, color: { argb: '000000' } };
+  section.font = { name: 'Arial', size: 14, bold: true, color: { argb: '000000' } };
   section.alignment = { vertical: 'middle', horizontal: 'left' };
-  sheet.getRow(4).height = 30;
+  sheet.getRow(5).height = 10;
+  sheet.getRow(6).height = 12;
 
-  sheet.getRow(5).height = 18;
-
+  // Center the field list in the sheet and use a single gray value panel,
+  // matching the supplied reference instead of the old full-width blue table.
+  const firstDataRow = 8;
+  const labelColumn = 5;
+  const valueStartColumn = 6;
+  const valueEndColumn = 9;
   DATA_SHEET_LABELS.forEach((label, index) => {
-    const row = 6 + index;
-    const labelCell = sheet.getCell(row, 2);
-    const valueCell = sheet.getCell(row, 3);
-    const value = getProjectDataValue(project, label);
-
+    const row = firstDataRow + index;
+    sheet.mergeCells(row, labelColumn, row, valueStartColumn - 1);
+    sheet.mergeCells(row, valueStartColumn, row, valueEndColumn);
+    const labelCell = sheet.getCell(row, labelColumn);
+    const valueCell = sheet.getCell(row, valueStartColumn);
     labelCell.value = label;
-    labelCell.font = { name: 'Arial', size: 11, color: { argb: '222222' } };
+    labelCell.font = { name: 'Arial', size: 11, color: { argb: '000000' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-    valueCell.value = value;
+    valueCell.value = getProjectDataValue(project, label);
     valueCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
-    valueCell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EEF3F7' } };
-
-    sheet.getRow(row).height = row === 14 ? 34 : 27;
+    valueCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D9D9D9' } };
+    sheet.getRow(row).height = 19;
+    for (let col = valueStartColumn; col <= valueEndColumn; col++) {
+      sheet.getCell(row, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D9D9D9' } };
+    }
   });
-
-  for (let row = 6; row <= 14; row++) {
-    sheet.getCell(row, 2).border = {
-      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
-    };
-    sheet.getCell(row, 3).border = {
-      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
-    };
-  }
 
   return sheet;
 };
