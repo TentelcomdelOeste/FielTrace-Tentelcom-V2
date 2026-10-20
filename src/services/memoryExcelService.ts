@@ -793,9 +793,17 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
       right: { style: 'thin', color: { argb: '222222' } },
     };
   }
+  // Completar el marco exterior de la esquina superior izquierda (B1:C2).
+  // Antes faltaba el borde superior de B1 y C1, por lo que el encabezado
+  // parecía cortado cuando la hoja comenzaba justo en la primera fila.
   sheet.getCell('B1').border = {
     ...sheet.getCell('B1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C1').border = {
+    ...sheet.getCell('C1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell('B2').border = {
     ...sheet.getCell('B2').border,
@@ -971,9 +979,15 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
   }
 
   // La columna B/C queda como espacio lateral, igual que en el encabezado inicial.
+  // Repetir también el borde superior del bloque lateral vacío B:C.
   sheet.getCell(startRow, 2).border = {
     ...sheet.getCell(startRow, 2).border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow, 3).border = {
+    ...sheet.getCell(startRow, 3).border,
+    top: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell(startRow + 1, 2).border = {
     ...sheet.getCell(startRow + 1, 2).border,
