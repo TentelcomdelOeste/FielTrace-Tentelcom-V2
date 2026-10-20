@@ -573,8 +573,9 @@ const applyMergedPhotoFrame = (
   left: number,
   bottom: number,
   right: number,
+  style: 'thin' | 'medium' = 'medium',
 ) => {
-  const edge = { style: 'medium' as const, color: { argb: '222222' } };
+  const edge = { style, color: { argb: '222222' } };
 
   for (let row = top; row <= bottom; row++) {
     for (let col = left; col <= right; col++) {
@@ -809,16 +810,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   product.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(2).height = 30;
 
-  for (let r = 1; r <= 2; r++) {
-    for (let col = 9; col <= 10; col++) {
-      sheet.getCell(r, col).border = {
-        top: r === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        bottom: r === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      };
-    }
-  }
+  applyMergedPhotoFrame(sheet, 1, 9, 2, 10, 'thin');
   sheet.getCell('I1').value = 'FR-PE-15';
   sheet.getCell('I1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
@@ -990,18 +982,7 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
   product.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(startRow + 1).height = 30;
 
-  for (let col = 9; col <= 10; col++) {
-    sheet.getCell(startRow, col).border = {
-      top: { style: 'thin', color: { argb: '222222' } },
-      left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-    };
-    sheet.getCell(startRow + 1, col).border = {
-      bottom: { style: 'thin', color: { argb: '222222' } },
-      left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-    };
-  }
+  applyMergedPhotoFrame(sheet, startRow, 9, startRow + 1, 10, 'thin');
 
   sheet.getCell(startRow, 9).value = 'FR-PE-15';
   sheet.getCell(startRow, 9).font = { name: 'Arial', size: 12, bold: true };
@@ -1195,16 +1176,7 @@ const addFiberTipsSheet = async (
   sheet.getRow(2).height = 30;
 
   // Recuadro superior derecho de la plantilla: I:J.
-  for (let r = 1; r <= 2; r++) {
-    for (let col = 9; col <= 10; col++) {
-      sheet.getCell(r, col).border = {
-        top: r === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        bottom: r === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      };
-    }
-  }
+  applyMergedPhotoFrame(sheet, 1, 9, 2, 10, 'thin');
   sheet.getCell('I1').value = 'FR-PE-15';
   sheet.getCell('I1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
@@ -1408,16 +1380,7 @@ const addFiberTipsSheet = async (
 
     // El recuadro de metadatos NO se fusiona: así los tres valores
     // (ruta, tipo de fibra y carrete) pueden ocupar sus propias celdas.
-    for (let r = boxTop; r <= boxBottom; r++) {
-      for (let col = 2; col <= 4; col++) {
-        sheet.getCell(r, col).border = {
-          top: r === boxTop ? { style: 'medium', color: { argb: '222222' } } : undefined,
-          bottom: r === boxBottom ? { style: 'medium', color: { argb: '222222' } } : undefined,
-          left: col === 2 ? { style: 'medium', color: { argb: '222222' } } : undefined,
-          right: col === 4 ? { style: 'medium', color: { argb: '222222' } } : undefined,
-        };
-      }
-    }
+    applyMergedPhotoFrame(sheet, boxTop, 2, boxBottom, 4, 'medium');
 
     const metaRows: Array<[number, string, string]> = [
       [boxTop + 2, 'RUTA', route],
