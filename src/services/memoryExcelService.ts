@@ -579,7 +579,7 @@ const applyMergedPhotoFrame = (
   for (let row = top; row <= bottom; row++) {
     for (let col = left; col <= right; col++) {
       const cell = sheet.getCell(row, col);
-      const border = { ...cell.border };
+      const border = { ...(cell.border ?? {}) };
       if (row === top) border.top = edge;
       if (row === bottom) border.bottom = edge;
       if (col === left) border.left = edge;
@@ -717,11 +717,17 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   for (let row = 1; row <= 2; row++) {
     for (let col = 4; col <= 14; col++) {
       const cell = sheet.getCell(row, col);
-      cell.border = {
-        ...cell.border,
-        top: row === 1 ? { style: 'thin', color: { argb: '222222' } } : cell.border?.top,
-        bottom: row === 2 ? { style: 'thin', color: { argb: '222222' } } : cell.border?.bottom,
-      };
+      // Do not write explicit undefined border sides: ExcelJS may attempt
+      // to inspect border.bottom while normalizing styles and throw at runtime.
+      const existingBorder = cell.border ?? {};
+      const nextBorder: Partial<ExcelJS.Borders> = { ...existingBorder };
+      if (row === 1) {
+        nextBorder.top = { style: 'thin', color: { argb: '222222' } };
+      }
+      if (row === 2) {
+        nextBorder.bottom = { style: 'thin', color: { argb: '222222' } };
+      }
+      cell.border = nextBorder as ExcelJS.Borders;
     }
   }
   for (const col of [11, 13]) {
