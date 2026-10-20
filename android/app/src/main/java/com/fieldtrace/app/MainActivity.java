@@ -45,6 +45,8 @@ import android.graphics.RectF;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
@@ -695,6 +697,165 @@ public class MainActivity extends BridgeActivity {
       } catch (Exception e) {
         android.util.Log.e("FieldTracePDF", "Save PDF failed", e);
         return "";
+      }
+    }
+
+    /**
+     * Downloads Firebase Storage image URLs directly from Android. A WebView
+     * fetch() may be blocked by browser CORS even when the image is valid;
+     * the APK cannot use the Netlify function because its origin is local.
+     *
+     * Only HTTPS Firebase/Google Storage hosts and image bytes are accepted.
+     * The byte limit avoids returning an unbounded Base64 string to JavaScript.
+     */
+    /**
+     * Non-blocking JavaScript bridge for image downloads. Never make WebView's
+     * JavaScript thread wait synchronously on network I/O during Excel export.
+     */
+    @JavascriptInterface
+    public void fetchImageDataUrlAsync(String imageUrl, String callbackId) {
+      if (callbackId == null || !callbackId.matches("[A-Za-z0-9_]+")) return;
+      new Thread(() -> {
+        String dataUrl = fetchImageDataUrl(imageUrl);
+        final String safeResult = dataUrl == null ? "" : dataUrl;
+        final WebView webView = MainActivity.this.bridge == null
+            ? null : MainActivity.this.bridge.getWebView();
+        if (webView == null) return;
+        webView.post(() -> {
+          String script = "window.__fieldTraceImageCallbacks && " +
+              "window.__fieldTraceImageCallbacks['" + callbackId + "']('" + safeResult + "');";
+          webView.evaluateJavascript(script, null);
+        });
+      }, "FieldTraceImageDownload").start();
+    }
+
+    @JavascriptInterface
+    public String fetchImageDataUrl(String imageUrl) {
+      if (imageUrl == null || imageUrl.trim().isEmpty()) return "";
+      HttpURLConnection connection = null;
+      try {
+        URL current = new URL(imageUrl.trim());
+        final long maxBytes = 25L * 1024L * 1024L;
+
+        for (int redirects = 0; redirects <= 3; redirects++) {
+          String host = current.getHost() == null ? "" : current.getHost().toLowerCase(Locale.US);
+          // Firebase projects may issue download URLs from the legacy
+          // firebasestorage.googleapis.com endpoint or the newer bucket-specific
+          // firebasestorage.app domain. Google Cloud Storage can also redirect
+          // to storage.googleapis.com. Accept only these exact trusted suffixes.
+          boolean firebaseHost = "firebasestorage.googleapis.com".equals(host) ||
+              "storage.googleapis.com".equals(host) ||
+              (host.endsWith(".firebasestorage.app") && host.length() > ".firebasestorage.app".length()) ||
+              (host.endsWith(".appspot.com") && host.length() > ".appspot.com".length());
+          boolean netlifyImageProxy = "field-trace.netlify.app".equals(host) &&
+              "/.netlify/functions/storage-image".equals(current.getPath());
+          boolean allowedHost = firebaseHost || netlifyImageProxy;
+          if (!"https".equalsIgnoreCase(current.getProtocol()) || !allowedHost ||
+              current.getUserInfo() != null) {
+            throw new IllegalArgumentException("Host de fotografía no permitido");
+          }
+
+          connection = (HttpURLConnection) current.openConnection();
+          connection.setConnectTimeout(15000);
+          connection.setReadTimeout(25000);
+          connection.setInstanceFollowRedirects(false);
+          connection.setRequestMethod("GET");
+          connection.setRequestProperty("Accept", "image/jpeg,image/png,image/webp");
+          connection.setRequestProperty("Cache-Control", "no-cache");
+
+          int status = connection.getResponseCode();
+          if (status == HttpURLConnection.HTTP_MOVED_PERM ||
+              status == HttpURLConnection.HTTP_MOVED_TEMP ||
+              status == HttpURLConnection.HTTP_SEE_OTHER ||
+              status == 307 || status == 308) {
+            String location = connection.getHeaderField("Location");
+            connection.disconnect();
+            connection = null;
+            if (location == null || location.trim().isEmpty()) {
+              throw new IllegalStateException("Redirección sin destino");
+            }
+            current = new URL(current, location);
+            continue;
+          }
+
+          if (status != HttpURLConnection.HTTP_OK) {
+            throw new IllegalStateException("HTTP " + status + " al descargar fotografía");
+          }
+
+          int contentLength = connection.getContentLength();
+          if (contentLength > maxBytes) {
+            throw new IllegalStateException("Fotografía excede el límite de 25 MB");
+          }
+
+          byte[] bytes;
+          try (InputStream input = connection.getInputStream();
+               ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] chunk = new byte[32 * 1024];
+            int count;
+            while ((count = input.read(chunk)) != -1) {
+              if ((long) output.size() + count > maxBytes) {
+                throw new IllegalStateException("Fotografía excede el límite de 25 MB");
+              }
+              output.write(chunk, 0, count);
+            }
+            bytes = output.toByteArray();
+          }
+
+          boolean jpeg = bytes.length >= 3 &&
+              (bytes[0] & 0xff) == 0xff &&
+              (bytes[1] & 0xff) == 0xd8 &&
+              (bytes[2] & 0xff) == 0xff;
+          boolean png = bytes.length >= 8 &&
+              (bytes[0] & 0xff) == 0x89 && bytes[1] == 0x50 &&
+              bytes[2] == 0x4e && bytes[3] == 0x47 &&
+              bytes[4] == 0x0d && bytes[5] == 0x0a &&
+              bytes[6] == 0x1a && bytes[7] == 0x0a;
+          boolean webp = bytes.length >= 12 &&
+              bytes[0] == 0x52 && bytes[1] == 0x49 &&
+              bytes[2] == 0x46 && bytes[3] == 0x46 &&
+              bytes[8] == 0x57 && bytes[9] == 0x45 &&
+              bytes[10] == 0x42 && bytes[11] == 0x50;
+          if (!jpeg && !png && !webp) {
+            throw new IllegalStateException("La respuesta no contiene una imagen compatible");
+          }
+
+          // Never pass full-resolution camera files through evaluateJavascript:
+          // large Base64 strings can exceed WebView/Binder limits. Downscale and
+          // JPEG-compress the image before crossing the native bridge.
+          Bitmap decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+          if (decoded == null) {
+            throw new IllegalStateException("No se pudo decodificar la fotografía");
+          }
+          Bitmap outputBitmap = decoded;
+          try {
+            int maxDimension = 1600;
+            int largest = Math.max(decoded.getWidth(), decoded.getHeight());
+            if (largest > maxDimension) {
+              float scale = (float) maxDimension / (float) largest;
+              outputBitmap = Bitmap.createScaledBitmap(
+                  decoded,
+                  Math.max(1, Math.round(decoded.getWidth() * scale)),
+                  Math.max(1, Math.round(decoded.getHeight() * scale)),
+                  true);
+            }
+            ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+            if (!outputBitmap.compress(Bitmap.CompressFormat.JPEG, 78, compressed)) {
+              throw new IllegalStateException("No se pudo optimizar la fotografía");
+            }
+            return "data:image/jpeg;base64," +
+                Base64.encodeToString(compressed.toByteArray(), Base64.NO_WRAP);
+          } finally {
+            if (outputBitmap != decoded) outputBitmap.recycle();
+            decoded.recycle();
+          }
+        }
+        throw new IllegalStateException("Demasiadas redirecciones al descargar fotografía");
+      } catch (Exception error) {
+        String reason = error.getClass().getSimpleName() + ": " + String.valueOf(error.getMessage());
+        android.util.Log.w("FieldTraceImage", "Descarga nativa de imagen falló: " + reason);
+        return "ERROR:" + reason;
+      } finally {
+        if (connection != null) connection.disconnect();
       }
     }
 

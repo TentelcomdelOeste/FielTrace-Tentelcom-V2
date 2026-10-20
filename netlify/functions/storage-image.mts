@@ -1,4 +1,8 @@
-const ALLOWED_STORAGE_HOSTS = new Set(['firebasestorage.googleapis.com', 'storage.googleapis.com']);
+const ALLOWED_STORAGE_HOSTS = (hostname: string) =>
+  hostname === 'firebasestorage.googleapis.com' ||
+  hostname === 'storage.googleapis.com' ||
+  (hostname.endsWith('.firebasestorage.app') && hostname.length > '.firebasestorage.app'.length) ||
+  (hostname.endsWith('.appspot.com') && hostname.length > '.appspot.com'.length);
 
 export default async (req) => {
   if (req.method !== 'GET') {
@@ -11,7 +15,7 @@ export default async (req) => {
     if (!target) return new Response('Missing image URL', { status: 400 });
 
     const targetUrl = new URL(target);
-    if (targetUrl.protocol !== 'https:' || !ALLOWED_STORAGE_HOSTS.has(targetUrl.hostname)) {
+    if (targetUrl.protocol !== 'https:' || !ALLOWED_STORAGE_HOSTS(targetUrl.hostname)) {
       return new Response('Unsupported image host', { status: 400 });
     }
 

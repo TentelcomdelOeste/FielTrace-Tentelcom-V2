@@ -1,4 +1,6 @@
 import ExcelJS from 'exceljs';
+import { Capacitor } from '@capacitor/core';
+import { firebaseService } from './firebaseService';
 import { deliverGeneratedFile } from './fileDownloadService';
 
 type MemoryEvidence = Record<string, any>;
@@ -85,18 +87,146 @@ const getMufaDisplayName = (items: MemoryEvidence[]) => {
   return name || '';
 };
 
-const getPhotoUrl = (ev: MemoryEvidence) =>
-  String(
-    ev.photoUrl ||
-    ev.photo?.uri ||
-    ev.photo?.url ||
-    ev.imageUrl ||
-    ev.image?.url ||
-    ev.storageUrl ||
-    ev.url ||
-    ev.photoPath ||
-    ''
-  ).trim();
+
+
+/**
+ * Excel export must resolve a real download URL, not a local filename/path.
+ * Some historical records contain only photoStoragePath, while others have
+ * an expired/missing download URL but a valid Storage path.
+ */
+const resolvedExcelPhotoUrls = new WeakMap<object, Promise<string>>();
+
+const withExcelTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
+  ]);
+
+const fetchNativeImageDataUrl = async (url: string): Promise<string> => {
+  const bridge = (window as Window & {
+    FieldTraceNative?: { fetchImageDataUrlAsync?: (imageUrl: string, callbackId: string) => void };
+    __fieldTraceImageCallbacks?: Record<string, (dataUrl: string) => void>;
+  });
+  if (typeof bridge.FieldTraceNative?.fetchImageDataUrlAsync !== 'function') {
+    throw new Error('El APK instalado no contiene el descargador de imágenes actualizado.');
+  }
+
+  const requestNative = (imageUrl: string): Promise<string> => {
+    const callbackId = `img_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    return new Promise<string>((resolve, reject) => {
+      const callbacks = bridge.__fieldTraceImageCallbacks || (bridge.__fieldTraceImageCallbacks = {});
+      const timer = window.setTimeout(() => {
+        delete callbacks[callbackId];
+        reject(new Error('Android tardó demasiado en descargar una fotografía.'));
+      }, 35_000);
+      callbacks[callbackId] = (dataUrl: string) => {
+        window.clearTimeout(timer);
+        delete callbacks[callbackId];
+        if (typeof dataUrl !== 'string' || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(dataUrl)) {
+          reject(new Error(dataUrl?.startsWith('ERROR:') ? dataUrl.slice(6) : 'El servidor no devolvió una imagen válida.'));
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      try {
+        bridge.FieldTraceNative!.fetchImageDataUrlAsync!(imageUrl, callbackId);
+      } catch (error) {
+        window.clearTimeout(timer);
+        delete callbacks[callbackId];
+        reject(error);
+      }
+    });
+  };
+
+  try {
+    return await requestNative(url);
+  } catch (directError) {
+    // Match the working desktop path: ask the deployed Netlify image proxy
+    // to fetch Firebase Storage, then let Android transfer only the image bytes.
+    const proxyUrl = `https://field-trace.netlify.app/.netlify/functions/storage-image?url=${encodeURIComponent(url)}`;
+    try {
+      return await requestNative(proxyUrl);
+    } catch (proxyError: any) {
+      throw new Error(`Descarga directa y proxy fallaron. Directo: ${String((directError as any)?.message || directError)}. Proxy: ${String(proxyError?.message || proxyError)}`);
+    }
+  }
+};
+
+const isDownloadableImageUrl = (value: string) =>
+  /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
+
+const getStoragePathCandidatesForExcel = (ev: MemoryEvidence): string[] => {
+  const paths: string[] = [];
+  const add = (value: unknown) => {
+    const path = String(value ?? '').trim();
+    if (path && !paths.includes(path)) paths.push(path);
+  };
+
+  add(ev.photoStoragePath);
+  add(ev.storagePath);
+  add(ev.photo?.storagePath);
+
+  for (const value of [ev.photoPath, ev.photo?.fileName]) {
+    const raw = String(value ?? '').trim();
+    if (raw.startsWith('gs://') || raw.startsWith('projects/')) add(raw);
+  }
+
+  const projectUuid = String(ev.projectUuid ?? '').trim();
+  const evidenceUuid = String(ev.uuid ?? '').trim();
+  const rawName = String(ev.photoPath || ev.photo?.fileName || (evidenceUuid ? `FT_${evidenceUuid}` : '')).trim();
+
+  if (projectUuid && evidenceUuid && rawName) {
+    const safeName = rawName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\.(jpeg|jpg|png|webp)$/i, '');
+    const mime = String(ev.photo?.mimeType || '').toLowerCase();
+    const extension = mime.includes('png') ? 'png' : 'jpg';
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.${extension}`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.jpg`);
+    add(`projects/${projectUuid}/evidences/${evidenceUuid}/${safeName}.png`);
+  }
+
+  return paths;
+};
+
+const resolveExcelPhotoUrl = async (ev: MemoryEvidence): Promise<string> => {
+  if (!ev || typeof ev !== 'object') return '';
+  const cached = resolvedExcelPhotoUrls.get(ev);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const directCandidates = [
+      ev.photoUrl, ev.photo?.uri, ev.photo?.url, ev.imageUrl,
+      ev.image?.url, ev.storageUrl, ev.url, ev.photoPath,
+    ]
+      .map(value => String(value ?? '').trim())
+      .filter(isDownloadableImageUrl);
+
+    if (directCandidates.length) return directCandidates[0];
+
+    const storagePaths = getStoragePathCandidatesForExcel(ev);
+    for (const storagePath of storagePaths) {
+      try {
+        return await withExcelTimeout(
+          firebaseService.getEvidencePhotoUrl(storagePath),
+          12_000,
+          'Se agotó el tiempo buscando la fotografía en Firebase Storage.'
+        );
+      } catch (error: any) {
+        console.warn('[Memory Excel] No se pudo resolver la URL de Storage para una evidencia.', {
+          evidenceUuid: String(ev.uuid || ''),
+          storagePath,
+          error: String(error?.message || error || 'Error desconocido'),
+        });
+      }
+    }
+
+    return '';
+  })();
+
+  resolvedExcelPhotoUrls.set(ev, pending);
+  return pending;
+};
 
 // Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
 // pero en Memoria Fotográfica representan un único set de 2 fotografías.
@@ -178,7 +308,10 @@ type ExcelImageData = {
 
 const getExcelImagePrefetchConcurrency = () => {
   if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
-    return 2;
+    // Android downloads images through independent native HTTPS requests.
+    // Four concurrent transfers reduce waiting between photos without changing
+    // their source resolution or JPEG quality; keep the cap conservative for RAM.
+    return 4;
   }
   return 4;
 };
@@ -196,12 +329,14 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     let response: Response;
     let blob: Blob;
     try {
-      response = await fetch(target, proxy
-        ? { cache: 'force-cache', signal: controller.signal }
-        : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+      const request = target.startsWith('data:')
+        ? fetch(target)
+        : fetch(target, proxy
+          ? { cache: 'force-cache', signal: controller.signal }
+          : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+      response = await request;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      // Mantener activo el timeout hasta leer el cuerpo completo; en móviles
-      // algunas respuestas entregan cabeceras y luego se quedan sin terminar.
+      // Mantener activo el timeout hasta leer el cuerpo completo.
       blob = await response.blob();
     } catch (error: any) {
       if (error?.name === 'AbortError') {
@@ -213,16 +348,14 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     }
 
     if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
-
     const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
     const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
     const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
     const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
       bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
     if (!isJpeg && !isPng && !isWebp) {
-      throw new Error('La URL no devolvió una imagen JPEG, PNG o WebP válida.');
+      throw new Error('La respuesta no contiene una imagen JPEG, PNG o WebP válida.');
     }
-
     const mime = isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'image/webp';
     return new Response(blob, { status: 200, headers: { 'content-type': mime } });
   };
@@ -234,9 +367,26 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   let response: Response;
   try {
     response = await fetchImage(url);
-  } catch (directError) {
-    if (proxyUrl === url) throw directError;
-    response = await fetchImage(proxyUrl, true);
+  } catch (directError: any) {
+    if (Capacitor.isNativePlatform()) {
+      // A WebView fetch can be blocked by CORS even when the same Firebase
+      // URL works as an <img>. Netlify functions are not served from the APK's
+      // local origin, so use an Android-side HTTPS download as the fallback.
+      try {
+        const dataUrl = await fetchNativeImageDataUrl(url);
+        response = await fetchImage(dataUrl, true);
+      } catch (nativeError: any) {
+        const reason = String(nativeError?.message || nativeError || directError?.message || 'Error de red');
+        console.error('[Memory Excel] Falló la descarga nativa de una fotografía.', {
+          sourceHost: (() => { try { return new URL(url).host; } catch { return 'URL no válida'; } })(),
+          reason,
+        });
+        throw new Error(`No se pudo recuperar la fotografía desde Firebase en Android: ${reason}`);
+      }
+    } else {
+      if (proxyUrl === url) throw directError;
+      response = await fetchImage(proxyUrl, true);
+    }
   }
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
@@ -278,9 +428,6 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 
     if (!width || !height) throw new Error('La fotografía no tiene dimensiones válidas.');
 
-    // Las fotos originales de móvil pueden ser muy grandes. Reducirlas antes
-    // de incorporarlas a Excel evita picos de RAM que dejan el botón en
-    // "GENERANDO..." sin completar en Android/WebView.
     const scale = Math.min(1, EXCEL_MAX_IMAGE_WIDTH / width, EXCEL_MAX_IMAGE_HEIGHT / height);
     const isWebp = contentType.includes('webp');
     if (scale < 1 || isWebp) {
@@ -352,7 +499,7 @@ function configureExcelImagePrefetch(urls: string[]) {
   primeExcelImagePrefetch();
 }
 
-async function getExcelImage(url: string): Promise<ExcelImageData> {
+async function getExcelImage(url: string, evidence?: MemoryEvidence): Promise<ExcelImageData> {
   let promise = excelImageCache.get(url);
 
   if (!promise) {
@@ -362,8 +509,34 @@ async function getExcelImage(url: string): Promise<ExcelImageData> {
 
   try {
     return await promise;
+  } catch (firstError: any) {
+    // A historical download URL may have an expired token. Refresh it through
+    // the authenticated Firebase SDK and retry once before declaring failure.
+    const storagePaths = evidence ? getStoragePathCandidatesForExcel(evidence) : [];
+    let lastError: any = firstError;
+    for (const storagePath of storagePaths) {
+      try {
+        const refreshedUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+        if (!refreshedUrl || refreshedUrl === url) continue;
+        console.info('[Memory Excel] Reintentando fotografía con URL renovada de Firebase Storage.', {
+          evidenceUuid: String(evidence?.uuid || ''),
+          storagePath,
+        });
+        return await fetchOriginalImage(refreshedUrl);
+      } catch (refreshError: any) {
+        lastError = refreshError;
+      }
+    }
+
+    console.error('[Memory Excel] No se pudo cargar una fotografía.', {
+      category: String(evidence?.category || ''),
+      evidenceUuid: String(evidence?.uuid || ''),
+      storagePath: String(evidence?.photoStoragePath || ''),
+      sourceHost: (() => { try { return new URL(url).host; } catch { return 'URL no válida'; } })(),
+      reason: String(lastError?.message || lastError || 'Error desconocido'),
+    });
+    throw lastError;
   } finally {
-    // Mantener un máximo pequeño de fotografías adelantadas en memoria.
     if (excelImageCache.get(url) === promise) {
       excelImageCache.delete(url);
     }
@@ -400,13 +573,14 @@ const applyMergedPhotoFrame = (
   left: number,
   bottom: number,
   right: number,
+  style: 'thin' | 'medium' = 'medium',
 ) => {
-  const edge = { style: 'medium' as const, color: { argb: '222222' } };
+  const edge = { style, color: { argb: '222222' } };
 
   for (let row = top; row <= bottom; row++) {
     for (let col = left; col <= right; col++) {
       const cell = sheet.getCell(row, col);
-      const border = { ...cell.border };
+      const border = { ...(cell.border ?? {}) };
       if (row === top) border.top = edge;
       if (row === bottom) border.bottom = edge;
       if (col === left) border.left = edge;
@@ -480,75 +654,122 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   const sheet = workbook.addWorksheet('Datos');
   sheet.views = [{ showGridLines: false }];
 
+  // Match the header proportions used by the photographic evidence sheets:
+  // blank framed area on the left, black two-line title, and document code at right.
   sheet.columns = [
-    { width: 3 },
-    { width: 48 },
-    { width: 72 },
+    { width: 3 },  // A: outer gutter
+    { width: 15 }, // B
+    { width: 15 }, // C
+    { width: 15 }, // D
+    { width: 15 }, // E
+    { width: 15 }, // F
+    { width: 15 }, // G
+    { width: 15 }, // H
+    { width: 15 }, // I
+    { width: 15 }, // J
+    { width: 10 }, // K
+    { width: 10 }, // L
+    { width: 10 }, // M
+    { width: 10 }, // N
   ];
 
-  sheet.mergeCells('B1:C1');
+  // Left blank panel, identical two-row height to the title area.
+  sheet.mergeCells('B1:C2');
+  // Apply only defined sides of the merged-range perimeter. Do not assign
+  // undefined border properties: ExcelJS can throw while reading .bottom.
+  applyMergedPhotoFrame(sheet, 1, 2, 2, 3);
+
+  sheet.mergeCells('D1:J1');
   const title = sheet.getCell('D1');
-  title.value = 'MEMORIA FOTOGRÁFICA — ESPH';
-  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
-  title.font = { name: 'Arial', size: 18, bold: true, color: { argb: 'FFFFFF' } };
+  title.value = 'MEMORIA FOTOGRÁFICA';
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  title.font = { name: 'Arial', size: 18, color: { argb: 'FFFFFF' } };
   title.alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('D1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('E1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('F1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('G1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('H1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getRow(1).height = 42;
+  sheet.getRow(1).height = 30;
 
-  sheet.mergeCells('B2:C2');
-  const subtitle = sheet.getCell('B2');
-  subtitle.value = 'DATOS DEL PROYECTO  ·  FR-PE-15  REV. 02';
-  subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
-  subtitle.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFF' } };
+  sheet.mergeCells('D2:J2');
+  const subtitle = sheet.getCell('D2');
+  subtitle.value = 'DATOS DEL PROYECTO';
+  subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  subtitle.font = { name: 'Arial', size: 13, color: { argb: 'FFFFFF' } };
   subtitle.alignment = { vertical: 'middle', horizontal: 'center' };
-  sheet.getCell('D2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('E2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('F2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('G2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getCell('H2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  sheet.getRow(2).height = 34;
+  sheet.getRow(2).height = 30;
 
+  // Document-control cells on the right, merged vertically as in the reference.
+  sheet.mergeCells('K1:L2');
+  sheet.mergeCells('M1:N2');
+  const formCode = sheet.getCell('K1');
+  formCode.value = 'FR-PE-15';
+  formCode.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
+  formCode.alignment = { vertical: 'middle', horizontal: 'center' };
+  const revision = sheet.getCell('M1');
+  revision.value = 'REV. 02';
+  revision.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
+  revision.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  for (let row = 1; row <= 2; row++) {
+    for (let col = 4; col <= 14; col++) {
+      const cell = sheet.getCell(row, col);
+      // Do not write explicit undefined border sides: ExcelJS may attempt
+      // to inspect border.bottom while normalizing styles and throw at runtime.
+      const existingBorder = cell.border ?? {};
+      const nextBorder: Partial<ExcelJS.Borders> = { ...existingBorder };
+      if (row === 1) {
+        nextBorder.top = { style: 'thin', color: { argb: '222222' } };
+      }
+      if (row === 2) {
+        nextBorder.bottom = { style: 'thin', color: { argb: '222222' } };
+      }
+      cell.border = nextBorder as ExcelJS.Borders;
+    }
+  }
+  for (const col of [11, 13]) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  for (const col of [12, 14]) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
   sheet.getRow(3).height = 18;
-
+  sheet.getRow(4).height = 20;
   sheet.mergeCells('B4:C4');
   const section = sheet.getCell('B4');
   section.value = 'DATOS:';
-  section.font = { name: 'Arial', size: 16, bold: true, color: { argb: '000000' } };
+  section.font = { name: 'Arial', size: 14, bold: true, color: { argb: '000000' } };
   section.alignment = { vertical: 'middle', horizontal: 'left' };
-  sheet.getRow(4).height = 30;
+  sheet.getRow(5).height = 10;
+  sheet.getRow(6).height = 12;
 
-  sheet.getRow(5).height = 18;
-
+  // Center the field list in the sheet and use a single gray value panel,
+  // matching the supplied reference instead of the old full-width blue table.
+  const firstDataRow = 8;
+  const labelColumn = 5;
+  const valueStartColumn = 6;
+  const valueEndColumn = 9;
   DATA_SHEET_LABELS.forEach((label, index) => {
-    const row = 6 + index;
-    const labelCell = sheet.getCell(row, 2);
-    const valueCell = sheet.getCell(row, 3);
-    const value = getProjectDataValue(project, label);
-
+    const row = firstDataRow + index;
+    sheet.mergeCells(row, labelColumn, row, valueStartColumn - 1);
+    sheet.mergeCells(row, valueStartColumn, row, valueEndColumn);
+    const labelCell = sheet.getCell(row, labelColumn);
+    const valueCell = sheet.getCell(row, valueStartColumn);
     labelCell.value = label;
-    labelCell.font = { name: 'Arial', size: 11, color: { argb: '222222' } };
+    labelCell.font = { name: 'Arial', size: 11, color: { argb: '000000' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-    valueCell.value = value;
+    valueCell.value = getProjectDataValue(project, label);
     valueCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: '000000' } };
-    valueCell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EEF3F7' } };
-
-    sheet.getRow(row).height = row === 14 ? 34 : 27;
+    valueCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D9D9D9' } };
+    sheet.getRow(row).height = 19;
+    for (let col = valueStartColumn; col <= valueEndColumn; col++) {
+      sheet.getCell(row, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D9D9D9' } };
+    }
   });
-
-  for (let row = 6; row <= 14; row++) {
-    sheet.getCell(row, 2).border = {
-      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
-    };
-    sheet.getCell(row, 3).border = {
-      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
-    };
-  }
 
   return sheet;
 };
@@ -589,16 +810,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   product.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(2).height = 30;
 
-  for (let r = 1; r <= 2; r++) {
-    for (let col = 9; col <= 10; col++) {
-      sheet.getCell(r, col).border = {
-        top: r === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        bottom: r === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      };
-    }
-  }
+  applyMergedPhotoFrame(sheet, 1, 9, 2, 10, 'thin');
   sheet.getCell('I1').value = 'FR-PE-15';
   sheet.getCell('I1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
@@ -620,9 +832,17 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
       right: { style: 'thin', color: { argb: '222222' } },
     };
   }
+  // Completar el marco exterior de la esquina superior izquierda (B1:C2).
+  // Antes faltaba el borde superior de B1 y C1, por lo que el encabezado
+  // parecía cortado cuando la hoja comenzaba justo en la primera fila.
   sheet.getCell('B1').border = {
     ...sheet.getCell('B1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C1').border = {
+    ...sheet.getCell('C1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell('B2').border = {
     ...sheet.getCell('B2').border,
@@ -762,18 +982,7 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
   product.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(startRow + 1).height = 30;
 
-  for (let col = 9; col <= 10; col++) {
-    sheet.getCell(startRow, col).border = {
-      top: { style: 'thin', color: { argb: '222222' } },
-      left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-    };
-    sheet.getCell(startRow + 1, col).border = {
-      bottom: { style: 'thin', color: { argb: '222222' } },
-      left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-    };
-  }
+  applyMergedPhotoFrame(sheet, startRow, 9, startRow + 1, 10, 'thin');
 
   sheet.getCell(startRow, 9).value = 'FR-PE-15';
   sheet.getCell(startRow, 9).font = { name: 'Arial', size: 12, bold: true };
@@ -798,9 +1007,15 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
   }
 
   // La columna B/C queda como espacio lateral, igual que en el encabezado inicial.
+  // Repetir también el borde superior del bloque lateral vacío B:C.
   sheet.getCell(startRow, 2).border = {
     ...sheet.getCell(startRow, 2).border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow, 3).border = {
+    ...sheet.getCell(startRow, 3).border,
+    top: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell(startRow + 1, 2).border = {
     ...sheet.getCell(startRow + 1, 2).border,
@@ -961,16 +1176,7 @@ const addFiberTipsSheet = async (
   sheet.getRow(2).height = 30;
 
   // Recuadro superior derecho de la plantilla: I:J.
-  for (let r = 1; r <= 2; r++) {
-    for (let col = 9; col <= 10; col++) {
-      sheet.getCell(r, col).border = {
-        top: r === 1 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        bottom: r === 2 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        left: col === 9 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-        right: col === 10 ? { style: 'thin', color: { argb: '222222' } } : undefined,
-      };
-    }
-  }
+  applyMergedPhotoFrame(sheet, 1, 9, 2, 10, 'thin');
   sheet.getCell('I1').value = 'FR-PE-15';
   sheet.getCell('I1').font = { name: 'Arial', size: 12, bold: true };
   sheet.getCell('I1').alignment = { vertical: 'middle', horizontal: 'center' };
@@ -1174,16 +1380,7 @@ const addFiberTipsSheet = async (
 
     // El recuadro de metadatos NO se fusiona: así los tres valores
     // (ruta, tipo de fibra y carrete) pueden ocupar sus propias celdas.
-    for (let r = boxTop; r <= boxBottom; r++) {
-      for (let col = 2; col <= 4; col++) {
-        sheet.getCell(r, col).border = {
-          top: r === boxTop ? { style: 'medium', color: { argb: '222222' } } : undefined,
-          bottom: r === boxBottom ? { style: 'medium', color: { argb: '222222' } } : undefined,
-          left: col === 2 ? { style: 'medium', color: { argb: '222222' } } : undefined,
-          right: col === 4 ? { style: 'medium', color: { argb: '222222' } } : undefined,
-        };
-      }
-    }
+    applyMergedPhotoFrame(sheet, boxTop, 2, boxBottom, 4, 'medium');
 
     const metaRows: Array<[number, string, string]> = [
       [boxTop + 2, 'RUTA', route],
@@ -1228,10 +1425,10 @@ const addFiberTipsSheet = async (
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
-        const url = getPhotoUrl(ev);
+        const url = await resolveExcelPhotoUrl(ev);
         if (url) {
           try {
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const photoBoxWidthPx = 600;
             const photoBoxHeightPx = 450;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
@@ -1446,10 +1643,10 @@ async function addEvidenceSheet(
         imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
         if (ev) {
-          const url = getPhotoUrl(ev);
+          const url = await resolveExcelPhotoUrl(ev);
           if (url) {
             try {
-              const image = await getExcelImage(url);
+              const image = await getExcelImage(url, ev);
               const photoBoxWidthPx = 600;
               const photoBoxHeightPx = 450;
               const scale = Math.min(
@@ -1583,10 +1780,10 @@ async function addEvidenceSheet(
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
-            const url = getPhotoUrl(ev);
+            const url = await resolveExcelPhotoUrl(ev);
             if (url) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(url, ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1712,10 +1909,10 @@ async function addEvidenceSheet(
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
-            const url = getPhotoUrl(ev);
+            const url = await resolveExcelPhotoUrl(ev);
             if (url) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(url, ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1826,12 +2023,12 @@ async function addEvidenceSheet(
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
-        const url = getPhotoUrl(ev);
+        const url = await resolveExcelPhotoUrl(ev);
         if (url) {
           try {
             // Cada fotografía se descarga, reduce y agrega individualmente.
             // No se acumulan las fotos originales en memoria.
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(url, ev);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
             const scale = Math.min(
@@ -1954,10 +2151,14 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   // Preparar el pipeline de descargas únicamente para las secciones elegidas.
   // Así, al desmarcar libros, tampoco se descargan sus fotografías.
-  const imageUrls = evidences
-    .filter(ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category)))
-    .map(getPhotoUrl)
-    .filter(Boolean);
+  const selectedEvidences = evidences.filter(
+    ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category))
+  );
+  const imageUrls = (await withExcelTimeout(
+    Promise.all(selectedEvidences.map(ev => resolveExcelPhotoUrl(ev))),
+    30_000,
+    'La consulta de fotografías tardó demasiado. Verifique la conexión y vuelva a intentar.'
+  )).filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
   const workbook = new ExcelJS.Workbook();

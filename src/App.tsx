@@ -232,7 +232,6 @@ import { firebaseService } from './services/firebaseService';
 import { exportService } from './services/exportService';
 import { generateMemoryExcel, MEMORY_EXCEL_SECTIONS } from './services/memoryExcelService';
 import { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
-import { prepareMobileDownloadTarget } from './services/fileDownloadService';
 import { cameraService } from './services/cameraService';
 import { locationService } from './services/locationService';
 import { shareService } from './services/shareService';
@@ -1366,7 +1365,6 @@ export default function App() {
 
   const handleGenerateMemoryExcel = async () => {
     if (!memorySelectedProject || memoryExcelLoading || memoryExcelSelectedSections.length === 0) return;
-    const downloadTarget = prepareMobileDownloadTarget();
     setMemoryExcelModalOpen(false);
     setMemoryExcelLoading(true);
     try {
@@ -1374,7 +1372,6 @@ export default function App() {
         memorySelectedProject,
         memorySelectedProject._evidences || [],
         memoryExcelSelectedSections,
-        downloadTarget,
       );
     } catch (error: any) {
       console.error('[Memory Excel] Error generando:', error);
@@ -1386,7 +1383,6 @@ export default function App() {
 
   const handleGenerateMemoryPhotosZip = async () => {
     if (!memorySelectedProject || memoryExcelLoading || memoryZipLoading || memorySectionZipLoading) return;
-    const downloadTarget = prepareMobileDownloadTarget();
     setMemoryZipLoading(true);
     setMemoryZipProgress('INICIANDO...');
     try {
@@ -1405,7 +1401,6 @@ export default function App() {
           console.log(`[Memory ZIP] ${phase}: ${completed}/${total}`);
         },
         undefined,
-        downloadTarget,
       );
     } catch (error: any) {
       console.error('[Memory ZIP] Error generando:', error);
@@ -1443,7 +1438,6 @@ export default function App() {
           console.log(`[Memory ZIP] sección ${category} ${phase}: ${completed}/${total}`);
         },
         category,
-        downloadTarget,
       );
     } catch (error: any) {
       console.error('[Memory ZIP] Error generando sección:', category, error);

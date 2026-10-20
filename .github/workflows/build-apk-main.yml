@@ -46,6 +46,8 @@ jobs:
           app=Path('src/App.tsx').read_text()
           cam=Path('src/services/cameraService.ts').read_text()
           storage=Path('src/services/storageService.ts').read_text()
+          memory_excel=Path('src/services/memoryExcelService.ts').read_text()
+          native=Path('android/app/src/main/java/com/fieldtrace/app/MainActivity.java').read_text()
           manifest=Path('android/app/src/main/AndroidManifest.xml').read_text()
           pkg=json.loads(Path('package.json').read_text())
           checks={
@@ -61,6 +63,8 @@ jobs:
             'no photo persistence':'La fotografía NO se persiste en IndexedDB' in storage,
             'manifest FINE location':'ACCESS_FINE_LOCATION' in manifest,
             'manifest COARSE location':'ACCESS_COARSE_LOCATION' in manifest,
+            'native Firebase image downloader':'fetchImageDataUrl' in native,
+            'Excel native image fallback':'fetchImageDataUrl' in memory_excel and 'resolveExcelPhotoUrl' in memory_excel,
           }
           failed=[k for k,v in checks.items() if not v]
           if failed: raise SystemExit('SOURCE AUDIT FAILED: '+', '.join(failed))
