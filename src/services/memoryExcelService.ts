@@ -178,11 +178,11 @@ type ExcelImageData = {
 
 const getExcelImagePrefetchConcurrency = () => {
   if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
-    // Mantener una cola pequeña pero con 3 fotos en paralelo mejora el
-    // aprovechamiento de la red móvil sin acumular demasiados buffers grandes.
-    return 3;
+    // Cuatro descargas simultáneas reducen las esperas entre fotos sin
+    // acumular demasiados buffers grandes en la memoria del teléfono.
+    return 4;
   }
-  return 4;
+  return 6;
 };
 const excelImageCache = new Map<string, Promise<ExcelImageData>>();
 let excelImagePrefetchQueue: string[] = [];
@@ -253,11 +253,18 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     : url;
 
   let response: Response;
+  // En APK, las solicitudes directas a Firebase Storage suelen fallar por
+  // CORS (origin https://localhost). Ir primero al proxy evita una petición
+  // fallida por cada foto y el tiempo extra antes del reintento.
+  const useProxyFirst = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   try {
-    response = await fetchImage(url);
-  } catch (directError) {
-    if (proxyUrl === url) throw directError;
-    response = await fetchImage(proxyUrl, true);
+    response = useProxyFirst && proxyUrl !== url
+      ? await fetchImage(proxyUrl, true)
+      : await fetchImage(url);
+  } catch (firstError) {
+    if (proxyUrl === url) throw firstError;
+    response = await fetchImage(useProxyFirst ? url : proxyUrl, useProxyFirst ? false : true);
   }
 
   const downloadMs = metricNow() - downloadStart;
@@ -2132,7 +2139,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   const deliveryMs = now() - deliveryStart;
 
   if (typeof console !== 'undefined') {
-    console.info('[MemoryExcel] Diagnóstico de rendimiento:', {
+    console.info('[MemoryExcel] Diagnóstico de rendimiento:', JSON.stringify({
       evidenceCount: evidences.length,
       uniqueImageUrls: new Set(imageUrls).size,
       imagesProcessed: excelImageMetrics.processed,
