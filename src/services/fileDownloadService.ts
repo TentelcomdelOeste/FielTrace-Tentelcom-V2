@@ -16,6 +16,8 @@ export function prepareMobileDownloadTarget(): Window | null {
 }
 
 export async function deliverGeneratedFile(blob: Blob, fileName: string, downloadTarget?: Window | null): Promise<void> {
+  const deliveryStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const metricNow = () => typeof performance !== 'undefined' ? performance.now() : Date.now();
   if (!blob || blob.size === 0) {
     throw new Error('El archivo generado está vacío. Inténtelo nuevamente.');
   }
@@ -44,23 +46,42 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string, downloa
     if (!started) throw new Error('Android no pudo iniciar el guardado. Libere espacio e inténtelo nuevamente.');
 
     try {
+      const byteConversionStart = metricNow();
       const bytes = new Uint8Array(await blob.arrayBuffer());
+      const byteConversionMs = metricNow() - byteConversionStart;
+      let base64EncodingMs = 0;
+      let nativeBridgeMs = 0;
       // 48 KiB is divisible by 3, so chunks encode independently without padding
       // corrupting the concatenated byte stream.
       const chunkSize = 48 * 1024;
       for (let offset = 0; offset < bytes.length; offset += chunkSize) {
         const end = Math.min(offset + chunkSize, bytes.length);
+        const encodeStart = metricNow();
         let binary = '';
         for (let i = offset; i < end; i += 1) binary += String.fromCharCode(bytes[i]);
-        const result = nativeBridge.appendDocumentSaveChunk(btoa(binary));
+        const base64 = btoa(binary);
+        base64EncodingMs += metricNow() - encodeStart;
+        const bridgeStart = metricNow();
+        const result = nativeBridge.appendDocumentSaveChunk(base64);
+        nativeBridgeMs += metricNow() - bridgeStart;
         if (!result) throw new Error(`Android no pudo guardar el archivo (bloque ${Math.floor(offset / chunkSize) + 1}).`);
         if (end < bytes.length && Math.floor(end / (1024 * 1024)) !== Math.floor(offset / (1024 * 1024))) {
           await new Promise<void>(resolve => window.setTimeout(resolve, 0));
         }
       }
+      const finishStart = metricNow();
       const savedPath = nativeBridge.finishDocumentSave();
+      const nativeFinalizeMs = metricNow() - finishStart;
       if (!savedPath) throw new Error('Android no pudo finalizar el archivo en Descargas. Revise el espacio disponible.');
-      console.info('[FileDownload] Archivo guardado por Android:', savedPath, 'bytes:', bytes.byteLength);
+      console.info('[FileDownload] Diagnóstico de entrega Android:', {
+        fileSizeMB: Number((bytes.byteLength / (1024 * 1024)).toFixed(2)),
+        byteConversionSeconds: Number((byteConversionMs / 1000).toFixed(3)),
+        base64EncodingSeconds: Number((base64EncodingMs / 1000).toFixed(3)),
+        nativeBridgeTransferSeconds: Number((nativeBridgeMs / 1000).toFixed(3)),
+        nativeFinalizeSeconds: Number((nativeFinalizeMs / 1000).toFixed(3)),
+        totalDeliverySeconds: Number(((metricNow() - deliveryStart) / 1000).toFixed(3)),
+      });
+      console.info('[FileDownload] Archivo guardado por Android; bytes:', bytes.byteLength);
       return;
     } catch (error) {
       try { nativeBridge.cancelDocumentSave?.(); } catch {}
