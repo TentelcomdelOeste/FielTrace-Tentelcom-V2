@@ -13,19 +13,31 @@ service cloud.firestore {
         && request.auth.token.email == 'jenamorado@tentelcom.com';
     }
 
+    function hasAppAccess() {
+      return isSignedIn()
+        && (
+          request.auth.token.email == 'jenamorado@tentelcom.com'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active != false
+        );
+    }
+
     function isAdmin() {
       return isSignedIn()
         && (
           request.auth.token.email == 'jenamorado@tentelcom.com'
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          || (
+            hasAppAccess()
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          )
         );
     }
 
     function validSelfProfile() {
       return request.resource.data.keys().hasOnly([
-          'uid', 'email', 'role', 'permissions', 'createdAt', 'updatedAt'
+          'uid', 'email', 'role', 'active', 'permissions', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.role == 'user'
+        && request.resource.data.active == true
         && request.resource.data.permissions.projects == true
         && request.resource.data.permissions.memory == true
         && request.resource.data.permissions.sync == true;
@@ -41,18 +53,18 @@ service cloud.firestore {
 
     // Proyectos compartidos de FieldTrace. Las operaciones requieren una cuenta nominativa.
     match /projects/{projectId} {
-      allow read, create, update: if isSignedIn();
+      allow read, create, update: if hasAppAccess();
       allow delete: if isAdmin();
 
       match /evidences/{evidenceId} {
-        allow read, create, update: if isSignedIn();
+        allow read, create, update: if hasAppAccess();
         allow delete: if isAdmin();
       }
     }
 
     // Compatibilidad con la colección global antigua.
     match /evidences/{evidenceId} {
-      allow read, create, update: if isSignedIn();
+      allow read, create, update: if hasAppAccess();
       allow delete: if isAdmin();
     }
   }
