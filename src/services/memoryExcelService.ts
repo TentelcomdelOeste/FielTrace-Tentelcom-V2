@@ -2153,7 +2153,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
       xlsxSerializationSeconds: Number((serializationMs / 1000).toFixed(2)),
       fileDeliverySeconds: Number((deliveryMs / 1000).toFixed(2)),
       fileSizeMB: Number((blob.size / (1024 * 1024)).toFixed(2)),
-    });
+    }));
   }
 
   if (typeof console !== 'undefined') {
