@@ -120,4 +120,11 @@ body {
     zoom: 1;
     width: 100%;
   }
+
+  /* Reduce la vista principal un 10% sin alterar la escala de Memoria Fotográfica. */
+  .app-shell.home-active {
+    zoom: 0.9;
+    width: 111.1112%;
+    min-height: 111.1112vh;
+  }
 }
