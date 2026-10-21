@@ -6,6 +6,10 @@ import './index.css';
 // Call the element loader after the platform has been bootstrapped
 defineCustomElements(window);
 
+import AuthGate from './components/AuthGate';
+
 createRoot(document.getElementById('root')!).render(
-  <App />,
+  <AuthGate>
+    <App />
+  </AuthGate>,
 );
