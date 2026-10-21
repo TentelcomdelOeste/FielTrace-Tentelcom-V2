@@ -186,6 +186,7 @@ const excelImageCache = new Map<string, Promise<ExcelImageData>>();
 let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
+let excelImagePrefetchGeneration = 0;
 
 const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 25_000;
 
@@ -338,8 +339,12 @@ function primeExcelImagePrefetch() {
     if (excelImageCache.has(url)) continue;
 
     excelImagePrefetchActive += 1;
+    const generation = excelImagePrefetchGeneration;
     const promise = fetchOriginalImage(url)
       .finally(() => {
+        // An export may have failed or been replaced while this request was in
+        // flight. Do not let an old request mutate the new export's queue state.
+        if (generation !== excelImagePrefetchGeneration) return;
         excelImagePrefetchActive -= 1;
         primeExcelImagePrefetch();
       });
@@ -349,6 +354,8 @@ function primeExcelImagePrefetch() {
 }
 
 function configureExcelImagePrefetch(urls: string[]) {
+  // Invalidate callbacks from any previous export before resetting shared state.
+  excelImagePrefetchGeneration += 1;
   excelImageCache.clear();
   excelImagePrefetchQueue = Array.from(new Set(urls.filter(Boolean)));
   excelImagePrefetchCursor = 0;
@@ -2018,6 +2025,8 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   } finally {
     // Always release image buffers and reset the queue, including failed exports.
     // A rejected generation must not retain large image buffers until the next export.
+    // Invalidate in-flight callbacks before resetting shared queue state.
+    excelImagePrefetchGeneration += 1;
     excelImageCache.clear();
     excelImagePrefetchQueue = [];
     excelImagePrefetchCursor = 0;
