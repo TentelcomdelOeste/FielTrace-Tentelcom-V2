@@ -148,7 +148,7 @@ export default function AuthGate({ children }: AuthGateProps) {
   return (
     <main className="h-[100dvh] overflow-y-auto overscroll-none bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950 flex items-center justify-center px-4 py-3">
       <section className="w-full max-w-md max-h-full overflow-y-auto rounded-[2rem] bg-white shadow-2xl shadow-black/30 border border-white/10 lg:max-w-sm lg:rounded-[1.75rem]">
-        <header className="bg-gradient-to-br from-[#1e3a8a] via-blue-800 to-[#2563eb] px-6 py-5 sm:py-6 text-white text-center lg:px-5 lg:py-4 lg:sm:py-5">
+        <header className="bg-gradient-to-br from-[#1e3a8a] via-blue-800 to-[#2563eb] px-6 py-5 sm:py-6 text-white text-center lg:px-5 lg:py-4 lg:py-5">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center mb-3">
             <ShieldCheck className="w-7 h-7 text-blue-100" aria-hidden="true" />
           </div>
