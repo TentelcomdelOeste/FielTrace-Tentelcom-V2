@@ -3933,7 +3933,7 @@ export default function App() {
                     )}
                   </>
                 ) : (
-                  {userPermissions.projects && (<div className="space-y-5">
+                  <div className="space-y-5">
                     {!memorySelectedCategory ? (
                       <>
                         <button type="button" onClick={() => setMemorySelectedProject(null)} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
@@ -4170,7 +4170,6 @@ export default function App() {
                       })()
                     )}
                   </div>
-                )}
 
                 {memorySelectedPhoto && (
                   <div className="fixed inset-0 z-[100] bg-black/90 p-4 md:p-8 flex items-center justify-center" onClick={() => setMemorySelectedPhoto(null)}>
