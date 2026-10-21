@@ -3618,7 +3618,7 @@ export default function App() {
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
-      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950'} flex flex-col font-sans`}
+      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'home' || currentStep === 'memory' ? 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950' : 'bg-white'} flex flex-col font-sans`}
     >
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
@@ -3867,7 +3867,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4 xl:rounded-none xl:bg-transparent xl:border-0 xl:p-0 xl:shadow-none"
+                className="space-y-6 pt-4 xl:mt-0 xl:space-y-5 xl:rounded-none xl:bg-transparent xl:border-0 xl:p-0 xl:shadow-none"
               >
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0 xl:bg-slate-800 xl:border-slate-700">
