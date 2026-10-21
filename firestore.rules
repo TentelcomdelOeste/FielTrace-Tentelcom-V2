@@ -6,36 +6,53 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
+    // Cuenta de administración inicial definida por la empresa.
+    // Las demás cuentas administradoras se autorizan mediante su perfil protegido.
+    function isBootstrapAdmin() {
+      return isSignedIn()
+        && request.auth.token.email == 'jenamorado@tentelcom.com';
+    }
+
     function isAdmin() {
       return isSignedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && (
+          request.auth.token.email == 'jenamorado@tentelcom.com'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        );
     }
 
-    // Perfil y rol. Los usuarios pueden consultar su propio perfil;
-    // solo un administrador puede crear perfiles o cambiar roles.
+    function validSelfProfile() {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'email', 'role', 'permissions', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.role == 'user'
+        && request.resource.data.permissions.projects == true
+        && request.resource.data.permissions.memory == true
+        && request.resource.data.permissions.sync == true;
+    }
+
     match /users/{userId} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow create, update, delete: if isAdmin();
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId && validSelfProfile());
+      allow update, delete: if isAdmin();
     }
 
-    // Firebase es el repositorio histórico de FieldTrace.
-    // La lectura y escritura requieren una cuenta no anónima.
+    // Proyectos compartidos de FieldTrace. Las operaciones requieren una cuenta nominativa.
     match /projects/{projectId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if isSignedIn();
       allow delete: if isAdmin();
 
       match /evidences/{evidenceId} {
-        allow read: if isSignedIn();
-        allow create, update: if isSignedIn();
+        allow read, create, update: if isSignedIn();
         allow delete: if isAdmin();
       }
     }
 
     // Compatibilidad con la colección global antigua.
     match /evidences/{evidenceId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if isSignedIn();
       allow delete: if isAdmin();
     }
   }
