@@ -42,7 +42,7 @@ import {
   Square
 } from 'lucide-react';
 import { AutoResizingTextarea } from './components/AutoResizingTextarea';
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react';
 
 function getFormattedLocationText(loc: any, selectedProject: any): string {
   if (!loc) return "Buscando...";
@@ -399,6 +399,8 @@ export default function App() {
   const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
   const [webCameraError, setWebCameraError] = useState<string | null>(null);
   const [nativeCameraError, setNativeCameraError] = useState<string | null>(null);
+  // Evita mostrar el fondo negro mientras Android entrega el primer frame del sensor.
+  const [nativeCameraPreviewReady, setNativeCameraPreviewReady] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -724,6 +726,7 @@ export default function App() {
 
     document.documentElement.classList.add('native-camera-active');
     setNativeCameraError(null);
+    setNativeCameraPreviewReady(false);
 
     (async () => {
       try {
@@ -781,6 +784,11 @@ export default function App() {
         console.log('[Camera] native preview ready:', started);
         await CameraPreview.setZoom({ level: cameraZoom });
         await ensureFlashArmed(flashMode);
+        // CameraPreview.start() puede resolverse antes del primer frame de imagen.
+        // Mantener una cortina breve oculta el negro inicial del preview nativo.
+        await new Promise(resolve => window.setTimeout(resolve, 800));
+        if (!active) return;
+        setNativeCameraPreviewReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
         if (!active) return;
@@ -817,7 +825,8 @@ export default function App() {
   }, [flashMode, currentStep]);
 
 
-  useEffect(() => {
+  // Aplicar transparencia antes del primer paint de la cámara, no después.
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
     return () => document.documentElement.classList.remove('native-camera-active');
   }, [currentStep]);
@@ -5405,6 +5414,13 @@ export default function App() {
                 {cameraZoom % 1 === 0 ? `${cameraZoom}x` : `${cameraZoom.toFixed(1)}x`}
               </button>
             </div>
+            {!isNativeCamera && false}
+            {isNativeCamera && !nativeCameraPreviewReady && !nativeCameraError && (
+              <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-slate-950 text-white" aria-live="polite">
+                <div className="h-9 w-9 rounded-full border-2 border-white/25 border-t-white animate-spin" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">Preparando cámara…</p>
+              </div>
+            )}
           </div>
 
           {/* Shutter Bar */}
