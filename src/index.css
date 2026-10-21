@@ -112,3 +112,34 @@ body {
   }
 }
 
+
+
+/* Memoria Fotográfica ocupa toda la pantalla en escritorio; evita el margen blanco causado por zoom global. */
+@media (min-width: 1024px) and (pointer: fine) {
+  .app-shell.dashboard-active {
+    zoom: 1;
+    width: 100%;
+  }
+
+  /* Reduce la vista principal un 10% sin alterar la escala de Memoria Fotográfica. */
+  .app-shell.home-active {
+    zoom: 0.9;
+    width: 100%;
+    min-height: 111.1112vh;
+    max-width: 100%;
+    overflow-x: clip;
+    background-image: linear-gradient(to bottom right, #020617, #101d3a, #172554);
+  }
+
+  html, body, #root {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .app-shell {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+}
+
+

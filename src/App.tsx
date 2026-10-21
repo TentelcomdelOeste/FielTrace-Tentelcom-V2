@@ -3618,12 +3618,12 @@ export default function App() {
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
-      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : 'bg-white'} flex flex-col font-sans`}
+      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'home' || currentStep === 'memory' ? (currentStep === 'home' ? 'dashboard-active home-active bg-white lg:bg-gradient-to-br lg:from-slate-950 lg:via-[#101d3a] lg:to-blue-950' : 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950') : 'bg-white'} flex flex-col font-sans`}
     >
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-6 py-8 xl:pt-4 xl:pb-8 no-scrollbar">
+        <div className="flex-1 overflow-y-auto px-5 py-7 sm:px-6 sm:py-8 xl:px-8 xl:pt-8 xl:pb-8 no-scrollbar">
           <input ref={memoryUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleMemoryUploadFile(e.target.files?.[0])} />
 
           <AnimatePresence mode="wait">
@@ -3634,14 +3634,14 @@ export default function App() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-7 pt-4 -mt-4 xl:-mt-4 xl:space-y-4"
+                className="space-y-7 pt-2 sm:pt-3 xl:pt-2 xl:space-y-5"
               >
                 <div className="flex justify-between items-center">
                    <div>
-                     <h1 className="text-3xl font-black tracking-tighter uppercase text-gray-950">Field Trace</h1>
+                     <h1 className="text-3xl font-black tracking-tighter uppercase text-gray-950 sm:text-4xl lg:text-white">Field Trace</h1>
                    </div>
-                   <button type="button" onClick={() => setShowAccountMenu(value => !value)} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200">
-                     <UserCircle className="w-6 h-6 text-gray-400"/>
+                   <button type="button" onClick={() => setShowAccountMenu(value => !value)} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200 lg:shrink-0 lg:bg-white/10 lg:border-white/15 lg:hover:bg-white/15 lg:hover:border-blue-300 lg:transition-colors">
+                     <UserCircle className="w-6 h-6 text-gray-400 lg:text-blue-100"/>
                    </button>
                 </div>
 
@@ -3705,14 +3705,14 @@ export default function App() {
                 </div>
 
                 {userPermissions.projects && (<div className="space-y-4">
-                  <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative">
-                    <Search className="w-4 h-4 text-gray-400" />
+                  <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative lg:bg-white/[0.06] lg:border-white/10 lg:focus-within:border-blue-400/60">
+                    <Search className="w-4 h-4 text-gray-400 lg:text-blue-200/60" />
                     <input 
                       type="text"
                       placeholder="BUSCAR PROYECTO, CLIENTE O TECNICO..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="bg-transparent flex-1 outline-none text-xs font-black uppercase tracking-tighter placeholder:text-gray-300 pr-8"
+                      className="bg-transparent flex-1 min-w-0 outline-none text-xs font-black uppercase tracking-tighter placeholder:text-gray-300 pr-8 lg:text-white lg:placeholder:text-blue-100/50"
                     />
                     {searchTerm && (
                       <button 
@@ -3730,7 +3730,7 @@ export default function App() {
                 <div className="space-y-5">
                   <div className="flex justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Proyectos Recientes</span>
+                    <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest lg:text-blue-100/70">Proyectos Recientes</span>
                     <button
                       type="button"
                       onClick={() => { void openCloudProjects(); }}
@@ -3818,7 +3818,7 @@ export default function App() {
                           handleSelectProject(p);
                         }
                       }}
-                      className={`p-5 bg-white border rounded-[2rem] flex justify-between items-center hover:shadow-xl hover:shadow-blue-600/5 transition-all cursor-pointer group shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-100'} xl:w-fit xl:min-w-[280px] xl:max-w-[430px] xl:flex-none`}
+                      className={`p-5 bg-white border rounded-[2rem] flex justify-between items-center hover:shadow-xl hover:shadow-blue-600/5 transition-all cursor-pointer group shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] ${isSelected ? 'border-blue-500 ring-2 ring-blue-200 lg:border-blue-400 lg:ring-blue-400/30' : 'border-gray-100 lg:border-white/10'} lg:bg-[#202D48] lg:hover:bg-[#293A5B] lg:hover:shadow-xl lg:hover:shadow-blue-950/30 lg:shadow-lg lg:shadow-slate-950/10 xl:w-fit xl:min-w-[280px] xl:max-w-[430px] xl:flex-none`}
                     >
                       <div className="flex gap-4 items-center min-w-0 xl:max-w-[350px]">
                         {projectSelectMode ? (
@@ -3826,13 +3826,13 @@ export default function App() {
                             {isSelected && <CheckCircle2 className="w-4 h-4" />}
                           </div>
                         ) : (
-                          <div className="w-14 h-14 bg-[#F8FAFC] rounded-[1.5rem] flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0">
-                            <MapPin className="w-6 h-6 text-gray-400 group-hover:text-blue-600"/>
+                          <div className="w-14 h-14 bg-[#F8FAFC] rounded-[1.5rem] flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0 lg:bg-white/10 lg:group-hover:bg-blue-500/20">
+                            <MapPin className="w-6 h-6 text-gray-400 group-hover:text-blue-600 lg:text-blue-200/70 lg:group-hover:text-blue-200"/>
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="text-[14px] font-black text-gray-950 uppercase tracking-tight truncate">{p.name}</p>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate">{p.client}</p>
+                          <p className="text-[14px] font-black text-gray-950 uppercase tracking-tight truncate lg:text-white">{p.name}</p>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate lg:text-blue-100/60">{p.client}</p>
                         </div>
                       </div>
                       {!projectSelectMode && (
@@ -3867,7 +3867,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4 xl:rounded-[2rem] xl:bg-gradient-to-br xl:from-slate-950 xl:via-[#101d3a] xl:to-blue-950 xl:border xl:border-slate-800 xl:p-6 xl:shadow-2xl xl:shadow-slate-950/20"
+                className="space-y-6 pt-4 xl:mt-0 xl:space-y-5 xl:rounded-none xl:bg-transparent xl:border-0 xl:p-0 xl:shadow-none"
               >
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0 xl:bg-slate-800 xl:border-slate-700">
@@ -4018,7 +4018,7 @@ export default function App() {
                               <ChevronLeft className="w-4 h-4" /> Volver a secciones
                             </button>
 
-                            <div className="bg-gray-900 text-white rounded-[2rem] p-5 sm:p-6">
+                            <div className="bg-[#1B2942] text-white rounded-[2rem] p-5 sm:p-6">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
                                   <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Revisión de sección</p>
@@ -4061,17 +4061,17 @@ export default function App() {
                             ) : (
                               <div className="space-y-4">
                                 {summary.groups.map((group: any) => (
-                                  <section key={group.id} className="bg-white border border-gray-100 rounded-[1.75rem] p-4 shadow-sm">
+                                  <section key={group.id} className="bg-[#202A3A] rounded-[1.75rem] p-4 shadow-sm">
                                     <div className="flex items-center justify-between gap-3 mb-3">
                                       <div className="min-w-0">
-                                        <p className="text-[10px] font-black uppercase truncate">
+                                        <p className="text-[10px] font-black uppercase truncate text-white">
                                           {category.id === 'NAPS' ? 'NAP ' + String(group.number).padStart(2, '0') :
                                            category.id === 'MUFA' ? 'MUFA ' + String(group.number).padStart(2, '0') :
                                            category.id === 'PUNTAS_FIBRA' ? 'PUNTA ' + String(group.number).padStart(2, '0') :
                                            category.id === 'RESERVA' ? 'RESERVA ' + String(group.number).padStart(2, '0') :
                                            category.label}
                                         </p>
-                                        {group.name && <p className="text-[8px] text-gray-400 uppercase truncate">{group.name}</p>}
+                                        {group.name && <p className="text-[8px] text-slate-300 uppercase truncate">{group.name}</p>}
                                       </div>
                                       <span className={"text-[9px] font-black shrink-0 " + (group.count >= group.required ? 'text-green-600' : 'text-amber-600')}>
                                         {group.count}/{group.required}
@@ -4086,13 +4086,13 @@ export default function App() {
                                             key={String(ev.uuid || ev.id || photoIndex)}
                                             type="button"
                                             onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
-                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-gray-100 border border-gray-100 text-left"
+                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left"
                                           >
                                             {imageUrl ? (
                                               <img src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
                                             ) : (
-                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-gray-400 uppercase p-2 text-center">
-                                                <CameraIcon className="w-5 h-5 mb-1 text-gray-300" />
+                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-slate-300 uppercase p-2 text-center">
+                                                <CameraIcon className="w-5 h-5 mb-1 text-slate-300" />
                                                 Sin foto
                                               </div>
                                             )}
