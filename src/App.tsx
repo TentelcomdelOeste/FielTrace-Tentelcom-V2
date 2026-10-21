@@ -3724,8 +3724,10 @@ export default function App() {
                     )}
                   </div>
                 </div>
+                )}
 
-                <div className="space-y-5"> )}
+                {userPermissions.projects && (
+                <div className="space-y-5">
                   <div className="flex justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
                     <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Proyectos Recientes</span>
