@@ -3667,7 +3667,7 @@ export default function App() {
                 )}
 
                 <div className="space-y-4 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
-                <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-3 text-white shadow-2xl relative overflow-hidden">
+                {userPermissions.sync && (<div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-3 text-white shadow-2xl relative overflow-hidden">
                    <div className="relative z-10">
                      <p className="text-[10px] font-black uppercase opacity-40 mb-1 xl:mb-1 tracking-widest">Estado de Sincronización</p>
                      <h3 className="text-xl font-bold leading-tight mb-2 xl:mb-1.5">{syncRunning ? 'Sincronizando...' : syncSummary.failed > 0 ? 'Atención requerida' : syncSummary.pending > 0 ? 'Registros pendientes' : 'Todo sincronizado'}</h3>
@@ -3686,9 +3686,9 @@ export default function App() {
                      </div>
                    </div>
                    <LayoutGrid className="absolute -right-8 -bottom-8 w-40 h-40 opacity-5" />
-                </div>
+                </div>)}
 
-                <button
+                {userPermissions.memory && (<button
                   type="button"
                   onClick={() => { void loadMemoryDashboard(); }}
                   className="w-full p-5 xl:p-3.5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform xl:ml-0"
@@ -3701,10 +3701,10 @@ export default function App() {
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5" />
-                </button>
+                </button>)}
                 </div>
 
-                <div className="space-y-4">
+                {userPermissions.projects && (<div className="space-y-4">
                   <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative">
                     <Search className="w-4 h-4 text-gray-400" />
                     <input 
@@ -3725,7 +3725,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-5">
+                <div className="space-y-5"> )}
                   <div className="flex justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
                     <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Proyectos Recientes</span>
@@ -3854,6 +3854,7 @@ export default function App() {
                   })}
                   </div>
                 </div>
+              )}
               </motion.div>
             )}
 
@@ -3930,7 +3931,7 @@ export default function App() {
                     )}
                   </>
                 ) : (
-                  <div className="space-y-5">
+                  {userPermissions.projects && (<div className="space-y-5">
                     {!memorySelectedCategory ? (
                       <>
                         <button type="button" onClick={() => setMemorySelectedProject(null)} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
