@@ -491,10 +491,18 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   const sheet = workbook.addWorksheet('Datos');
   sheet.views = [{ showGridLines: false }];
 
+  // La hoja Datos utiliza B como etiqueta y C:H como valor.
+  // Definir también D:H evita que el encabezado D1:H1 quede comprimido
+  // frente al bloque B1:C1 y permite que los valores largos sean legibles.
   sheet.columns = [
     { width: 3 },
-    { width: 48 },
-    { width: 72 },
+    { width: 36 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
   ];
 
   sheet.mergeCells('B1:C1');
@@ -536,6 +544,9 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
 
   DATA_SHEET_LABELS.forEach((label, index) => {
     const row = 6 + index;
+    // Mantener el dato en la columna C (las fórmulas de las demás hojas
+    // referencian Datos!C6:C14), pero ampliar visualmente el campo hasta H.
+    sheet.mergeCells(row, 3, row, 8);
     const labelCell = sheet.getCell(row, 2);
     const valueCell = sheet.getCell(row, 3);
     const value = getProjectDataValue(project, label);
