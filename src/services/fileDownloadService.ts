@@ -133,24 +133,8 @@ export async function deliverGeneratedFile(blob: Blob, fileName: string, downloa
     }
   }
 
-  // On mobile browsers, prefer the native share sheet when sharing files is
-  // supported; it is more reliable than synthetic downloads in some browsers.
-  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' &&
-      typeof navigator.canShare === 'function') {
-    try {
-      const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
-        return;
-      }
-    } catch (error) {
-      // In mobile browsers, Web Share can reject after the lengthy file generation
-      // has outlived the original tap's transient user activation. Some WebViews
-      // also report AbortError without showing a visible share sheet. Never treat
-      // that as a successful download: fall through to the browser download path.
-      console.warn('[FileDownload] Compartir archivo no completado; usando descarga web.', error);
-    }
-  }
+  // En navegadores, descargar directamente desde la página actual.
+  // No abrir pestañas auxiliares ni mostrar una hoja de compartir inesperada.
 
   if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
     throw new Error('Este dispositivo no permite descargar el archivo desde este entorno.');
