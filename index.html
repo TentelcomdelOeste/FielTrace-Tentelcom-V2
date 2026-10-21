@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" style="min-height:100%;background:#071126">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,7 +12,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/pwa-180x180.png" />
   </head>
-  <body style="margin:0;min-height:100vh;background:linear-gradient(135deg,#071126 0%,#101d3a 55%,#172554 100%)">
+  <body style="margin:0;min-height:100vh;background:#FFFFFF">
     <div id="root" style="min-height:100vh">
       <main aria-label="Cargando Field Trace" style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#dbeafe;font:600 14px system-ui,sans-serif">
         <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
@@ -20,7 +20,15 @@
           <span>Preparando Field Trace...</span>
         </div>
       </main>
-      <style>@keyframes fieldtrace-spin{to{transform:rotate(360deg)}}</style>
+      <style>
+        @keyframes fieldtrace-spin{to{transform:rotate(360deg)}}
+        @media (min-width:1024px) and (pointer:fine) {
+          html, body { background:linear-gradient(135deg,#071126 0%,#101d3a 55%,#172554 100%) !important; }
+        }
+        @media (max-width:1023px), (pointer:coarse) {
+          #root > main[aria-label="Cargando Field Trace"] { display:none !important; }
+        }
+      </style>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
