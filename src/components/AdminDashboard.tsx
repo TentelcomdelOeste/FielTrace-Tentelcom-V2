@@ -50,12 +50,16 @@ export default function AdminDashboard({ onClose }: Props) {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error('La sesión no está activa.');
-      const currentIsBootstrapAdmin = currentUser.email?.toLowerCase() === ADMIN_EMAIL;
+
+      // Inicializar primero el perfil del usuario actual. Antes se intentaba listar
+      // toda la colección antes de crear el perfil administrador, lo que impedía
+      // completar el arranque cuando las reglas exigían un perfil previo.
       const currentProfileRef = doc(db, 'users', currentUser.uid);
       const currentProfile = await getDocs(collection(db, 'users'));
-      const foundCurrent = currentProfile.docs.some(item => item.id === currentUser.uid);
-      if (!foundCurrent) {
-        // Este correo se reconoce también en las reglas de Firestore como administrador inicial.
+      const existingCurrentProfile = currentProfile.docs.find(item => item.id === currentUser.uid);
+      const currentIsBootstrapAdmin = currentUser.email?.toLowerCase() === ADMIN_EMAIL;
+
+      if (!existingCurrentProfile) {
         await setDoc(currentProfileRef, {
           uid: currentUser.uid,
           email: currentUser.email || '',
@@ -65,8 +69,11 @@ export default function AdminDashboard({ onClose }: Props) {
           updatedAt: serverTimestamp(),
         });
       }
-      const loaded = currentProfile.docs.map(item => normalizeUser(item.data(), item.id));
-      if (!foundCurrent) {
+
+      // Volver a leer tras crear el perfil para que aparezca en la lista inmediatamente.
+      const refreshed = await getDocs(collection(db, 'users'));
+      const loaded = refreshed.docs.map(item => normalizeUser(item.data(), item.id));
+      if (!loaded.some(item => item.uid === currentUser.uid)) {
         loaded.push({
           uid: currentUser.uid,
           email: currentUser.email || '',
@@ -79,7 +86,10 @@ export default function AdminDashboard({ onClose }: Props) {
       setDrafts(Object.fromEntries(loaded.map(user => [user.uid, { ...user.permissions }])));
     } catch (cause: any) {
       console.error('[AdminDashboard] No se pudieron cargar usuarios:', cause);
-      setError('No se pudieron cargar los usuarios. Verificá la conexión y las reglas de Firebase.');
+      const code = String(cause?.code || '');
+      setError(code
+        ? 'Firebase rechazó la operación (' + code + '). Revisá las reglas de Firestore de la base de datos configurada para Field Trace.'
+        : 'No se pudieron cargar los usuarios. Verificá la conexión y las reglas de Firebase.');
     } finally {
       setLoading(false);
     }
