@@ -186,6 +186,7 @@ const excelImageCache = new Map<string, Promise<ExcelImageData>>();
 let excelImagePrefetchQueue: string[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
+let excelImagePrefetchGeneration = 0;
 
 const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 25_000;
 
@@ -326,16 +327,24 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 }
 
 function primeExcelImagePrefetch() {
+  // Bound total prefetched entries, not only active network requests.
+  // Completed image buffers stay in the cache until the worksheet consumes them;
+  // limiting only active fetches allowed hundreds of completed buffers to pile up.
   while (
     excelImagePrefetchActive < getExcelImagePrefetchConcurrency() &&
+    excelImageCache.size < getExcelImagePrefetchConcurrency() &&
     excelImagePrefetchCursor < excelImagePrefetchQueue.length
   ) {
     const url = excelImagePrefetchQueue[excelImagePrefetchCursor++];
     if (excelImageCache.has(url)) continue;
 
     excelImagePrefetchActive += 1;
+    const generation = excelImagePrefetchGeneration;
     const promise = fetchOriginalImage(url)
       .finally(() => {
+        // An export may have failed or been replaced while this request was in
+        // flight. Do not let an old request mutate the new export's queue state.
+        if (generation !== excelImagePrefetchGeneration) return;
         excelImagePrefetchActive -= 1;
         primeExcelImagePrefetch();
       });
@@ -345,6 +354,8 @@ function primeExcelImagePrefetch() {
 }
 
 function configureExcelImagePrefetch(urls: string[]) {
+  // Invalidate callbacks from any previous export before resetting shared state.
+  excelImagePrefetchGeneration += 1;
   excelImageCache.clear();
   excelImagePrefetchQueue = Array.from(new Set(urls.filter(Boolean)));
   excelImagePrefetchCursor = 0;
@@ -480,10 +491,18 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   const sheet = workbook.addWorksheet('Datos');
   sheet.views = [{ showGridLines: false }];
 
+  // La hoja Datos utiliza B como etiqueta y C:H como valor.
+  // Definir también D:H evita que el encabezado D1:H1 quede comprimido
+  // frente al bloque B1:C1 y permite que los valores largos sean legibles.
   sheet.columns = [
     { width: 3 },
-    { width: 48 },
-    { width: 72 },
+    { width: 36 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
   ];
 
   sheet.mergeCells('B1:C1');
@@ -511,7 +530,7 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   sheet.getCell('F2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   sheet.getCell('G2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   sheet.getCell('H2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
-  // Complete the outer frame of the header on the Datos sheet.
+  // Marco completo de ambos bloques del encabezado.
   for (let col = 2; col <= 3; col++) {
     sheet.getCell(1, col).border = {
       ...sheet.getCell(1, col).border,
@@ -566,6 +585,9 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
 
   DATA_SHEET_LABELS.forEach((label, index) => {
     const row = 6 + index;
+    // Mantener el dato en la columna C (las fórmulas de las demás hojas
+    // referencian Datos!C6:C14), pero ampliar visualmente el campo hasta H.
+    sheet.mergeCells(row, 3, row, 8);
     const labelCell = sheet.getCell(row, 2);
     const valueCell = sheet.getCell(row, 3);
     const value = getProjectDataValue(project, label);
@@ -586,9 +608,12 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
     sheet.getCell(row, 2).border = {
       bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
     };
-    sheet.getCell(row, 3).border = {
-      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
-    };
+    for (let col = 3; col <= 8; col++) {
+      sheet.getCell(row, col).border = {
+        ...sheet.getCell(row, col).border,
+        bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
+      };
+    }
   }
 
   return sheet;
@@ -663,12 +688,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   }
   sheet.getCell('B1').border = {
     ...sheet.getCell('B1').border,
-    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
-  };
-  sheet.getCell('C1').border = {
-    ...sheet.getCell('C1').border,
-    top: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell('B2').border = {
     ...sheet.getCell('B2').border,
@@ -846,12 +866,7 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
   // La columna B/C queda como espacio lateral, igual que en el encabezado inicial.
   sheet.getCell(startRow, 2).border = {
     ...sheet.getCell(startRow, 2).border,
-    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
-  };
-  sheet.getCell(startRow, 3).border = {
-    ...sheet.getCell(startRow, 3).border,
-    top: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell(startRow + 1, 2).border = {
     ...sheet.getCell(startRow + 1, 2).border,
@@ -1998,7 +2013,9 @@ async function addEvidenceSheet(
 
 export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[], downloadTarget?: Window | null) {
   const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const now = () => typeof performance !== 'undefined' ? performance.now() : Date.now();
 
+  try {
   const selectedCategories = selectedCategoryIds?.length
     ? new Set(selectedCategoryIds.map(id => normalizeMemoryCategory(id)))
     : null;
@@ -2030,19 +2047,29 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     await addEvidenceSheet(workbook, category, project, evidences);
   }
 
+  const workbookBuildMs = now() - exportStart;
+  const serializationStart = now();
   const buffer = await workbook.xlsx.writeBuffer();
+  const serializationMs = now() - serializationStart;
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
   const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
 
+  const deliveryStart = now();
   await deliverGeneratedFile(blob, fileName, downloadTarget);
+  const deliveryMs = now() - deliveryStart;
 
-  excelImageCache.clear();
-  excelImagePrefetchQueue = [];
-  excelImagePrefetchCursor = 0;
-  excelImagePrefetchActive = 0;
+  if (typeof console !== 'undefined') {
+    console.info('[MemoryExcel] Tiempos por etapa:', {
+      imageCount: imageUrls.length,
+      workbookBuildSeconds: Number((workbookBuildMs / 1000).toFixed(2)),
+      xlsxSerializationSeconds: Number((serializationMs / 1000).toFixed(2)),
+      fileDeliverySeconds: Number((deliveryMs / 1000).toFixed(2)),
+      fileSizeMB: Number((blob.size / (1024 * 1024)).toFixed(2)),
+    });
+  }
 
   if (typeof console !== 'undefined') {
     const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
@@ -2050,4 +2077,14 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   }
 
   return fileName;
+  } finally {
+    // Always release image buffers and reset the queue, including failed exports.
+    // A rejected generation must not retain large image buffers until the next export.
+    // Invalidate in-flight callbacks before resetting shared queue state.
+    excelImagePrefetchGeneration += 1;
+    excelImageCache.clear();
+    excelImagePrefetchQueue = [];
+    excelImagePrefetchCursor = 0;
+    excelImagePrefetchActive = 0;
+  }
 }
