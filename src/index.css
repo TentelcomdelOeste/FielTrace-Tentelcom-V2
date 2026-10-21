@@ -128,17 +128,18 @@ body {
     min-height: 111.1112vh;
     max-width: 100%;
     overflow-x: clip;
+    background-image: linear-gradient(to bottom right, #020617, #101d3a, #172554);
+  }
+
+  html, body, #root {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .app-shell {
+    max-width: 100%;
+    overflow-x: clip;
   }
 }
 
 
-/* Evita que la escala de escritorio o algún componente genere desplazamiento horizontal. */
-html, body, #root {
-  max-width: 100%;
-  overflow-x: clip;
-}
-
-.app-shell {
-  max-width: 100%;
-  overflow-x: clip;
-}
