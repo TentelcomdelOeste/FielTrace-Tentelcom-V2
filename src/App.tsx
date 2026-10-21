@@ -5439,7 +5439,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => void (isRecordingVideo ? stopVideoRecording() : startVideoRecording())}
-                disabled={videoProcessing}
+                disabled={videoProcessing || (isNativeCamera && !nativeCameraPreviewReady)}
                 className={`w-12 h-12 rounded-full border-2 border-white/80 active:scale-95 transition-all flex items-center justify-center ${isRecordingVideo ? 'bg-red-600 text-white' : 'bg-red-500 text-white'} disabled:opacity-50`}
                 title={isRecordingVideo ? 'DETENER VIDEO' : 'GRABAR VIDEO'}
                 aria-label={isRecordingVideo ? 'DETENER VIDEO' : 'GRABAR VIDEO'}
@@ -5452,7 +5452,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={captureBatchPhoto}
-                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
+                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (isNativeCamera && !nativeCameraPreviewReady) || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
                 className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
                 title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
                 aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
