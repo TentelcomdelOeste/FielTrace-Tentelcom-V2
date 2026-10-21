@@ -454,6 +454,9 @@ export default function App() {
   const videoRecordingPathRef = useRef<string | null>(null);
   const webCameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const webCameraStreamRef = useRef<MediaStream | null>(null);
+  // Serializa el cierre de una sesión nativa antes de abrir la siguiente para evitar
+  // solapamientos stop/start que provocan un destello al entrar a la cámara.
+  const nativeCameraStopPromiseRef = useRef<Promise<void> | null>(null);
   const isNativeCamera = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -518,8 +521,8 @@ export default function App() {
     if (capturingRef.current) return;
     const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
     try {
-      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
-      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
+      // Cambiar el estado dispara el cleanup del efecto de cámara, que detiene
+      // la sesión actual y serializa su cierre antes de iniciar el nuevo lente.
       setCameraFacing(nextFacing);
     } catch (error) {
       console.warn('[Camera] switch facing:', error);
@@ -739,7 +742,17 @@ export default function App() {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
 
-        await CameraPreview.stop({ force: true }).catch(() => {});
+        // Si venimos de otra sesión, esperar a que su cierre termine. No detener
+        // la cámara de nuevo al abrir: ese stop redundante apaga el preview y causa
+        // un parpadeo visible antes de que start() vuelva a dibujar la imagen.
+        const pendingCameraStop = nativeCameraStopPromiseRef.current;
+        if (pendingCameraStop) {
+          await pendingCameraStop;
+          if (nativeCameraStopPromiseRef.current === pendingCameraStop) {
+            nativeCameraStopPromiseRef.current = null;
+          }
+        }
+        if (!active) return;
 
         // Preview fotográfico estable. No activamos el modo de video aquí:
         // la captura de fotos usa CameraPreview.capture().
@@ -785,8 +798,15 @@ export default function App() {
 
     return () => {
       active = false;
-      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
-      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
+      // Guardar la promesa inmediatamente permite que una reapertura espere este cierre,
+      // en vez de ejecutar start() mientras la sesión anterior aún se está apagando.
+      nativeCameraStopPromiseRef.current = Promise.resolve()
+        .then(() => CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {}))
+        .then(() => CameraPreview.stop({ force: true }))
+        .then(() => undefined)
+        .catch((error) => {
+          console.warn('[Camera] stop:', error);
+        });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
