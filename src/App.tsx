@@ -3618,7 +3618,7 @@ export default function App() {
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
-      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : 'bg-white'} flex flex-col font-sans`}
+      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'memory' ? 'memory-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950' : 'bg-white'} flex flex-col font-sans`}
     >
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
@@ -3867,7 +3867,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4 xl:rounded-[2rem] xl:bg-gradient-to-br xl:from-slate-950 xl:via-[#101d3a] xl:to-blue-950 xl:border xl:border-slate-800 xl:p-6 xl:shadow-2xl xl:shadow-slate-950/20"
+                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4 xl:rounded-none xl:bg-transparent xl:border-0 xl:p-0 xl:shadow-none"
               >
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0 xl:bg-slate-800 xl:border-slate-700">
@@ -4018,7 +4018,7 @@ export default function App() {
                               <ChevronLeft className="w-4 h-4" /> Volver a secciones
                             </button>
 
-                            <div className="bg-gray-900 text-white rounded-[2rem] p-5 sm:p-6">
+                            <div className="bg-[#1B2942] text-white rounded-[2rem] p-5 sm:p-6">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
                                   <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Revisión de sección</p>
@@ -4061,17 +4061,17 @@ export default function App() {
                             ) : (
                               <div className="space-y-4">
                                 {summary.groups.map((group: any) => (
-                                  <section key={group.id} className="bg-white border border-gray-100 rounded-[1.75rem] p-4 shadow-sm">
+                                  <section key={group.id} className="bg-[#202A3A] rounded-[1.75rem] p-4 shadow-sm">
                                     <div className="flex items-center justify-between gap-3 mb-3">
                                       <div className="min-w-0">
-                                        <p className="text-[10px] font-black uppercase truncate">
+                                        <p className="text-[10px] font-black uppercase truncate text-white">
                                           {category.id === 'NAPS' ? 'NAP ' + String(group.number).padStart(2, '0') :
                                            category.id === 'MUFA' ? 'MUFA ' + String(group.number).padStart(2, '0') :
                                            category.id === 'PUNTAS_FIBRA' ? 'PUNTA ' + String(group.number).padStart(2, '0') :
                                            category.id === 'RESERVA' ? 'RESERVA ' + String(group.number).padStart(2, '0') :
                                            category.label}
                                         </p>
-                                        {group.name && <p className="text-[8px] text-gray-400 uppercase truncate">{group.name}</p>}
+                                        {group.name && <p className="text-[8px] text-slate-300 uppercase truncate">{group.name}</p>}
                                       </div>
                                       <span className={"text-[9px] font-black shrink-0 " + (group.count >= group.required ? 'text-green-600' : 'text-amber-600')}>
                                         {group.count}/{group.required}
@@ -4086,13 +4086,13 @@ export default function App() {
                                             key={String(ev.uuid || ev.id || photoIndex)}
                                             type="button"
                                             onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
-                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-gray-100 border border-gray-100 text-left"
+                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left"
                                           >
                                             {imageUrl ? (
                                               <img src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
                                             ) : (
-                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-gray-400 uppercase p-2 text-center">
-                                                <CameraIcon className="w-5 h-5 mb-1 text-gray-300" />
+                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-slate-300 uppercase p-2 text-center">
+                                                <CameraIcon className="w-5 h-5 mb-1 text-slate-300" />
                                                 Sin foto
                                               </div>
                                             )}
