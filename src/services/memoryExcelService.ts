@@ -524,6 +524,23 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
     }
   }
 
+  // Refuerza el marco superior e izquierdo del panel vacío, solo en la hoja Datos.
+  // Se asigna explícitamente después de combinar B1:C2 para que ExcelJS conserve los bordes.
+  for (const address of ['B1', 'C1']) {
+    const cell = sheet.getCell(address);
+    cell.border = {
+      ...cell.border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  for (const address of ['B1', 'B2']) {
+    const cell = sheet.getCell(address);
+    cell.border = {
+      ...cell.border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+
   sheet.mergeCells('D1:J1');
   const title = sheet.getCell('D1');
   title.value = 'MEMORIA FOTOGRÁFICA';
