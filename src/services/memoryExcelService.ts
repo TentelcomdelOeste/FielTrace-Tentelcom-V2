@@ -178,7 +178,9 @@ type ExcelImageData = {
 
 const getExcelImagePrefetchConcurrency = () => {
   if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
-    return 2;
+    // Mantener una cola pequeña pero con 3 fotos en paralelo mejora el
+    // aprovechamiento de la red móvil sin acumular demasiados buffers grandes.
+    return 3;
   }
   return 4;
 };
@@ -2075,7 +2077,15 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   const workbookBuildMs = now() - exportStart;
   const serializationStart = now();
-  const buffer = await workbook.xlsx.writeBuffer();
+  // Las fotografías ya están comprimidas como JPEG/PNG. Un nivel DEFLATE
+  // bajo reduce el trabajo de CPU al empaquetar el XLSX, sin cambiar la calidad
+  // ni la resolución de las imágenes incrustadas.
+  const buffer = await workbook.xlsx.writeBuffer({
+    zip: {
+      compression: 'DEFLATE',
+      compressionOptions: { level: 1 },
+    },
+  });
   const serializationMs = now() - serializationStart;
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
