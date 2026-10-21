@@ -326,8 +326,12 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 }
 
 function primeExcelImagePrefetch() {
+  // Bound total prefetched entries, not only active network requests.
+  // Completed image buffers stay in the cache until the worksheet consumes them;
+  // limiting only active fetches allowed hundreds of completed buffers to pile up.
   while (
     excelImagePrefetchActive < getExcelImagePrefetchConcurrency() &&
+    excelImageCache.size < getExcelImagePrefetchConcurrency() &&
     excelImagePrefetchCursor < excelImagePrefetchQueue.length
   ) {
     const url = excelImagePrefetchQueue[excelImagePrefetchCursor++];
@@ -1947,7 +1951,9 @@ async function addEvidenceSheet(
 
 export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[], downloadTarget?: Window | null) {
   const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const now = () => typeof performance !== 'undefined' ? performance.now() : Date.now();
 
+  try {
   const selectedCategories = selectedCategoryIds?.length
     ? new Set(selectedCategoryIds.map(id => normalizeMemoryCategory(id)))
     : null;
@@ -1979,19 +1985,29 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     await addEvidenceSheet(workbook, category, project, evidences);
   }
 
+  const workbookBuildMs = now() - exportStart;
+  const serializationStart = now();
   const buffer = await workbook.xlsx.writeBuffer();
+  const serializationMs = now() - serializationStart;
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
   const fileName = `Memoria_Fotografica_${safeFileName(project?.name)}_${Date.now()}.xlsx`;
 
+  const deliveryStart = now();
   await deliverGeneratedFile(blob, fileName, downloadTarget);
+  const deliveryMs = now() - deliveryStart;
 
-  excelImageCache.clear();
-  excelImagePrefetchQueue = [];
-  excelImagePrefetchCursor = 0;
-  excelImagePrefetchActive = 0;
+  if (typeof console !== 'undefined') {
+    console.info('[MemoryExcel] Tiempos por etapa:', {
+      imageCount: imageUrls.length,
+      workbookBuildSeconds: Number((workbookBuildMs / 1000).toFixed(2)),
+      xlsxSerializationSeconds: Number((serializationMs / 1000).toFixed(2)),
+      fileDeliverySeconds: Number((deliveryMs / 1000).toFixed(2)),
+      fileSizeMB: Number((blob.size / (1024 * 1024)).toFixed(2)),
+    });
+  }
 
   if (typeof console !== 'undefined') {
     const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - exportStart;
@@ -1999,4 +2015,12 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   }
 
   return fileName;
+  } finally {
+    // Always release image buffers and reset the queue, including failed exports.
+    // A rejected generation must not retain large image buffers until the next export.
+    excelImageCache.clear();
+    excelImagePrefetchQueue = [];
+    excelImagePrefetchCursor = 0;
+    excelImagePrefetchActive = 0;
+  }
 }
