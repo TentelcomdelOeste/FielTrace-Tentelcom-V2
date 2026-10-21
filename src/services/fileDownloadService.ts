@@ -8,27 +8,10 @@ import { Share } from '@capacitor/share';
  * sheet instead of relying on an <a download> click inside a WebView.
  */
 /**
- * Opens a same-origin download surface synchronously from the user's tap.
- * Mobile browsers can discard transient user activation while a large Excel
- * or ZIP is being generated; a new tab opened here remains available when the
- * Blob is finally ready.
+ * Kept for compatibility with existing export buttons.
+ * Downloads are delivered from the current page; never open an auxiliary tab.
  */
 export function prepareMobileDownloadTarget(): Window | null {
-  if (typeof window === 'undefined' || Capacitor.isNativePlatform()) return null;
-  const isMobile = window.matchMedia('(max-width: 767px), (pointer: coarse)').matches;
-  if (!isMobile) return null;
-
-  try {
-    const target = window.open('', '_blank');
-    if (target && !target.closed) {
-      target.document.open();
-      target.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Field Trace</title></head><body style="font-family:system-ui,sans-serif;padding:24px;color:#172033"><h2>Preparando archivo…</h2><p>No cierre esta pestaña mientras se prepara la descarga.</p></body></html>`);
-      target.document.close();
-      return target;
-    }
-  } catch (error) {
-    console.warn('[FileDownload] No se pudo abrir el destino móvil de descarga.', error);
-  }
   return null;
 }
 
