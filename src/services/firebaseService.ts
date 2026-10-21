@@ -463,4 +463,3 @@ export const firebaseService = {
   }
 };
 
-export { db, auth };
