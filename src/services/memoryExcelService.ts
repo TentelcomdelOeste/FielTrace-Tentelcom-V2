@@ -192,7 +192,25 @@ let excelImagePrefetchGeneration = 0;
 
 const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 25_000;
 
+// Diagnóstico de rendimiento por exportación. Solo acumula métricas agregadas;
+// no registra URLs, nombres de proyecto ni datos de las evidencias.
+const excelImageMetrics = {
+  downloadMs: 0,
+  processingMs: 0,
+  downloadedBytes: 0,
+  processed: 0,
+  failed: 0,
+};
+const metricNow = () => typeof performance !== 'undefined' ? performance.now() : Date.now();
+const recordExcelImageMetrics = (downloadMs: number, processingMs: number, bytes: number) => {
+  excelImageMetrics.downloadMs += downloadMs;
+  excelImageMetrics.processingMs += processingMs;
+  excelImageMetrics.downloadedBytes += bytes;
+  excelImageMetrics.processed += 1;
+};
+
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
+  const downloadStart = metricNow();
   const fetchImage = async (target: string, proxy = false): Promise<Response> => {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
@@ -242,8 +260,10 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     response = await fetchImage(proxyUrl, true);
   }
 
+  const downloadMs = metricNow() - downloadStart;
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const sourceBlob = await response.blob();
+  const processingStart = metricNow();
   let bitmap: ImageBitmap | null = null;
   let fallbackImage: HTMLImageElement | null = null;
   let objectUrl: string | null = null;
@@ -308,16 +328,20 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
       );
       canvas.width = 1;
       canvas.height = 1;
+      const buffer = await converted.arrayBuffer();
+      recordExcelImageMetrics(downloadMs, metricNow() - processingStart, sourceBlob.size);
       return {
-        buffer: await converted.arrayBuffer(),
+        buffer,
         extension: 'jpeg',
         width: targetWidth,
         height: targetHeight,
       };
     }
 
+    const buffer = await sourceBlob.arrayBuffer();
+    recordExcelImageMetrics(downloadMs, metricNow() - processingStart, sourceBlob.size);
     return {
-      buffer: await sourceBlob.arrayBuffer(),
+      buffer,
       extension: contentType.includes('png') ? 'png' : 'jpeg',
       width,
       height,
@@ -375,6 +399,9 @@ async function getExcelImage(url: string): Promise<ExcelImageData> {
 
   try {
     return await promise;
+  } catch (error) {
+    excelImageMetrics.failed += 1;
+    throw error;
   } finally {
     // Mantener un máximo pequeño de fotografías adelantadas en memoria.
     if (excelImageCache.get(url) === promise) {
@@ -2040,8 +2067,11 @@ async function addEvidenceSheet(
 }
 
 export async function generateMemoryExcel(project: any, evidences: MemoryEvidence[], selectedCategoryIds?: string[], downloadTarget?: Window | null) {
-  const exportStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const now = () => typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const exportStart = metricNow();
+  const now = metricNow;
+  for (const key of Object.keys(excelImageMetrics) as Array<keyof typeof excelImageMetrics>) {
+    excelImageMetrics[key] = 0;
+  }
 
   try {
   const selectedCategories = selectedCategoryIds?.length
@@ -2056,6 +2086,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     .filter(Boolean);
   configureExcelImagePrefetch(imageUrls);
 
+  const preparationStart = now();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FielTrace';
   workbook.company = 'Tentelcom del Oeste S.A.';
@@ -2065,6 +2096,8 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   // Los valores variables de la columna C se dejan vacíos hasta integrar
   // los datos específicos del proyecto/sitio.
   addDataSheet(workbook, project);
+  const workbookSetupMs = now() - preparationStart;
+  const sheetBuildStart = now();
 
   for (const category of CATEGORY_CONFIG) {
     if (selectedCategories && !selectedCategories.has(category.id)) continue;
@@ -2075,6 +2108,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     await addEvidenceSheet(workbook, category, project, evidences);
   }
 
+  const sheetBuildMs = now() - sheetBuildStart;
   const workbookBuildMs = now() - exportStart;
   const serializationStart = now();
   // Las fotografías ya están comprimidas como JPEG/PNG. Un nivel DEFLATE
@@ -2098,8 +2132,16 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   const deliveryMs = now() - deliveryStart;
 
   if (typeof console !== 'undefined') {
-    console.info('[MemoryExcel] Tiempos por etapa:', {
-      imageCount: imageUrls.length,
+    console.info('[MemoryExcel] Diagnóstico de rendimiento:', {
+      evidenceCount: evidences.length,
+      uniqueImageUrls: new Set(imageUrls).size,
+      imagesProcessed: excelImageMetrics.processed,
+      imageFailures: excelImageMetrics.failed,
+      downloadedImageMB: Number((excelImageMetrics.downloadedBytes / (1024 * 1024)).toFixed(2)),
+      imageDownloadSecondsAccumulated: Number((excelImageMetrics.downloadMs / 1000).toFixed(2)),
+      imageProcessingSecondsAccumulated: Number((excelImageMetrics.processingMs / 1000).toFixed(2)),
+      workbookSetupSeconds: Number((workbookSetupMs / 1000).toFixed(2)),
+      worksheetBuildSeconds: Number((sheetBuildMs / 1000).toFixed(2)),
       workbookBuildSeconds: Number((workbookBuildMs / 1000).toFixed(2)),
       xlsxSerializationSeconds: Number((serializationMs / 1000).toFixed(2)),
       fileDeliverySeconds: Number((deliveryMs / 1000).toFixed(2)),
