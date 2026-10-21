@@ -798,7 +798,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
     const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
     const dataRow = dataIndex >= 0 ? dataIndex + 8 : 8;
     const valueCell = sheet.getCell(item.valueRange.split(':')[0]);
-    valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
+    valueCell.value = { formula: 'Datos!F' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
@@ -986,7 +986,7 @@ const addRepeatedProjectDataBox = (sheet: ExcelJS.Worksheet, project: any, start
     const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
     const dataRow = dataIndex >= 0 ? dataIndex + 8 : 8;
     const valueCell = sheet.getCell(item.valueRange[0], item.valueRange[1]);
-    valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
+    valueCell.value = { formula: 'Datos!F' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
@@ -1195,7 +1195,7 @@ const addFiberTipsSheet = async (
     const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
     const dataRow = dataIndex >= 0 ? dataIndex + 8 : 8;
     const valueCell = sheet.getCell(item.valueRange.split(':')[0]);
-    valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
+    valueCell.value = { formula: 'Datos!F' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
     valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
     valueCell.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
