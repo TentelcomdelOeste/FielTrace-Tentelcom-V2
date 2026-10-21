@@ -3867,31 +3867,31 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4"
+                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4 xl:rounded-[2rem] xl:bg-gradient-to-br xl:from-slate-950 xl:via-[#101d3a] xl:to-blue-950 xl:border xl:border-slate-800 xl:p-6 xl:shadow-2xl xl:shadow-slate-950/20"
               >
                 <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0">
-                    <ArrowLeft className="w-6 h-6 text-gray-950" />
+                  <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0 xl:bg-slate-800 xl:border-slate-700">
+                    <ArrowLeft className="w-6 h-6 text-gray-950 xl:text-white" />
                   </button>
                   <div className="flex-1">
-                    <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950">Memoria Fotográfica</h2>
-                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">Proyectos almacenados en Firebase</p>
+                    <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950 xl:text-white">Memoria Fotográfica</h2>
+                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest xl:text-blue-200/70">Proyectos almacenados en Firebase</p>
                   </div>
-                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center xl:bg-blue-900/40 xl:text-blue-200">
                     <RefreshCcw className={"w-4 h-4 " + (memoryLoading ? 'animate-spin' : '')} />
                   </button>
                 </div>
 
                 {!memorySelectedProject ? (
                   <>
-                    <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl focus-within:border-blue-300">
+                    <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl focus-within:border-blue-300 xl:bg-white/[0.06] xl:border-white/10 xl:focus-within:border-blue-400/60">
                       <Search className="w-4 h-4 text-gray-400" />
                       <input
                         type="text"
                         placeholder="BUSCAR PROYECTO..."
                         value={memoryProjectSearch}
                         onChange={(e) => setMemoryProjectSearch(e.target.value)}
-                        className="bg-transparent flex-1 outline-none text-xs font-black uppercase tracking-tighter"
+                        className="bg-transparent flex-1 outline-none text-xs font-black uppercase tracking-tighter xl:text-white placeholder:xl:text-blue-100/50"
                       />
                     </div>
 
@@ -3941,27 +3941,27 @@ export default function App() {
                         </button>
 
                         <div className="xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
-                          <div className="bg-gray-900 text-white rounded-[2rem] p-6 xl:p-5">
-                            <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
+                          <div className="bg-gray-900 text-white rounded-[2rem] p-6 xl:p-5 xl:bg-gradient-to-br xl:from-[#1e3a8a] xl:via-blue-800 xl:to-[#2563eb] xl:shadow-xl xl:shadow-blue-950/30">
+                            <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest">Proyecto seleccionado</p>
                             <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
                             <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
                             <p className="mt-4 text-[10px] font-black uppercase">{(memorySelectedProject._evidences || []).length} fotografías registradas en Firebase</p>
                           </div>
                           <div className="hidden xl:flex flex-col gap-3">
-                            <button type="button" onClick={openMemoryExcelModal} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99]">
+                            <button type="button" onClick={openMemoryExcelModal} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-blue-600 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 disabled:opacity-60 active:scale-[0.99] xl:bg-gradient-to-r xl:from-[#4F7DF0] xl:to-[#7BA8FF] xl:shadow-blue-950/30 xl:rounded-[1.1rem] xl:py-5 hover:xl:brightness-105 transition-all">
                               <FileSpreadsheet className={"w-5 h-5 shrink-0 " + (memoryExcelLoading ? 'animate-pulse' : '')} />
                               <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryExcelLoading ? 'GENERANDO...' : 'GENERAR EXCEL'}</span>
                             </button>
-                            <button type="button" onClick={() => { void handleGenerateMemoryPhotosZip(); }} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99]">
+                            <button type="button" onClick={() => { void handleGenerateMemoryPhotosZip(); }} disabled={memoryExcelLoading || memoryZipLoading || memorySectionZipLoading !== null} className="flex-1 bg-slate-800 text-white rounded-2xl px-3 py-4 flex items-center justify-center gap-2 shadow-lg shadow-slate-800/20 disabled:opacity-60 active:scale-[0.99] xl:bg-[#202D48] xl:ring-1 xl:ring-white/10 xl:shadow-slate-950/30 xl:rounded-[1.1rem] xl:py-5 hover:xl:bg-[#293A5B] transition-all">
                               <Archive className={"w-5 h-5 shrink-0 " + (memoryZipLoading ? 'animate-pulse' : '')} />
                               <span className="text-[9px] font-black uppercase tracking-widest text-center">{memoryZipLoading ? (memoryZipProgress || 'PREPARANDO ZIP...') : 'DESCARGAR FOTOS ZIP'}</span>
                             </button>
                           </div>
                         </div>
 
-                        <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
-                          <p className="text-[9px] font-black uppercase text-blue-700">Seleccione una sección</p>
-                          <p className="text-[8px] text-blue-500 font-bold uppercase mt-1">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
+                        <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 xl:bg-blue-900/30 xl:border-blue-400/20">
+                          <p className="text-[9px] font-black uppercase text-blue-700 xl:text-blue-100">Seleccione una sección</p>
+                          <p className="text-[8px] text-blue-500 font-bold uppercase mt-1 xl:text-blue-200">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
                         </div>
 
                         <div className="xl:hidden">
@@ -3986,7 +3986,7 @@ export default function App() {
                                 key={category.id}
                                 type="button"
                                 onClick={() => { setMemorySelectedCategory(category.id); setMemorySelectedPhoto(null); }}
-                                className="w-full text-left bg-white border border-gray-100 rounded-[1.75rem] p-5 xl:p-4 shadow-sm active:scale-[0.99] transition-transform"
+                                className="w-full text-left bg-white border border-gray-100 rounded-[1.5rem] p-5 xl:p-4 xl:border-white/70 xl:shadow-md xl:shadow-slate-950/10 xl:hover:-translate-y-0.5 xl:hover:shadow-lg active:scale-[0.99] transition-all"
                               >
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="min-w-0">
