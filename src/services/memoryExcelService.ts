@@ -783,7 +783,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
 
   sheet.mergeCells('I5:J5');
   const identificationValue = sheet.getCell('I5');
-  identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
+  identificationValue.value = { formula: 'Datos!F16', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
   identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
   identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
   identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
@@ -796,7 +796,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
     labelCell.font = { name: 'Calibri', size: 11, color: { argb: '222222' } };
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
     const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
-    const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
+    const dataRow = dataIndex >= 0 ? dataIndex + 8 : 8;
     const valueCell = sheet.getCell(item.valueRange.split(':')[0]);
     valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
@@ -967,7 +967,7 @@ const addRepeatedProjectDataBox = (sheet: ExcelJS.Worksheet, project: any, start
   sheet.mergeCells(startRow, 9, startRow, 10);
   const identificationValue = sheet.getCell(startRow, 9);
   identificationValue.value = {
-    formula: 'Datos!C14',
+    formula: 'Datos!F16',
     result: data('Identificación (OB; DTTO; ID; OT; SISA:')
   };
   identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
@@ -984,7 +984,7 @@ const addRepeatedProjectDataBox = (sheet: ExcelJS.Worksheet, project: any, start
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
     const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
-    const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
+    const dataRow = dataIndex >= 0 ? dataIndex + 8 : 8;
     const valueCell = sheet.getCell(item.valueRange[0], item.valueRange[1]);
     valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
@@ -1178,7 +1178,7 @@ const addFiberTipsSheet = async (
 
   sheet.mergeCells('I5:J5');
   const identificationValue = sheet.getCell('I5');
-  identificationValue.value = { formula: 'Datos!C14', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
+  identificationValue.value = { formula: 'Datos!F16', result: data('Identificación (OB; DTTO; ID; OT; SISA:') };
   identificationValue.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
   identificationValue.alignment = { vertical: 'middle', horizontal: 'left' };
   identificationValue.border = { bottom: { style: 'thin', color: { argb: '444444' } } };
@@ -1193,7 +1193,7 @@ const addFiberTipsSheet = async (
     labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
     const dataIndex = DATA_SHEET_LABELS.indexOf(item.dataLabel);
-    const dataRow = dataIndex >= 0 ? dataIndex + 6 : 6;
+    const dataRow = dataIndex >= 0 ? dataIndex + 8 : 8;
     const valueCell = sheet.getCell(item.valueRange.split(':')[0]);
     valueCell.value = { formula: 'Datos!C' + dataRow, result: data(item.dataLabel) };
     valueCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '111111' } };
