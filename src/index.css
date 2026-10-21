@@ -116,7 +116,7 @@ body {
 
 /* Memoria Fotográfica ocupa toda la pantalla en escritorio; evita el margen blanco causado por zoom global. */
 @media (min-width: 1024px) and (pointer: fine) {
-  .app-shell.memory-active {
+  .app-shell.dashboard-active {
     zoom: 1;
     width: 100%;
   }
