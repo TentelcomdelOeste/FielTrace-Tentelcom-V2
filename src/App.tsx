@@ -3867,17 +3867,17 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4"
+                className="space-y-6 pt-4 xl:-mt-4 xl:space-y-4 xl:rounded-[2rem] xl:bg-gradient-to-br xl:from-slate-950 xl:via-[#101d3a] xl:to-blue-950 xl:border xl:border-slate-800 xl:p-6 xl:shadow-2xl xl:shadow-slate-950/20"
               >
                 <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0">
+                  <button type="button" onClick={() => setCurrentStep('home')} className="w-12 h-12 bg-white shadow-lg rounded-2xl flex items-center justify-center border border-gray-100 shrink-0 xl:bg-slate-800 xl:border-slate-700">
                     <ArrowLeft className="w-6 h-6 text-gray-950" />
                   </button>
                   <div className="flex-1">
-                    <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950">Memoria Fotográfica</h2>
-                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">Proyectos almacenados en Firebase</p>
+                    <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950 xl:text-white">Memoria Fotográfica</h2>
+                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest xl:text-blue-200/70">Proyectos almacenados en Firebase</p>
                   </div>
-                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center xl:bg-blue-900/40 xl:text-blue-200">
                     <RefreshCcw className={"w-4 h-4 " + (memoryLoading ? 'animate-spin' : '')} />
                   </button>
                 </div>
@@ -3941,7 +3941,7 @@ export default function App() {
                         </button>
 
                         <div className="xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
-                          <div className="bg-gray-900 text-white rounded-[2rem] p-6 xl:p-5">
+                          <div className="bg-gray-900 text-white rounded-[2rem] p-6 xl:p-5 xl:bg-gradient-to-br xl:from-[#1e3a8a] xl:via-blue-800 xl:to-[#2563eb] xl:shadow-xl xl:shadow-blue-950/30">
                             <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Proyecto seleccionado</p>
                             <h3 className="mt-1 text-xl font-black uppercase">{memorySelectedProject.name || 'SIN NOMBRE'}</h3>
                             <p className="text-[10px] text-white/50 font-bold uppercase">{memorySelectedProject.client || 'SIN CLIENTE'}</p>
@@ -3959,9 +3959,9 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
-                          <p className="text-[9px] font-black uppercase text-blue-700">Seleccione una sección</p>
-                          <p className="text-[8px] text-blue-500 font-bold uppercase mt-1">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
+                        <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 xl:bg-blue-900/30 xl:border-blue-400/20">
+                          <p className="text-[9px] font-black uppercase text-blue-700 xl:text-blue-100">Seleccione una sección</p>
+                          <p className="text-[8px] text-blue-500 font-bold uppercase mt-1 xl:text-blue-200">Entre a NAPS, MUFA, RESERVAS, ACEROS, DESECHOS, ALTAS o MEJORAS para revisar sus fotografías.</p>
                         </div>
 
                         <div className="xl:hidden">
