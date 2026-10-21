@@ -231,6 +231,7 @@ import { storageService } from './services/storageService';
 import { firebaseService, auth, db } from './services/firebaseService';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import AdminDashboard, { type AreaPermissions } from './components/AdminDashboard';
 import { exportService } from './services/exportService';
 import { generateMemoryExcel, MEMORY_EXCEL_SECTIONS } from './services/memoryExcelService';
 import { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
@@ -244,7 +245,31 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [accountRole, setAccountRole] = useState<'Administrador' | 'Usuario'>('Usuario');
+  const [isAdministrator, setIsAdministrator] = useState(auth.currentUser?.email?.toLowerCase() === 'jenamorado@tentelcom.com');
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  const [userPermissions, setUserPermissions] = useState<AreaPermissions>({ projects: true, memory: true, sync: true });
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    if (currentUser.email?.toLowerCase() === 'jenamorado@tentelcom.com') {
+      setIsAdministrator(true);
+      setAccountRole('Administrador');
+      setUserPermissions({ projects: true, memory: true, sync: true });
+      return;
+    }
+    let active = true;
+    void getDoc(doc(db, 'users', currentUser.uid)).then(profile => {
+      if (!active) return;
+      const data = profile.exists() ? profile.data() : {};
+      const admin = data.role === 'admin';
+      setIsAdministrator(admin);
+      setAccountRole(admin ? 'Administrador' : 'Usuario');
+      setUserPermissions({ projects: data.permissions?.projects !== false, memory: data.permissions?.memory !== false, sync: data.permissions?.sync !== false });
+    }).catch(error => console.error('[Auth] No se pudieron cargar permisos:', error));
+    return () => { active = false; };
+  }, []);
   const [cloudProjects, setCloudProjects] = useState<any[]>([]);
   const [cloudSearchTerm, setCloudSearchTerm] = useState("");
   const [showCloudProjects, setShowCloudProjects] = useState(false);
@@ -1241,6 +1266,7 @@ export default function App() {
   };
 
   const loadMemoryDashboard = async () => {
+    if (!userPermissions.memory) { setCurrentStep('home'); return; }
     setCurrentStep('memory');
     setMemoryLoading(true);
     setMemorySelectedProject(null);
@@ -3587,6 +3613,8 @@ export default function App() {
       !!ev.photoUrl
     );
 
+  if (showAdminDashboard && isAdministrator) return <AdminDashboard onClose={() => setShowAdminDashboard(false)} />;
+
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
@@ -3612,15 +3640,7 @@ export default function App() {
                    <div>
                      <h1 className="text-3xl font-black tracking-tighter uppercase text-gray-950">Field Trace</h1>
                    </div>
-                   <button type="button" onClick={() => {
-                     setShowAccountMenu(value => !value);
-                     const currentUser = auth.currentUser;
-                     if (currentUser) {
-                       void getDoc(doc(db, 'users', currentUser.uid)).then(profile => {
-                         setAccountRole(profile.exists() && profile.data().role === 'admin' ? 'Administrador' : 'Usuario');
-                       }).catch(() => setAccountRole('Usuario'));
-                     }
-                   }} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200">
+                   <button type="button" onClick={() => setShowAccountMenu(value => !value)} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200">
                      <UserCircle className="w-6 h-6 text-gray-400"/>
                    </button>
                 </div>
@@ -3631,13 +3651,18 @@ export default function App() {
                       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0"><UserCircle className="w-5 h-5 text-blue-600"/></div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-gray-900 break-all">{auth.currentUser?.email || 'Cuenta autenticada'}</p>
-                        <p className="mt-1 text-xs text-gray-500">Rol: {accountRole}</p>
+                        <p className="mt-1 text-xs text-gray-500">Rol: {isAdministrator ? 'Administrador' : accountRole}</p>
                       </div>
                       <button type="button" onClick={() => setShowAccountMenu(false)} className="text-gray-400 hover:text-gray-700" aria-label="Cerrar perfil"><X className="w-5 h-5"/></button>
                     </div>
+                    {isAdministrator && (
+                      <button type="button" onClick={() => { setShowAccountMenu(false); setShowAdminDashboard(true); }} className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-800 to-blue-600 px-4 py-3 text-sm font-bold text-white flex items-center justify-center gap-2">
+                        <ShieldCheck className="w-4 h-4"/> Panel de administración
+                      </button>
+                    )}
                     <button type="button" onClick={() => {
                       void signOut(auth).catch(error => console.error('[Auth] No se pudo cerrar sesión:', error));
-                    }} className="mt-4 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50">Cerrar sesión</button>
+                    }} className="mt-3 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50">Cerrar sesión</button>
                   </section>
                 )}
 
