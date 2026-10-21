@@ -228,8 +228,9 @@ import { Capacitor } from '@capacitor/core';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
-import { firebaseService, auth } from './services/firebaseService';
-import { getIdTokenResult, signOut } from 'firebase/auth';
+import { firebaseService, auth, db } from './services/firebaseService';
+import { signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { exportService } from './services/exportService';
 import { generateMemoryExcel, MEMORY_EXCEL_SECTIONS } from './services/memoryExcelService';
 import { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
@@ -3615,8 +3616,8 @@ export default function App() {
                      setShowAccountMenu(value => !value);
                      const currentUser = auth.currentUser;
                      if (currentUser) {
-                       void getIdTokenResult(currentUser).then(token => {
-                         setAccountRole(token.claims.admin === true || token.claims.role === 'admin' ? 'Administrador' : 'Usuario');
+                       void getDoc(doc(db, 'users', currentUser.uid)).then(profile => {
+                         setAccountRole(profile.exists() && profile.data().role === 'admin' ? 'Administrador' : 'Usuario');
                        }).catch(() => setAccountRole('Usuario'));
                      }
                    }} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200">
