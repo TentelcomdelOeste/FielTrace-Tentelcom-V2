@@ -506,6 +506,7 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   ];
 
   sheet.mergeCells('B1:C1');
+  sheet.mergeCells('D1:H1');
   const title = sheet.getCell('D1');
   title.value = 'MEMORIA FOTOGRÁFICA — ESPH';
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '102033' } };
@@ -529,6 +530,46 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   sheet.getCell('F2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   sheet.getCell('G2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
   sheet.getCell('H2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '000000' } };
+  // Marco completo de ambos bloques del encabezado.
+  for (let col = 2; col <= 3; col++) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  sheet.getCell('B1').border = {
+    ...sheet.getCell('B1').border,
+    left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('B2').border = {
+    ...sheet.getCell('B2').border,
+    left: { style: 'thin', color: { argb: '222222' } },
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C2').border = {
+    ...sheet.getCell('C2').border,
+    bottom: { style: 'thin', color: { argb: '222222' } },
+  };
+  for (let col = 4; col <= 8; col++) {
+    sheet.getCell(1, col).border = {
+      ...sheet.getCell(1, col).border,
+      top: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(2, col).border = {
+      ...sheet.getCell(2, col).border,
+      bottom: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
+  for (let row = 1; row <= 2; row++) {
+    sheet.getCell(row, 4).border = {
+      ...sheet.getCell(row, 4).border,
+      left: { style: 'thin', color: { argb: '222222' } },
+    };
+    sheet.getCell(row, 8).border = {
+      ...sheet.getCell(row, 8).border,
+      right: { style: 'thin', color: { argb: '222222' } },
+    };
+  }
   sheet.getRow(2).height = 34;
 
   sheet.getRow(3).height = 18;
@@ -567,9 +608,12 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
     sheet.getCell(row, 2).border = {
       bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
     };
-    sheet.getCell(row, 3).border = {
-      bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
-    };
+    for (let col = 3; col <= 8; col++) {
+      sheet.getCell(row, col).border = {
+        ...sheet.getCell(row, col).border,
+        bottom: { style: 'hair', color: { argb: 'D9DEE5' } },
+      };
+    }
   }
 
   return sheet;
