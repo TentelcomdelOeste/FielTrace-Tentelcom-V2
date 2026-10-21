@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, LoaderCircle, ShieldCheck, Users, FolderKanban, Images, Cloud, Save, Check, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, LoaderCircle, ShieldCheck, Users, FolderKanban, Images, Cloud, Save, Check, AlertTriangle, Power } from 'lucide-react';
 import { auth, db } from '../services/firebaseService';
 
 export type AreaPermissions = {
@@ -13,6 +13,7 @@ type ManagedUser = {
   uid: string;
   email: string;
   role: 'admin' | 'user';
+  active: boolean;
   permissions: AreaPermissions;
 };
 
@@ -28,6 +29,7 @@ function normalizeUser(data: any, uid: string): ManagedUser {
     uid,
     email: String(data?.email || 'Usuario sin correo'),
     role: data?.role === 'admin' ? 'admin' : 'user',
+    active: data?.active !== false,
     permissions: {
       projects: data?.permissions?.projects !== false,
       memory: data?.permissions?.memory !== false,
@@ -39,6 +41,7 @@ function normalizeUser(data: any, uid: string): ManagedUser {
 export default function AdminDashboard({ onClose }: Props) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [drafts, setDrafts] = useState<Record<string, AreaPermissions>>({});
+  const [activeDrafts, setActiveDrafts] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [savingUid, setSavingUid] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -63,6 +66,7 @@ export default function AdminDashboard({ onClose }: Props) {
           uid: currentUser.uid,
           email: currentUser.email || '',
           role: currentIsBootstrapAdmin ? 'admin' : 'user',
+          active: true,
           permissions: DEFAULT_PERMISSIONS,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -83,6 +87,7 @@ export default function AdminDashboard({ onClose }: Props) {
       loaded.sort((a, b) => a.email.localeCompare(b.email));
       setUsers(loaded);
       setDrafts(Object.fromEntries(loaded.map(user => [user.uid, { ...user.permissions }])));
+      setActiveDrafts(Object.fromEntries(loaded.map(user => [user.uid, user.active])));
     } catch (cause: any) {
       console.error('[AdminDashboard] No se pudieron cargar usuarios:', cause);
       const code = String(cause?.code || '');
@@ -101,6 +106,11 @@ export default function AdminDashboard({ onClose }: Props) {
     setNotice('');
   };
 
+  const toggleUserActive = (uid: string, active: boolean) => {
+    setActiveDrafts(current => ({ ...current, [uid]: active }));
+    setNotice('');
+  };
+
   const savePermissions = async (user: ManagedUser) => {
     setSavingUid(user.uid);
     setError('');
@@ -108,9 +118,10 @@ export default function AdminDashboard({ onClose }: Props) {
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         permissions: drafts[user.uid] || DEFAULT_PERMISSIONS,
+        active: activeDrafts[user.uid] ?? user.active,
         updatedAt: serverTimestamp(),
       });
-      setUsers(current => current.map(item => item.uid === user.uid ? { ...item, permissions: { ...(drafts[user.uid] || DEFAULT_PERMISSIONS) } } : item));
+      setUsers(current => current.map(item => item.uid === user.uid ? { ...item, permissions: { ...(drafts[user.uid] || DEFAULT_PERMISSIONS) }, active: activeDrafts[user.uid] ?? item.active } : item));
       setNotice('Permisos guardados para ' + user.email + '.');
     } catch (cause) {
       console.error('[AdminDashboard] No se pudieron guardar permisos:', cause);
@@ -159,6 +170,7 @@ export default function AdminDashboard({ onClose }: Props) {
             {users.map(user => {
               const permissions = drafts[user.uid] || DEFAULT_PERMISSIONS;
               const isCurrentAdmin = user.email.toLowerCase() === ADMIN_EMAIL || user.role === 'admin';
+              const isActive = activeDrafts[user.uid] ?? user.active;
               return (
                 <section key={user.uid} className="rounded-3xl border border-white/10 bg-slate-900 p-4 sm:p-5">
                   <div className="flex items-start gap-3 mb-4">
@@ -167,8 +179,22 @@ export default function AdminDashboard({ onClose }: Props) {
                       <p className="font-bold break-all">{user.email}</p>
                       <p className="mt-1 text-xs text-slate-400">{isCurrentAdmin ? 'Administrador principal' : 'Usuario'} · ID: {user.uid.slice(0, 10)}…</p>
                     </div>
-                    {isCurrentAdmin && <span className="rounded-full bg-blue-500/15 text-blue-200 px-2.5 py-1 text-[10px] font-black uppercase">Admin</span>}
+                    {isCurrentAdmin ? (
+                      <span className="rounded-full bg-blue-500/15 text-blue-200 px-2.5 py-1 text-[10px] font-black uppercase">Admin</span>
+                    ) : (
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${isActive ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'}`}>
+                        {isActive ? 'Activo' : 'Deshabilitado'}
+                      </span>
+                    )}
                   </div>
+                  <label className={`mb-3 flex items-center gap-3 rounded-xl border border-white/10 px-3 py-3 ${isCurrentAdmin ? 'bg-slate-950/30 opacity-70' : 'bg-slate-950/50 cursor-pointer'}`}>
+                    <input type="checkbox" role="switch" checked={isActive} disabled={isCurrentAdmin}
+                      onChange={event => toggleUserActive(user.uid, event.target.checked)}
+                      className="h-4 w-4 accent-blue-500" aria-label={`Acceso a la aplicación para ${user.email}`} />
+                    <Power className={`w-4 h-4 ${isActive ? 'text-emerald-300' : 'text-red-300'}`} />
+                    <span className="flex-1 text-sm font-semibold">Acceso a la aplicación</span>
+                    <span className={`text-xs font-bold ${isActive ? 'text-emerald-300' : 'text-red-300'}`}>{isActive ? 'Habilitado' : 'Bloqueado'}</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {([
                       ['projects', 'Proyectos', FolderKanban],
