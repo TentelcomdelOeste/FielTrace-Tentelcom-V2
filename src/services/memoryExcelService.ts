@@ -557,8 +557,8 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
       const cell = sheet.getCell(row, col);
       cell.border = {
         ...cell.border,
-        top: row === 1 ? { style: 'thin', color: { argb: '222222' } } : cell.border.top,
-        bottom: row === 2 ? { style: 'thin', color: { argb: '222222' } } : cell.border.bottom,
+        top: row === 1 ? { style: 'thin', color: { argb: '222222' } } : cell.border?.top,
+        bottom: row === 2 ? { style: 'thin', color: { argb: '222222' } } : cell.border?.bottom,
       };
     }
   }
