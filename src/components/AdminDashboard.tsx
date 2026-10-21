@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, doc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ArrowLeft, LoaderCircle, ShieldCheck, Users, FolderKanban, Images, Cloud, Save, Check, AlertTriangle } from 'lucide-react';
 import { auth, db } from '../services/firebaseService';
 
@@ -55,11 +55,10 @@ export default function AdminDashboard({ onClose }: Props) {
       // toda la colección antes de crear el perfil administrador, lo que impedía
       // completar el arranque cuando las reglas exigían un perfil previo.
       const currentProfileRef = doc(db, 'users', currentUser.uid);
-      const currentProfile = await getDocs(collection(db, 'users'));
-      const existingCurrentProfile = currentProfile.docs.find(item => item.id === currentUser.uid);
+      const currentProfile = await getDoc(currentProfileRef);
       const currentIsBootstrapAdmin = currentUser.email?.toLowerCase() === ADMIN_EMAIL;
 
-      if (!existingCurrentProfile) {
+      if (!currentProfile.exists()) {
         await setDoc(currentProfileRef, {
           uid: currentUser.uid,
           email: currentUser.email || '',
