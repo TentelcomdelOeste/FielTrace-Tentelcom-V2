@@ -4170,6 +4170,7 @@ export default function App() {
                       })()
                     )}
                   </div>
+                )}
 
                 {memorySelectedPhoto && (
                   <div className="fixed inset-0 z-[100] bg-black/90 p-4 md:p-8 flex items-center justify-center" onClick={() => setMemorySelectedPhoto(null)}>
