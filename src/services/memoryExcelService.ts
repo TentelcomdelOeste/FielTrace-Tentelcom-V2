@@ -539,7 +539,13 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   }
   sheet.getCell('B1').border = {
     ...sheet.getCell('B1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C1').border = {
+    ...sheet.getCell('C1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
+    right: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell('B2').border = {
     ...sheet.getCell('B2').border,
@@ -548,6 +554,7 @@ const addDataSheet = (workbook: ExcelJS.Workbook, project: any) => {
   };
   sheet.getCell('C2').border = {
     ...sheet.getCell('C2').border,
+    right: { style: 'thin', color: { argb: '222222' } },
     bottom: { style: 'thin', color: { argb: '222222' } },
   };
   for (let col = 4; col <= 8; col++) {
@@ -688,7 +695,13 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   }
   sheet.getCell('B1').border = {
     ...sheet.getCell('B1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell('C1').border = {
+    ...sheet.getCell('C1').border,
+    top: { style: 'thin', color: { argb: '222222' } },
+    right: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell('B2').border = {
     ...sheet.getCell('B2').border,
@@ -697,6 +710,7 @@ const applyFiberStyleHeaderToSheet = (sheet: ExcelJS.Worksheet, project: any) =>
   };
   sheet.getCell('C2').border = {
     ...sheet.getCell('C2').border,
+    right: { style: 'thin', color: { argb: '222222' } },
     bottom: { style: 'thin', color: { argb: '222222' } },
   };
 
@@ -863,10 +877,17 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
     };
   }
 
-  // La columna B/C queda como espacio lateral, igual que en el encabezado inicial.
+  // La columna B/C queda como espacio lateral, con el marco completo
+  // también en encabezados repetidos de las hojas con varios grupos.
   sheet.getCell(startRow, 2).border = {
     ...sheet.getCell(startRow, 2).border,
+    top: { style: 'thin', color: { argb: '222222' } },
     left: { style: 'thin', color: { argb: '222222' } },
+  };
+  sheet.getCell(startRow, 3).border = {
+    ...sheet.getCell(startRow, 3).border,
+    top: { style: 'thin', color: { argb: '222222' } },
+    right: { style: 'thin', color: { argb: '222222' } },
   };
   sheet.getCell(startRow + 1, 2).border = {
     ...sheet.getCell(startRow + 1, 2).border,
@@ -875,6 +896,7 @@ const addRepeatedFiberHeader = (sheet: ExcelJS.Worksheet, startRow: number) => {
   };
   sheet.getCell(startRow + 1, 3).border = {
     ...sheet.getCell(startRow + 1, 3).border,
+    right: { style: 'thin', color: { argb: '222222' } },
     bottom: { style: 'thin', color: { argb: '222222' } },
   };
 
