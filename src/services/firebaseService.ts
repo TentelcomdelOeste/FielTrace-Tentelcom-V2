@@ -8,7 +8,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL, getBytes, deleteObject } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
@@ -23,44 +23,36 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfigData.firestoreDatabaseId || '(default)');
+export const db = getFirestore(app, firebaseConfigData.firestoreDatabaseId || '(default)');
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// Authenticate anonymously so Firestore security rules (request.auth != null) pass successfully.
-// Reutilizamos la misma promesa mientras la autenticación inicial está en curso.
-// Esto evita varias llamadas concurrentes a signInAnonymously al arrancar la app.
+// La identidad debe proceder de una cuenta autorizada; no crear sesiones anónimas.
+// Esperamos a que Firebase restaure su estado persistido antes de decidir si existe sesión.
 let authenticationPromise: Promise<string | null> | null = null;
 
 export async function ensureAuthenticated(): Promise<string | null> {
-  if (auth.currentUser) {
-    return auth.currentUser.uid;
-  }
+  if (auth.currentUser) return auth.currentUser.uid;
+  if (authenticationPromise) return authenticationPromise;
 
-  if (authenticationPromise) {
-    return authenticationPromise;
-  }
-
-  authenticationPromise = (async () => {
-    try {
-      if (auth.currentUser) {
-        return auth.currentUser.uid;
-      }
-      const cred = await signInAnonymously(auth);
-      return cred.user.uid;
-    } catch (error) {
-      console.error('[Firebase] Error en autenticación anónima:', error);
-      return null;
-    } finally {
-      authenticationPromise = null;
-    }
-  })();
+  authenticationPromise = new Promise<string | null>((resolve) => {
+    let unsubscribe: (() => void) | undefined;
+    unsubscribe = onAuthStateChanged(auth, user => {
+      unsubscribe?.();
+      resolve(user?.uid ?? null);
+    }, error => {
+      console.error('[Firebase] No se pudo restaurar la sesión:', error);
+      unsubscribe?.();
+      resolve(null);
+    });
+  }).finally(() => {
+    authenticationPromise = null;
+  });
 
   return authenticationPromise;
 }
 
-// Auto sign in on load
-ensureAuthenticated().catch(console.error);
+export { auth };
 
 export const firebaseService = {
   /** Sube la fotografía original a Firebase Storage y devuelve su URL pública/autenticada. */
@@ -471,4 +463,3 @@ export const firebaseService = {
   }
 };
 
-export { db, auth };

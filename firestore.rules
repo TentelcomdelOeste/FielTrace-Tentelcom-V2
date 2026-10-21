@@ -1,30 +1,71 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Firebase es el repositorio histórico de FieldTrace.
-    // Los clientes autenticados pueden crear y actualizar registros,
-    // pero nunca eliminarlos. El borrado local no se propaga a la nube.
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Cuenta de administración inicial definida por la empresa.
+    // Las demás cuentas administradoras se autorizan mediante su perfil protegido.
+    function isBootstrapAdmin() {
+      return isSignedIn()
+        && request.auth.token.email == 'jenamorado@tentelcom.com';
+    }
+
+    function hasAppAccess() {
+      return isSignedIn()
+        && (
+          request.auth.token.email == 'jenamorado@tentelcom.com'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active != false
+        );
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && (
+          request.auth.token.email == 'jenamorado@tentelcom.com'
+          || (
+            hasAppAccess()
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          )
+        );
+    }
+
+    function validSelfProfile() {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'email', 'role', 'active', 'permissions', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.role == 'user'
+        && request.resource.data.active == true
+        && request.resource.data.permissions.projects == true
+        && request.resource.data.permissions.memory == true
+        && request.resource.data.permissions.sync == true;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId && validSelfProfile());
+      allow update, delete: if isAdmin();
+    }
+
+    // Proyectos compartidos de FieldTrace. Las operaciones requieren una cuenta nominativa.
     match /projects/{projectId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null;
-      // Temporalmente habilitado para las pruebas de eliminación de proyectos compartidos.
-      allow delete: if request.auth != null;
+      allow read, create, update: if hasAppAccess();
+      allow delete: if isAdmin();
 
       match /evidences/{evidenceId} {
-        allow read: if request.auth != null;
-        allow create, update: if request.auth != null;
-        // Temporalmente habilitado para las pruebas de eliminación de proyectos compartidos.
-        allow delete: if request.auth != null;
+        allow read, create, update: if hasAppAccess();
+        allow delete: if isAdmin();
       }
-
-      allow delete: if false;
     }
 
     // Compatibilidad con la colección global antigua.
     match /evidences/{evidenceId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null;
-      allow delete: if false;
+      allow read, create, update: if hasAppAccess();
+      allow delete: if isAdmin();
     }
   }
 }

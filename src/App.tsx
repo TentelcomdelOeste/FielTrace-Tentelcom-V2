@@ -228,7 +228,10 @@ import { Capacitor } from '@capacitor/core';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
-import { firebaseService } from './services/firebaseService';
+import { firebaseService, auth, db } from './services/firebaseService';
+import { signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import AdminDashboard, { type AreaPermissions } from './components/AdminDashboard';
 import { exportService } from './services/exportService';
 import { generateMemoryExcel, MEMORY_EXCEL_SECTIONS } from './services/memoryExcelService';
 import { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
@@ -240,7 +243,33 @@ import { EVIDENCE_CATEGORIES, type EvidenceCategory, type Project, type Evidence
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [accountRole, setAccountRole] = useState<'Administrador' | 'Usuario'>('Usuario');
+  const [isAdministrator, setIsAdministrator] = useState(auth.currentUser?.email?.toLowerCase() === 'jenamorado@tentelcom.com');
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  const [userPermissions, setUserPermissions] = useState<AreaPermissions>({ projects: true, memory: true, sync: true });
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    if (currentUser.email?.toLowerCase() === 'jenamorado@tentelcom.com') {
+      setIsAdministrator(true);
+      setAccountRole('Administrador');
+      setUserPermissions({ projects: true, memory: true, sync: true });
+      return;
+    }
+    let active = true;
+    void getDoc(doc(db, 'users', currentUser.uid)).then(profile => {
+      if (!active) return;
+      const data = profile.exists() ? profile.data() : {};
+      const admin = data.role === 'admin';
+      setIsAdministrator(admin);
+      setAccountRole(admin ? 'Administrador' : 'Usuario');
+      setUserPermissions({ projects: data.permissions?.projects !== false, memory: data.permissions?.memory !== false, sync: data.permissions?.sync !== false });
+    }).catch(error => console.error('[Auth] No se pudieron cargar permisos:', error));
+    return () => { active = false; };
+  }, []);
   const [cloudProjects, setCloudProjects] = useState<any[]>([]);
   const [cloudSearchTerm, setCloudSearchTerm] = useState("");
   const [showCloudProjects, setShowCloudProjects] = useState(false);
@@ -1237,6 +1266,7 @@ export default function App() {
   };
 
   const loadMemoryDashboard = async () => {
+    if (!userPermissions.memory) { setCurrentStep('home'); return; }
     setCurrentStep('memory');
     setMemoryLoading(true);
     setMemorySelectedProject(null);
@@ -3583,6 +3613,8 @@ export default function App() {
       !!ev.photoUrl
     );
 
+  if (showAdminDashboard && isAdministrator) return <AdminDashboard onClose={() => setShowAdminDashboard(false)} />;
+
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
@@ -3608,11 +3640,34 @@ export default function App() {
                    <div>
                      <h1 className="text-3xl font-black tracking-tighter uppercase text-gray-950">Field Trace</h1>
                    </div>
-                   <div className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100"><UserCircle className="w-6 h-6 text-gray-400"/></div>
+                   <button type="button" onClick={() => setShowAccountMenu(value => !value)} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200">
+                     <UserCircle className="w-6 h-6 text-gray-400"/>
+                   </button>
                 </div>
 
+                {showAccountMenu && (
+                  <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-lg" aria-label="Perfil de usuario">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0"><UserCircle className="w-5 h-5 text-blue-600"/></div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-gray-900 break-all">{auth.currentUser?.email || 'Cuenta autenticada'}</p>
+                        <p className="mt-1 text-xs text-gray-500">Rol: {isAdministrator ? 'Administrador' : accountRole}</p>
+                      </div>
+                      <button type="button" onClick={() => setShowAccountMenu(false)} className="text-gray-400 hover:text-gray-700" aria-label="Cerrar perfil"><X className="w-5 h-5"/></button>
+                    </div>
+                    {isAdministrator && (
+                      <button type="button" onClick={() => { setShowAccountMenu(false); setShowAdminDashboard(true); }} className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-800 to-blue-600 px-4 py-3 text-sm font-bold text-white flex items-center justify-center gap-2">
+                        <ShieldCheck className="w-4 h-4"/> Panel de administración
+                      </button>
+                    )}
+                    <button type="button" onClick={() => {
+                      void signOut(auth).catch(error => console.error('[Auth] No se pudo cerrar sesión:', error));
+                    }} className="mt-3 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50">Cerrar sesión</button>
+                  </section>
+                )}
+
                 <div className="space-y-4 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
-                <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-3 text-white shadow-2xl relative overflow-hidden">
+                {userPermissions.sync && (<div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-3 text-white shadow-2xl relative overflow-hidden">
                    <div className="relative z-10">
                      <p className="text-[10px] font-black uppercase opacity-40 mb-1 xl:mb-1 tracking-widest">Estado de Sincronización</p>
                      <h3 className="text-xl font-bold leading-tight mb-2 xl:mb-1.5">{syncRunning ? 'Sincronizando...' : syncSummary.failed > 0 ? 'Atención requerida' : syncSummary.pending > 0 ? 'Registros pendientes' : 'Todo sincronizado'}</h3>
@@ -3631,9 +3686,9 @@ export default function App() {
                      </div>
                    </div>
                    <LayoutGrid className="absolute -right-8 -bottom-8 w-40 h-40 opacity-5" />
-                </div>
+                </div>)}
 
-                <button
+                {userPermissions.memory && (<button
                   type="button"
                   onClick={() => { void loadMemoryDashboard(); }}
                   className="w-full p-5 xl:p-3.5 bg-blue-600 text-white rounded-[2rem] shadow-lg shadow-blue-600/20 flex items-center justify-between active:scale-[0.99] transition-transform xl:ml-0"
@@ -3646,10 +3701,10 @@ export default function App() {
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5" />
-                </button>
+                </button>)}
                 </div>
 
-                <div className="space-y-4">
+                {userPermissions.projects && (<div className="space-y-4">
                   <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative">
                     <Search className="w-4 h-4 text-gray-400" />
                     <input 
@@ -3669,7 +3724,9 @@ export default function App() {
                     )}
                   </div>
                 </div>
+                )}
 
+                {userPermissions.projects && (
                 <div className="space-y-5">
                   <div className="flex justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
@@ -3799,6 +3856,7 @@ export default function App() {
                   })}
                   </div>
                 </div>
+              )}
               </motion.div>
             )}
 
