@@ -3618,7 +3618,7 @@ export default function App() {
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
-      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'home' || currentStep === 'memory' ? (currentStep === 'home' ? 'dashboard-active home-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950' : 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950') : 'bg-white'} flex flex-col font-sans`}
+      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'home' || currentStep === 'memory' ? (currentStep === 'home' ? 'dashboard-active home-active bg-white lg:bg-gradient-to-br lg:from-slate-950 lg:via-[#101d3a] lg:to-blue-950' : 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950') : 'bg-white'} flex flex-col font-sans`}
     >
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
@@ -3638,10 +3638,10 @@ export default function App() {
               >
                 <div className="flex justify-between items-center">
                    <div>
-                     <h1 className="text-3xl font-black tracking-tighter uppercase text-white sm:text-4xl">Field Trace</h1>
+                     <h1 className="text-3xl font-black tracking-tighter uppercase text-gray-950 sm:text-4xl lg:text-white">Field Trace</h1>
                    </div>
-                   <button type="button" onClick={() => setShowAccountMenu(value => !value)} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 shrink-0 bg-white/10 shadow-xl rounded-2xl flex items-center justify-center border border-white/15 hover:bg-white/15 hover:border-blue-300 transition-colors">
-                     <UserCircle className="w-6 h-6 text-blue-100"/>
+                   <button type="button" onClick={() => setShowAccountMenu(value => !value)} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200 lg:shrink-0 lg:bg-white/10 lg:border-white/15 lg:hover:bg-white/15 lg:hover:border-blue-300 lg:transition-colors">
+                     <UserCircle className="w-6 h-6 text-gray-400 lg:text-blue-100"/>
                    </button>
                 </div>
 
@@ -3705,14 +3705,14 @@ export default function App() {
                 </div>
 
                 {userPermissions.projects && (<div className="space-y-4">
-                  <div className="flex items-center gap-3 bg-white/[0.06] border border-white/10 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-400/60 transition-all relative">
-                    <Search className="w-4 h-4 text-blue-200/60" />
+                  <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 px-5 py-4 rounded-3xl shadow-sm focus-within:border-blue-300 transition-all relative lg:bg-white/[0.06] lg:border-white/10 lg:focus-within:border-blue-400/60">
+                    <Search className="w-4 h-4 text-gray-400 lg:text-blue-200/60" />
                     <input 
                       type="text"
                       placeholder="BUSCAR PROYECTO, CLIENTE O TECNICO..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="bg-transparent flex-1 min-w-0 outline-none text-xs font-black uppercase tracking-tighter text-white placeholder:text-blue-100/50 pr-8"
+                      className="bg-transparent flex-1 min-w-0 outline-none text-xs font-black uppercase tracking-tighter placeholder:text-gray-300 pr-8 lg:text-white lg:placeholder:text-blue-100/50"
                     />
                     {searchTerm && (
                       <button 
@@ -3730,7 +3730,7 @@ export default function App() {
                 <div className="space-y-5">
                   <div className="flex justify-between items-center gap-2">
                     <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-black text-blue-100/70 uppercase tracking-widest">Proyectos Recientes</span>
+                    <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest lg:text-blue-100/70">Proyectos Recientes</span>
                     <button
                       type="button"
                       onClick={() => { void openCloudProjects(); }}
@@ -3818,7 +3818,7 @@ export default function App() {
                           handleSelectProject(p);
                         }
                       }}
-                      className={`p-5 bg-[#202D48] border rounded-[2rem] flex justify-between items-center hover:bg-[#293A5B] hover:shadow-xl hover:shadow-blue-950/30 transition-all cursor-pointer group shadow-lg shadow-slate-950/10 ${isSelected ? 'border-blue-400 ring-2 ring-blue-400/30' : 'border-white/10'} xl:w-fit xl:min-w-[280px] xl:max-w-[430px] xl:flex-none`}
+                      className={`p-5 bg-white border rounded-[2rem] flex justify-between items-center hover:shadow-xl hover:shadow-blue-600/5 transition-all cursor-pointer group shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] ${isSelected ? 'border-blue-500 ring-2 ring-blue-200 lg:border-blue-400 lg:ring-blue-400/30' : 'border-gray-100 lg:border-white/10'} lg:bg-[#202D48] lg:hover:bg-[#293A5B] lg:hover:shadow-xl lg:hover:shadow-blue-950/30 lg:shadow-lg lg:shadow-slate-950/10 xl:w-fit xl:min-w-[280px] xl:max-w-[430px] xl:flex-none`}
                     >
                       <div className="flex gap-4 items-center min-w-0 xl:max-w-[350px]">
                         {projectSelectMode ? (
@@ -3826,13 +3826,13 @@ export default function App() {
                             {isSelected && <CheckCircle2 className="w-4 h-4" />}
                           </div>
                         ) : (
-                          <div className="w-14 h-14 bg-white/10 rounded-[1.5rem] flex items-center justify-center group-hover:bg-blue-500/20 transition-colors shrink-0">
-                            <MapPin className="w-6 h-6 text-blue-200/70 group-hover:text-blue-200"/>
+                          <div className="w-14 h-14 bg-[#F8FAFC] rounded-[1.5rem] flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0 lg:bg-white/10 lg:group-hover:bg-blue-500/20">
+                            <MapPin className="w-6 h-6 text-gray-400 group-hover:text-blue-600 lg:text-blue-200/70 lg:group-hover:text-blue-200"/>
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="text-[14px] font-black text-white uppercase tracking-tight truncate">{p.name}</p>
-                          <p className="text-[10px] text-blue-100/60 font-bold uppercase tracking-widest truncate">{p.client}</p>
+                          <p className="text-[14px] font-black text-gray-950 uppercase tracking-tight truncate lg:text-white">{p.name}</p>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate lg:text-blue-100/60">{p.client}</p>
                         </div>
                       </div>
                       {!projectSelectMode && (
