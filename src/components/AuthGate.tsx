@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, type User } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { LockKeyhole, Mail, Eye, EyeOff, LoaderCircle, ShieldCheck } from 'lucide-react';
 import { auth, db } from '../services/firebaseService';
 
@@ -15,38 +15,100 @@ export default function AuthGate({ children }: AuthGateProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [accessError, setAccessError] = useState('');
 
-  useEffect(() => onAuthStateChanged(auth, async currentUser => {
-    setCheckingSession(true);
-    setUser(currentUser);
-    if (currentUser && currentUser.email?.toLowerCase() !== ADMIN_EMAIL) {
+  useEffect(() => {
+    let profileUnsubscribe: (() => void) | undefined;
+    let authGeneration = 0;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async currentUser => {
+      const generation = ++authGeneration;
+      profileUnsubscribe?.();
+      profileUnsubscribe = undefined;
+      setCheckingSession(true);
+      setUser(currentUser);
+
+      if (!currentUser) {
+        setCheckingSession(false);
+        return;
+      }
+
+      // La cuenta administradora principal se protege contra el bloqueo accidental.
+      if (currentUser.email?.toLowerCase() === ADMIN_EMAIL) {
+        setAccessError('');
+        setCheckingSession(false);
+        return;
+      }
+
+      const profileRef = doc(db, 'users', currentUser.uid);
       try {
-        const profileRef = doc(db, 'users', currentUser.uid);
-        const profile = await getDoc(profileRef);
+        let profile = await getDoc(profileRef);
         if (!profile.exists()) {
           await setDoc(profileRef, {
             uid: currentUser.uid,
             email: currentUser.email || '',
             role: 'user',
+            active: true,
             permissions: { projects: true, memory: true, sync: true },
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
+          profile = await getDoc(profileRef);
         }
+
+        if (generation !== authGeneration || auth.currentUser?.uid !== currentUser.uid) return;
+        if (!profile.exists()) throw new Error('No se pudo verificar el perfil de acceso.');
+
+        if (profile.data().active === false) {
+          setAccessError('Tu cuenta está deshabilitada. Contactá al administrador de Tentelcom.');
+          setUser(null);
+          setCheckingSession(false);
+          await signOut(auth);
+          return;
+        }
+
+        profileUnsubscribe = onSnapshot(profileRef, snapshot => {
+          if (auth.currentUser?.uid !== currentUser.uid) return;
+          if (!snapshot.exists() || snapshot.data().active === false) {
+            setAccessError('Tu cuenta está deshabilitada. Contactá al administrador de Tentelcom.');
+            setUser(null);
+            setCheckingSession(false);
+            void signOut(auth).catch(signOutError => console.error('[Auth] No se pudo cerrar la sesión bloqueada:', signOutError));
+            return;
+          }
+          setAccessError('');
+          setUser(currentUser);
+          setCheckingSession(false);
+        }, listenerError => {
+          console.error('[Auth] No se pudo supervisar el estado de la cuenta:', listenerError);
+          setAccessError('No se pudo verificar tu autorización. Volvé a iniciar sesión o contactá al administrador.');
+          setUser(null);
+          setCheckingSession(false);
+          void signOut(auth).catch(signOutError => console.error('[Auth] No se pudo cerrar la sesión sin validar:', signOutError));
+        });
       } catch (cause) {
-        // No bloqueamos el acceso por una escritura de perfil fallida; los permisos sensibles
-        // deben seguir siendo validados por las reglas de Firebase.
-        console.error('[Auth] No se pudo inicializar el perfil:', cause);
+        console.error('[Auth] No se pudo validar el estado de la cuenta:', cause);
+        if (generation !== authGeneration) return;
+        setAccessError('No se pudo verificar tu autorización. Revisá la conexión o contactá al administrador.');
+        setUser(null);
+        setCheckingSession(false);
+        await signOut(auth).catch(signOutError => console.error('[Auth] No se pudo cerrar la sesión sin validar:', signOutError));
       }
-    }
-    setCheckingSession(false);
-  }), []);
+    });
+
+    return () => {
+      authGeneration += 1;
+      profileUnsubscribe?.();
+      unsubscribeAuth();
+    };
+  }, []);
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     setError('');
+    setAccessError('');
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       setPassword('');
@@ -116,7 +178,7 @@ export default function AuthGate({ children }: AuthGateProps) {
               </span>
             </label>
 
-            {error && <p role="alert" className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 text-sm text-red-700">{error}</p>}
+            {(accessError || error) && <p role="alert" className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 text-sm text-red-700">{accessError || error}</p>}
 
             <button type="submit" disabled={submitting || !email.trim() || !password}
               className="w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-black uppercase tracking-wider text-sm py-3.5 shadow-lg shadow-blue-800/20 transition-colors">
