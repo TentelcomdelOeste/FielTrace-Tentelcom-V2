@@ -228,7 +228,8 @@ import { Capacitor } from '@capacitor/core';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
-import { firebaseService } from './services/firebaseService';
+import { firebaseService, auth } from './services/firebaseService';
+import { getIdTokenResult, signOut } from 'firebase/auth';
 import { exportService } from './services/exportService';
 import { generateMemoryExcel, MEMORY_EXCEL_SECTIONS } from './services/memoryExcelService';
 import { generateMemoryPhotosZip } from './services/memoryPhotosZipService';
@@ -240,6 +241,8 @@ import { EVIDENCE_CATEGORIES, type EvidenceCategory, type Project, type Evidence
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [accountRole, setAccountRole] = useState<'Administrador' | 'Usuario'>('Usuario');
   const [searchTerm, setSearchTerm] = useState("");
   const [cloudProjects, setCloudProjects] = useState<any[]>([]);
   const [cloudSearchTerm, setCloudSearchTerm] = useState("");
@@ -3608,8 +3611,34 @@ export default function App() {
                    <div>
                      <h1 className="text-3xl font-black tracking-tighter uppercase text-gray-950">Field Trace</h1>
                    </div>
-                   <div className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100"><UserCircle className="w-6 h-6 text-gray-400"/></div>
+                   <button type="button" onClick={() => {
+                     setShowAccountMenu(value => !value);
+                     const currentUser = auth.currentUser;
+                     if (currentUser) {
+                       void getIdTokenResult(currentUser).then(token => {
+                         setAccountRole(token.claims.admin === true || token.claims.role === 'admin' ? 'Administrador' : 'Usuario');
+                       }).catch(() => setAccountRole('Usuario'));
+                     }
+                   }} aria-label="Abrir perfil de usuario" aria-expanded={showAccountMenu} className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center border border-gray-100 hover:border-blue-200">
+                     <UserCircle className="w-6 h-6 text-gray-400"/>
+                   </button>
                 </div>
+
+                {showAccountMenu && (
+                  <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-lg" aria-label="Perfil de usuario">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0"><UserCircle className="w-5 h-5 text-blue-600"/></div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-gray-900 break-all">{auth.currentUser?.email || 'Cuenta autenticada'}</p>
+                        <p className="mt-1 text-xs text-gray-500">Rol: {accountRole}</p>
+                      </div>
+                      <button type="button" onClick={() => setShowAccountMenu(false)} className="text-gray-400 hover:text-gray-700" aria-label="Cerrar perfil"><X className="w-5 h-5"/></button>
+                    </div>
+                    <button type="button" onClick={() => {
+                      void signOut(auth).catch(error => console.error('[Auth] No se pudo cerrar sesión:', error));
+                    }} className="mt-4 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50">Cerrar sesión</button>
+                  </section>
+                )}
 
                 <div className="space-y-4 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4 xl:items-stretch">
                 <div className="bg-gray-900 rounded-[2.5rem] p-7 xl:p-3 text-white shadow-2xl relative overflow-hidden">
