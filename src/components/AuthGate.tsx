@@ -67,6 +67,12 @@ export default function AuthGate({ children }: AuthGateProps) {
           return;
         }
 
+        // Mostrar la aplicación inmediatamente después de validar el perfil.
+        // No depender del primer evento de onSnapshot para quitar la pantalla de carga.
+        setAccessError('');
+        setUser(currentUser);
+        setCheckingSession(false);
+
         profileUnsubscribe = onSnapshot(profileRef, snapshot => {
           if (auth.currentUser?.uid !== currentUser.uid) return;
           if (!snapshot.exists() || snapshot.data().active === false) {
