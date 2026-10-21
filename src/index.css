@@ -124,7 +124,21 @@ body {
   /* Reduce la vista principal un 10% sin alterar la escala de Memoria Fotográfica. */
   .app-shell.home-active {
     zoom: 0.9;
-    width: 111.1112%;
+    width: 100%;
     min-height: 111.1112vh;
+    max-width: 100%;
+    overflow-x: clip;
   }
+}
+
+
+/* Evita que la escala de escritorio o algún componente genere desplazamiento horizontal. */
+html, body, #root {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.app-shell {
+  max-width: 100%;
+  overflow-x: clip;
 }
