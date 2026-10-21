@@ -3618,7 +3618,7 @@ export default function App() {
   return (
     <div
       onKeyDown={handleModalFieldKeyDown}
-      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'home' || currentStep === 'memory' ? 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950' : 'bg-white'} flex flex-col font-sans`}
+      className={`app-shell min-h-screen ${currentStep === 'camera' ? 'camera-active bg-transparent' : currentStep === 'home' || currentStep === 'memory' ? (currentStep === 'home' ? 'dashboard-active home-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950' : 'dashboard-active bg-gradient-to-br from-slate-950 via-[#101d3a] to-blue-950') : 'bg-white'} flex flex-col font-sans`}
     >
       {/* Main Content Viewport */}
       <div className={`flex-1 flex flex-col relative overflow-hidden ${currentStep === 'camera' ? 'hidden' : ''}`}>
