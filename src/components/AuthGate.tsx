@@ -60,7 +60,7 @@ export default function AuthGate({ children }: AuthGateProps) {
         if (!profile.exists()) throw new Error('No se pudo verificar el perfil de acceso.');
 
         if (profile.data().active === false) {
-          setAccessError('Tu cuenta está deshabilitada. Contactá al administrador de Tentelcom.');
+          setAccessError('No se pudo completar el acceso. Contactá a soporte.');
           setUser(null);
           setCheckingSession(false);
           await signOut(auth);
@@ -70,7 +70,7 @@ export default function AuthGate({ children }: AuthGateProps) {
         profileUnsubscribe = onSnapshot(profileRef, snapshot => {
           if (auth.currentUser?.uid !== currentUser.uid) return;
           if (!snapshot.exists() || snapshot.data().active === false) {
-            setAccessError('Tu cuenta está deshabilitada. Contactá al administrador de Tentelcom.');
+            setAccessError('No se pudo completar el acceso. Contactá a soporte.');
             setUser(null);
             setCheckingSession(false);
             void signOut(auth).catch(signOutError => console.error('[Auth] No se pudo cerrar la sesión bloqueada:', signOutError));
