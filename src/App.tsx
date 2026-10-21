@@ -5414,7 +5414,6 @@ export default function App() {
                 {cameraZoom % 1 === 0 ? `${cameraZoom}x` : `${cameraZoom.toFixed(1)}x`}
               </button>
             </div>
-            {!isNativeCamera && false}
             {isNativeCamera && !nativeCameraPreviewReady && !nativeCameraError && (
               <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-slate-950 text-white" aria-live="polite">
                 <div className="h-9 w-9 rounded-full border-2 border-white/25 border-t-white animate-spin" />
