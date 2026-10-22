@@ -843,9 +843,15 @@ export const storageService = {
       (localProjectId != null && item.projectId === localProjectId)
     );
     const remoteByUuid = new Map<string, any>();
+    const remotelyDeletedUuids = new Set<string>();
     for (const remote of remoteEvidences || []) {
       const uuid = String(remote?.uuid || '').trim();
-      if (uuid) remoteByUuid.set(uuid, remote);
+      if (!uuid) continue;
+      if (remote?.isDeleted === true) {
+        remotelyDeletedUuids.add(uuid);
+        continue;
+      }
+      remoteByUuid.set(uuid, remote);
     }
 
     for (const [uuid, remote] of remoteByUuid) {
@@ -881,7 +887,9 @@ export const storageService = {
     // sincronizado, fue eliminado desde otro dispositivo: retirarlo también aquí.
     for (const local of localForProject) {
       const uuid = String((local as any).uuid || '').trim();
-      if (local.syncStatus !== 'synced' || !uuid || remoteByUuid.has(uuid) || local.id == null) continue;
+      if (!uuid || local.id == null) continue;
+      const deletedByAnotherDevice = remotelyDeletedUuids.has(uuid);
+      if (!deletedByAnotherDevice && (local.syncStatus !== 'synced' || remoteByUuid.has(uuid))) continue;
       await manager.delete(STORE_EVIDENCES, local.id);
       if (local.photoPath) {
         try { await manager.delete(STORE_PHOTOS, local.photoPath); } catch (_) {}
