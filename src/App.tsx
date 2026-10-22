@@ -4156,86 +4156,82 @@ export default function App() {
                                     </div>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 lg:gap-2">
-                                      {group.items.map((ev: any, photoIndex: number) => {
-                                        const imageUrl = ev.photoUrl || ev.photo?.uri || '';
-                                        return (
-                                          <button
-                                            key={String(ev.uuid || ev.id || photoIndex)}
-                                            type="button"
-                                            onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
-                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left"
-                                          >
-                                            {imageUrl ? (
-                                              <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
-                                            ) : (
-                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-slate-300 uppercase p-2 text-center">
-                                                <CameraIcon className="w-5 h-5 mb-1 text-slate-300" />
-                                                Sin foto
-                                              </div>
-                                            )}
-                                            <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white px-2 py-1.5 lg:px-2.5 lg:py-2">
-                                              <p className="text-[7px] font-black uppercase truncate lg:text-[9px] lg:leading-tight">
-                                                {category.id === 'NAPS'
-                                                  ? getNapsPhotoTitle(Number(ev.napPhotoNumber || photoIndex + 1))
-                                                  : 'FOTO ' + (photoIndex + 1) + '/' + group.required}
-                                              </p>
-                                              <p className="text-[7px] text-white/80 truncate lg:text-[8px] lg:leading-tight lg:mt-0.5">
-                                                {category.id === 'NAPS'
-                                                  ? 'NAP' + (group.name ? ' · ' + String(group.name).toUpperCase() : '')
-                                                  : (ev.categoryLabel || ev.category || category.label)}
-                                              </p>
-                                            </div>
-                                          </button>
-                                        );
-                                      })}
                                       {(() => {
-                                        const slots = category.id === 'NAPS'
-                                          ? Array.from({ length: 9 }, (_, i) => i + 1)
-                                          : Array.from({ length: Math.max(0, group.required - group.items.length) }, (_, i) => group.items.length + i + 1);
-
-                                        return slots
-                                          .filter(photoNumber => !group.items.some((item: any) =>
-                                            category.id === 'NAPS'
-                                              ? Number(item.napPhotoNumber) === photoNumber
-                                              : false
-                                          ))
-                                          .map((photoNumber) => (
-                                            <div
-                                              key={'missing-' + group.id + '-' + photoNumber}
-                                              className="min-h-[180px] lg:min-h-[120px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 lg:p-2 gap-2"
-                                            >
+                                        const slotMap = new Map<number, any>();
+                                        const orderedItems = [...group.items].sort((a: any, b: any) =>
+                                          Number(Boolean(b.photoUrl || b.photo?.uri || b.photo?.url)) -
+                                          Number(Boolean(a.photoUrl || a.photo?.uri || a.photo?.url))
+                                        );
+                                        orderedItems.forEach((item: any) => {
+                                          const explicit = getMemoryPhotoSlotNumber(item, category.id);
+                                          if (explicit >= 1 && explicit <= group.required && !slotMap.has(explicit)) {
+                                            slotMap.set(explicit, item);
+                                          }
+                                        });
+                                        orderedItems.forEach((item: any) => {
+                                          const explicit = getMemoryPhotoSlotNumber(item, category.id);
+                                          if (explicit >= 1 && explicit <= group.required) return;
+                                          const firstFree = Array.from({ length: group.required }, (_, i) => i + 1).find(n => !slotMap.has(n));
+                                          if (firstFree) slotMap.set(firstFree, item);
+                                        });
+                                        const seed = group.items[0] || {};
+                                        const groupId = category.id === 'NAPS' ? seed.napId
+                                          : category.id === 'MUFA' ? seed.mufaId
+                                          : category.id === 'PUNTAS_FIBRA' ? seed.fiberPairId
+                                          : category.id === 'RESERVA' ? seed.reserveId
+                                          : category.id === 'ACEROS' ? seed.aceroId
+                                          : category.id === 'DESECHOS' ? seed.desechoId
+                                          : category.id === 'ALTAS' ? seed.altaId
+                                          : category.id === 'MEJORAS' ? seed.mejoraId : '';
+                                        const groupName = category.id === 'NAPS' ? seed.napName
+                                          : category.id === 'MUFA' ? seed.mufaName
+                                          : category.id === 'ALTAS' ? seed.altaType
+                                          : category.id === 'MEJORAS' ? seed.mejoraType
+                                          : seed.categoryLabel || '';
+                                        return Array.from({ length: group.required }, (_, index) => index + 1).map(photoNumber => {
+                                          const ev = slotMap.get(photoNumber);
+                                          const imageUrl = String(ev?.photoUrl || ev?.photo?.uri || ev?.photo?.url || '').trim();
+                                          if (ev && imageUrl) {
+                                            return (
+                                              <button key={'photo-' + group.id + '-' + photoNumber} type="button"
+                                                onClick={() => setMemorySelectedPhoto(ev)}
+                                                className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left">
+                                                <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + photoNumber}
+                                                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
+                                                <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white px-2 py-1.5 lg:px-2.5 lg:py-2">
+                                                  <p className="text-[7px] font-black uppercase truncate lg:text-[9px] lg:leading-tight">
+                                                    {category.id === 'NAPS' ? getNapsPhotoTitle(photoNumber) : 'FOTO ' + photoNumber + '/' + group.required}
+                                                  </p>
+                                                  <p className="text-[7px] text-white/80 truncate lg:text-[8px] lg:leading-tight lg:mt-0.5">
+                                                    {category.id === 'NAPS' ? 'NAP' + (groupName ? ' · ' + String(groupName).toUpperCase() : '') : (ev.categoryLabel || ev.category || category.label)}
+                                                  </p>
+                                                </div>
+                                              </button>
+                                            );
+                                          }
+                                          return (
+                                            <div key={'missing-' + group.id + '-' + photoNumber}
+                                              className="min-h-[180px] lg:min-h-[120px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 lg:p-2 gap-2">
                                               <CameraIcon className="w-6 h-6 text-blue-400" />
-                                              <p className="text-[8px] font-black uppercase text-blue-700">FALTA FOTO</p>
+                                              <p className="text-[8px] font-black uppercase text-blue-700">{ev ? 'FOTO NO DISPONIBLE' : 'FALTA FOTO'}</p>
                                               <p className="text-[8px] font-black uppercase text-blue-600">
-                                                {category.id === 'NAPS'
-                                                  ? getNapsPhotoTitle(photoNumber) + ' NAP'
-                                                  : 'FOTO ' + photoNumber}
+                                                {category.id === 'NAPS' ? getNapsPhotoTitle(photoNumber) + ' NAP' : 'FOTO ' + photoNumber}
                                               </p>
-
-                                              {category.id === 'NAPS' && (
-                                                <>
-                                                  <button
-                                                    type="button"
-                                                    disabled={memoryUploadLoading}
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      uploadMissingMemoryPhoto({
-                                                        category: 'NAPS',
-                                                        napId: String(group.id),
-                                                        napNumber: Number(group.number),
-                                                        napName: String(group.name || ''),
-                                                        photoNumber
-                                                      });
-                                                    }}
-                                                    className="w-full px-2.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
-                                                  >
-                                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
-                                                  </button>
-
-                                                </>
-                                              )}
+                                              <button type="button" disabled={memoryUploadLoading}
+                                                onClick={() => uploadMissingMemoryPhoto({
+                                                  category: category.id as EvidenceCategory,
+                                                  groupId: String(groupId || group.id || ''),
+                                                  groupNumber: Number(group.number || 1),
+                                                  groupName: String(groupName || ''),
+                                                  photoNumber,
+                                                  existingEvidence: ev || undefined
+                                                })}
+                                                className="w-full px-2.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50">
+                                                {memoryUploadLoading ? 'SUBIENDO...' : ev ? 'REEMPLAZAR / SUBIR FOTO' : 'SUBIR FOTO DESDE EL TELÉFONO'}
+                                              </button>
                                             </div>
-                                          ));
+                                          );
+                                        });
                                       })()}
                                     </div>
                                   </section>
