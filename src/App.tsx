@@ -42,7 +42,7 @@ import {
   Square
 } from 'lucide-react';
 import { AutoResizingTextarea } from './components/AutoResizingTextarea';
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react';
 
 function getFormattedLocationText(loc: any, selectedProject: any): string {
   if (!loc) return "Buscando...";
@@ -453,6 +453,8 @@ export default function App() {
   const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
   const [webCameraError, setWebCameraError] = useState<string | null>(null);
   const [nativeCameraError, setNativeCameraError] = useState<string | null>(null);
+  // Evita mostrar el fondo negro mientras Android entrega el primer frame del sensor.
+  const [nativeCameraPreviewReady, setNativeCameraPreviewReady] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -508,6 +510,9 @@ export default function App() {
   const videoRecordingPathRef = useRef<string | null>(null);
   const webCameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const webCameraStreamRef = useRef<MediaStream | null>(null);
+  // Serializa el cierre de una sesión nativa antes de abrir la siguiente para evitar
+  // solapamientos stop/start que provocan un destello al entrar a la cámara.
+  const nativeCameraStopPromiseRef = useRef<Promise<void> | null>(null);
   const isNativeCamera = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -572,8 +577,8 @@ export default function App() {
     if (capturingRef.current) return;
     const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
     try {
-      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
-      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
+      // Cambiar el estado dispara el cleanup del efecto de cámara, que detiene
+      // la sesión actual y serializa su cierre antes de iniciar el nuevo lente.
       setCameraFacing(nextFacing);
     } catch (error) {
       console.warn('[Camera] switch facing:', error);
@@ -775,6 +780,7 @@ export default function App() {
 
     document.documentElement.classList.add('native-camera-active');
     setNativeCameraError(null);
+    setNativeCameraPreviewReady(false);
 
     (async () => {
       try {
@@ -793,7 +799,17 @@ export default function App() {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
 
-        await CameraPreview.stop({ force: true }).catch(() => {});
+        // Si venimos de otra sesión, esperar a que su cierre termine. No detener
+        // la cámara de nuevo al abrir: ese stop redundante apaga el preview y causa
+        // un parpadeo visible antes de que start() vuelva a dibujar la imagen.
+        const pendingCameraStop = nativeCameraStopPromiseRef.current;
+        if (pendingCameraStop) {
+          await pendingCameraStop;
+          if (nativeCameraStopPromiseRef.current === pendingCameraStop) {
+            nativeCameraStopPromiseRef.current = null;
+          }
+        }
+        if (!active) return;
 
         // Preview fotográfico estable. No activamos el modo de video aquí:
         // la captura de fotos usa CameraPreview.capture().
@@ -822,6 +838,11 @@ export default function App() {
         console.log('[Camera] native preview ready:', started);
         await CameraPreview.setZoom({ level: cameraZoom });
         await ensureFlashArmed(flashMode);
+        // CameraPreview.start() puede resolverse antes del primer frame de imagen.
+        // Mantener una cortina breve oculta el negro inicial del preview nativo.
+        await new Promise(resolve => window.setTimeout(resolve, 800));
+        if (!active) return;
+        setNativeCameraPreviewReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
         if (!active) return;
@@ -839,8 +860,15 @@ export default function App() {
 
     return () => {
       active = false;
-      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
-      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
+      // Guardar la promesa inmediatamente permite que una reapertura espere este cierre,
+      // en vez de ejecutar start() mientras la sesión anterior aún se está apagando.
+      nativeCameraStopPromiseRef.current = Promise.resolve()
+        .then(() => CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {}))
+        .then(() => CameraPreview.stop({ force: true }))
+        .then(() => undefined)
+        .catch((error) => {
+          console.warn('[Camera] stop:', error);
+        });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
@@ -851,7 +879,8 @@ export default function App() {
   }, [flashMode, currentStep]);
 
 
-  useEffect(() => {
+  // Aplicar transparencia antes del primer paint de la cámara, no después.
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
     return () => document.documentElement.classList.remove('native-camera-active');
   }, [currentStep]);
@@ -5440,6 +5469,12 @@ export default function App() {
                 {cameraZoom % 1 === 0 ? `${cameraZoom}x` : `${cameraZoom.toFixed(1)}x`}
               </button>
             </div>
+            {isNativeCamera && !nativeCameraPreviewReady && !nativeCameraError && (
+              <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-slate-950 text-white" aria-live="polite">
+                <div className="h-9 w-9 rounded-full border-2 border-white/25 border-t-white animate-spin" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">Preparando cámara…</p>
+              </div>
+            )}
           </div>
 
           {/* Shutter Bar */}
@@ -5459,7 +5494,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => void (isRecordingVideo ? stopVideoRecording() : startVideoRecording())}
-                disabled={videoProcessing}
+                disabled={videoProcessing || (isNativeCamera && !nativeCameraPreviewReady)}
                 className={`w-12 h-12 rounded-full border-2 border-white/80 active:scale-95 transition-all flex items-center justify-center ${isRecordingVideo ? 'bg-red-600 text-white' : 'bg-red-500 text-white'} disabled:opacity-50`}
                 title={isRecordingVideo ? 'DETENER VIDEO' : 'GRABAR VIDEO'}
                 aria-label={isRecordingVideo ? 'DETENER VIDEO' : 'GRABAR VIDEO'}
@@ -5472,7 +5507,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={captureBatchPhoto}
-                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
+                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (isNativeCamera && !nativeCameraPreviewReady) || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
                 className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
                 title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
                 aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
