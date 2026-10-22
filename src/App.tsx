@@ -572,8 +572,8 @@ export default function App() {
     if (capturingRef.current) return;
     const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
     try {
-      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
-      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
+      // El efecto de cámara gestiona el cierre y la reapertura al cambiar cameraFacing.
+      // Evitamos detener el preview aquí para no ejecutar dos stops consecutivos.
       setCameraFacing(nextFacing);
     } catch (error) {
       console.warn('[Camera] switch facing:', error);
