@@ -800,6 +800,7 @@ export default function App() {
           x: 0,
           y: 0,
           aspectRatio: 'fill',
+          aspectMode: 'cover',
           storeToFile: false,
           disableAudio: true,
           initialZoomLevel: cameraZoom,
