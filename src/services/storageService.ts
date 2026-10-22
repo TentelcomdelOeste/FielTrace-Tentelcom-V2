@@ -876,6 +876,7 @@ export const storageService = {
         photoUrl: remote.photoUrl || existing?.photoUrl || '',
         photoStoragePath: remote.photoStoragePath || existing?.photoStoragePath || '',
         syncStatus: 'synced',
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
         retryCount: 0,
         syncError: undefined,
         updatedAt: remote.updatedAt || new Date().toISOString()
