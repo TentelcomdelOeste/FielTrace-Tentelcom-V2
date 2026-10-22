@@ -858,14 +858,21 @@ export const storageService = {
       const existing = allLocal.find(item => String((item as any).uuid || '') === uuid);
       // No destruir una captura o sustitución local que aún no llegó a la nube.
       if (existing && existing.syncStatus !== 'synced') continue;
+      const remotePhotoChanged = Boolean(existing && remote.photoUrl && existing.photoUrl &&
+        (remote.photoUrl !== existing.photoUrl || (remote.photoStoragePath && remote.photoStoragePath !== existing.photoStoragePath)));
+      if (remotePhotoChanged && existing?.photoPath) {
+        // No dejar una miniatura/blob de la foto anterior como respaldo de la sustitución.
+        try { await manager.delete(STORE_PHOTOS, existing.photoPath); } catch (_) {}
+      }
       const normalized: any = {
         ...(existing || {}),
         ...remote,
         uuid,
         projectUuid: canonicalProjectUuid,
         projectId: existing?.projectId ?? localProjectId ?? remote.projectId ?? null,
-        // Conservar la clave local de IndexedDB si esta evidencia ya existe.
-        photoPath: existing?.photoPath || remote.photoPath || '',
+        // Si cambió la foto remota, descartar la ruta local anterior para no
+        // mostrar accidentalmente la imagen sustituida cuando falle la URL nueva.
+        photoPath: remotePhotoChanged ? (remote.photoPath || '') : (existing?.photoPath || remote.photoPath || ''),
         photoUrl: remote.photoUrl || existing?.photoUrl || '',
         photoStoragePath: remote.photoStoragePath || existing?.photoStoragePath || '',
         syncStatus: 'synced',
