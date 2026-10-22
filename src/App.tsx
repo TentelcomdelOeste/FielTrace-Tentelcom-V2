@@ -7750,20 +7750,11 @@ export default function App() {
                                   <span className="text-[9px] font-black uppercase text-center px-2">
                                     FALTA FOTO<br />{getNapsPhotoTitle(photoNumber)} NAP
                                   </span>
-                                  <button
-                                    type="button"
-                                    disabled={memoryUploadLoading}
-                                    onClick={() => uploadMissingMemoryPhoto({
-                                      category: 'NAPS',
-                                      napId: group[0]?.napId || '',
-                                      napNumber: Number(group[0]?.napNumber || groupIndex + 1),
-                                      napName: group[0]?.napName || '',
-                                      photoNumber
-                                    })}
-                                    className="w-full px-2 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
-                                  >
-                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
-                                  </button>
+                                  {renderProjectUploadButton({
+                                    category: 'NAPS', groupId: group[0]?.napId || '',
+                                    groupNumber: Number(group[0]?.napNumber || groupIndex + 1),
+                                    groupName: group[0]?.napName || '', photoNumber, groupItem: group[0]
+                                  }, 'FOTO ' + photoNumber)}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -8227,23 +8218,28 @@ export default function App() {
                         }
 
                         return (
-                          <button
-                            key={`fiber-missing-${pairNumber}-${side}`}
-                            type="button"
-                            onClick={() => {
-                              setViewingEvidence(null);
-                              setShowStorageEvidenceViewer(false);
-                              setStorageEvidenceCategory(null);
-                              setEvidenceCategory('PUNTAS_FIBRA');
-                              openFiberSide(side, pairId);
-                            }}
-                            className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
-                          >
-                            <CameraIcon className="w-8 h-8" />
-                            <span className="text-[9px] font-black uppercase text-center px-2">
-                              TOMAR FOTO<br />{side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
-                            </span>
-                          </button>
+                          <div key={`fiber-missing-${pairNumber}-${side}`} className="flex flex-col gap-1 min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewingEvidence(null);
+                                setShowStorageEvidenceViewer(false);
+                                setStorageEvidenceCategory(null);
+                                setEvidenceCategory('PUNTAS_FIBRA');
+                                openFiberSide(side, pairId);
+                              }}
+                              className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                            >
+                              <CameraIcon className="w-8 h-8" />
+                              <span className="text-[9px] font-black uppercase text-center px-2">
+                                TOMAR FOTO<br />{side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
+                              </span>
+                            </button>
+                            {renderProjectUploadButton({
+                              category: 'PUNTAS_FIBRA', groupId: pairId, groupNumber: pairNumber,
+                              photoNumber: side === 'initial' ? 1 : 2, groupItem: first
+                            }, side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL')}
+                          </div>
                         );
                       };
 
@@ -8349,8 +8345,8 @@ export default function App() {
                               }
 
                               return (
+                                <div key={`mufa-missing-${photoNumber}`} className="flex flex-col gap-1 min-w-0">
                                 <button
-                                  key={`nap-missing-${photoNumber}`}
                                   type="button"
                                   onClick={() => {
                                     const mufaId = group[0]?.mufaId || '';
@@ -8379,6 +8375,12 @@ export default function App() {
                                     TOMAR FOTO<br />FOTO {photoNumber}/9
                                   </span>
                                 </button>
+                                {renderProjectUploadButton({
+                                  category: 'MUFA', groupId: group[0]?.mufaId || '',
+                                  groupNumber: Number(group[0]?.mufaNumber || groupIndex + 1),
+                                  groupName: group[0]?.mufaName || '', photoNumber, groupItem: group[0]
+                                }, 'FOTO ' + photoNumber)}
+                                </div>
                               );
                             })}
                           </div>
