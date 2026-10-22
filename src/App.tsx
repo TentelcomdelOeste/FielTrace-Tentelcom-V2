@@ -42,7 +42,7 @@ import {
   Square
 } from 'lucide-react';
 import { AutoResizingTextarea } from './components/AutoResizingTextarea';
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react';
 
 function getFormattedLocationText(loc: any, selectedProject: any): string {
   if (!loc) return "Buscando...";
@@ -939,10 +939,54 @@ export default function App() {
   }, [flashMode, currentStep]);
 
 
-  useEffect(() => {
+  // Aplicar la transparencia antes del primer paint de la pantalla de cámara.
+  // useEffect se ejecutaba después de pintar el fondo gris del body, causando el destello.
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
     return () => document.documentElement.classList.remove('native-camera-active');
   }, [currentStep]);
+
+  // Mantener sincronizadas en tiempo real las evidencias compartidas del proyecto.
+  // Firebase es la fuente canónica para cambios hechos desde Memoria Fotográfica
+  // en otro dispositivo; las capturas locales pendientes se conservan.
+  const activeSharedProjectUuid = String(
+    currentStep === 'history' ? (selectedProject?.uuid || '') :
+    currentStep === 'memory' ? (memorySelectedProject?.uuid || '') : ''
+  ).trim();
+  useEffect(() => {
+    if (!activeSharedProjectUuid || !navigator.onLine || (currentStep !== 'history' && currentStep !== 'memory')) return;
+    let active = true;
+    const unsubscribe = firebaseService.subscribeCloudProjectEvidences(
+      activeSharedProjectUuid,
+      (remoteEvidences, fromCache) => {
+        if (!active || fromCache) return;
+        void (async () => {
+          try {
+            const localEvidences = await storageService.reconcileCloudProjectEvidences(activeSharedProjectUuid, remoteEvidences);
+            if (!active) return;
+            if (currentStep === 'history') {
+              setEvidences(localEvidences);
+              setViewingEvidence(previous => {
+                if (!previous) return previous;
+                return localEvidences.find(item => item.uuid === previous.uuid) || previous;
+              });
+            } else {
+              setMemorySelectedProject((previous: any) => previous && String(previous.uuid || previous.id) === activeSharedProjectUuid
+                ? { ...previous, _evidences: remoteEvidences }
+                : previous);
+              setMemoryProjects(previous => previous.map(project => String(project.uuid || project.id) === activeSharedProjectUuid
+                ? { ...project, _evidences: remoteEvidences }
+                : project));
+            }
+          } catch (error) {
+            console.warn('[SharedEvidenceSync] No se pudieron aplicar los cambios remotos:', error);
+          }
+        })();
+      },
+      error => console.warn('[SharedEvidenceSync] La suscripción requiere reconexión:', error)
+    );
+    return () => { active = false; unsubscribe(); };
+  }, [currentStep, activeSharedProjectUuid]);
 
   // Load last Field Trace album thumbnail when entering camera (survives app restart)
   useEffect(() => {
