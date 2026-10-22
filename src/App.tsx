@@ -510,6 +510,15 @@ export default function App() {
   const webCameraStreamRef = useRef<MediaStream | null>(null);
   const isNativeCamera = Capacitor.isNativePlatform();
 
+  // El plugin nativo mantiene una única sesión de cámara. Serializamos start/stop
+  // para que cerrar y volver a abrir rápidamente no deje sesiones superpuestas.
+  const nativeCameraLifecycleRef = useRef<Promise<void>>(Promise.resolve());
+  const enqueueNativeCameraOperation = (operation: () => Promise<void>) => {
+    const next = nativeCameraLifecycleRef.current.catch(() => {}).then(operation);
+    nativeCameraLifecycleRef.current = next.catch(() => {});
+    return next;
+  };
+
   useEffect(() => {
     let listenerHandle: { remove: () => Promise<void> } | null = null;
     void CameraPreview.addListener('recordingFinished', (event: { videoFilePath?: string; reason?: string }) => {
@@ -568,16 +577,11 @@ export default function App() {
   const onCameraTouchMove = (e: TouchEvent) => { if (e.touches.length===2 && pinchStartDist.current) { const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY; void applyNativeZoom(Math.max(1,Math.min(8,pinchStartZoom.current*(Math.hypot(dx,dy)/pinchStartDist.current)))); } };
   const onCameraTouchEnd = () => { pinchStartDist.current=null; };
 
-  const switchCameraFacing = async () => {
+  const switchCameraFacing = () => {
     if (capturingRef.current) return;
-    const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
-    try {
-      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
-      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
-      setCameraFacing(nextFacing);
-    } catch (error) {
-      console.warn('[Camera] switch facing:', error);
-    }
+    // No ejecutar stop() aquí: el cleanup del efecto ya cierra la sesión.
+    // Hacer ambas cosas en paralelo producía doble stop y podía competir con start().
+    setCameraFacing((current) => current === 'rear' ? 'front' : 'rear');
   };
 
   const ensureFlashArmed = async (targetMode: 'off' | 'on') => {
@@ -776,7 +780,7 @@ export default function App() {
     document.documentElement.classList.add('native-camera-active');
     setNativeCameraError(null);
 
-    (async () => {
+    void enqueueNativeCameraOperation(async () => {
       try {
         const permission = await CameraPreview.checkPermissions({ disableAudio: true });
         let cameraPermission = permission?.camera;
@@ -792,24 +796,17 @@ export default function App() {
         if (cameraPermission !== 'granted') {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
+        if (!active) return;
 
-        // Configurar el tamaño desde el inicio evita mostrar primero el preview
-        // con dimensiones predeterminadas y redimensionarlo después (flash negro).
-        const previewWidth = Math.max(1, Math.round(window.innerWidth));
-        const previewHeight = Math.max(1, Math.round(window.innerHeight));
-
-        // No detener la sesión justo antes de abrirla: ese stop/start provoca
-        // el parpadeo negro visible en Android. El cleanup del efecto ya detiene
-        // la cámara al salir de la pantalla o cambiar de cámara.
-        // Preview fotográfico estable. No activamos el modo de video aquí:
-        // la captura de fotos usa CameraPreview.capture().
+        // IMPORTANTE: @capgo/camera-preview rechaza width/height junto con aspectRatio.
+        // Al omitir width/height, el plugin usa el tamaño real del WebView desde el inicio,
+        // sin una segunda operación setPreviewSize que pueda producir un destello negro.
+        // Mantenemos un único start y aspectRatio para conservar el encuadre de la cámara.
         const started = await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
           x: 0,
           y: 0,
-          width: previewWidth,
-          height: previewHeight,
           aspectRatio: '16:9',
           aspectMode: 'cover',
           storeToFile: false,
@@ -821,27 +818,38 @@ export default function App() {
         if (!active) return;
 
         console.log('[Camera] native preview ready:', started);
-        await CameraPreview.setZoom({ level: cameraZoom });
-        await ensureFlashArmed(flashMode);
         setNativeCameraError(null);
+        // Un fallo de zoom/flash no significa que el preview no haya arrancado.
+        await CameraPreview.setZoom({ level: cameraZoom }).catch((error) => {
+          console.warn('[Camera] Initial zoom unavailable:', error);
+        });
+        await ensureFlashArmed(flashMode);
       } catch (error: any) {
         if (!active) return;
         console.error('[Camera] start:', error);
-        const name = String(error?.name || '');
-        const message = String(error?.message || '');
-        const detail = name || message ? ' (' + (name || message) + ')' : '.';
+        const name = String(error?.name || '').trim();
+        const message = String(
+          error?.message || error?.errorMessage || error?.cause?.message || error?.code || ''
+        ).trim();
+        const detail = message || (name && name !== 'Error' ? name : '');
         setNativeCameraError(
           message === 'CAMERA_PERMISSION_DENIED'
             ? 'El permiso de cámara está bloqueado. Permita la cámara para Field Trace y vuelva a intentarlo.'
-            : 'No se pudo iniciar la cámara nativa' + detail
+            : detail
+              ? 'No se pudo iniciar la cámara nativa: ' + detail
+              : 'No se pudo iniciar la cámara. Verifique el permiso de cámara y vuelva a intentarlo.'
         );
       }
-    })();
+    });
 
     return () => {
       active = false;
-      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
-      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
+      void enqueueNativeCameraOperation(async () => {
+        await CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
+        await CameraPreview.stop({ force: true }).catch((error) => {
+          console.warn('[Camera] stop:', error);
+        });
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
