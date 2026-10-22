@@ -728,6 +728,14 @@ export default function App() {
     setNativeCameraError(null);
     setNativeCameraPreviewReady(false);
 
+    // Watchdog global: aunque un plugin nativo no resuelva ninguna promesa,
+    // nunca dejar el spinner visible indefinidamente.
+    const cameraStartupWatchdog = window.setTimeout(() => {
+      if (!active) return;
+      console.error('[Camera] watchdog: native startup exceeded 12 seconds');
+      setNativeCameraError('La cámara no respondió en 12 segundos. Pulse REINTENTAR; si persiste, cierre y vuelva a abrir Field Trace.');
+    }, 12000);
+
     // Limitar cada operación nativa: ninguna promesa pendiente debe dejar la cámara
     // bloqueada indefinidamente en la pantalla "Preparando cámara".
     const withCameraTimeout = <T,>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> =>
@@ -806,9 +814,11 @@ export default function App() {
 
         // Sin pausa artificial: liberar la cortina en cuanto start() confirma
         // que el complemento inició la vista previa.
+        window.clearTimeout(cameraStartupWatchdog);
         setNativeCameraPreviewReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
+        window.clearTimeout(cameraStartupWatchdog);
         if (!active) return;
         console.error('[Camera] start failed:', error);
         const name = String(error?.name || '');
@@ -827,6 +837,7 @@ export default function App() {
 
     return () => {
       active = false;
+      window.clearTimeout(cameraStartupWatchdog);
       // Guardar la promesa inmediatamente permite que una reapertura espere este cierre,
       // en vez de ejecutar start() mientras la sesión anterior aún se está apagando.
       nativeCameraStopPromiseRef.current = Promise.resolve()
