@@ -260,7 +260,7 @@ const EvidencePhoto = memo(({
     if (storagePath) {
       try {
         const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
-        if (freshUrl) {
+        if (freshUrl && freshUrl !== imageSrc) {
           setImageSrc(freshUrl);
           return;
         }
