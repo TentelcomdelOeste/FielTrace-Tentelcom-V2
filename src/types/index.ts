@@ -86,7 +86,8 @@ export type EvidenceCategory =
   | 'CABLEADO'
   | 'MEDICION'
   | 'ALTAS'
-  | 'MEJORAS';
+  | 'MEJORAS'
+  | 'EXTRAS';
 
 export const EVIDENCE_CATEGORIES: Array<{ id: EvidenceCategory; label: string }> = [
   { id: 'PUNTAS_FIBRA', label: 'Puntas de fibra' },
