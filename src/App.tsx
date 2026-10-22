@@ -7780,6 +7780,59 @@ export default function App() {
                         </div>
                       );
                     });
+                  })() : storageEvidenceCategory === 'RESERVA' ? (() => {
+                    const reservePhotos = evidences.filter((ev: any) =>
+                      Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) &&
+                      ev.category === 'RESERVA' && ev.reserveId
+                    );
+                    const groups = Array.from(reservePhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                      const key = ev.reserveId || 'reserve-' + (ev.reserveNumber || ev.id || ev.uuid);
+                      if (!map.has(key)) map.set(key, []);
+                      map.get(key)!.push(ev);
+                      return map;
+                    }, new Map<string, any[]>()).values());
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const first = group[0] || {};
+                      const reserveId = String(first.reserveId || '');
+                      const reserveNumber = Number(first.reserveNumber || groupIndex + 1);
+                      const slots = [
+                        { side: 'initial', number: 1, label: 'PUNTA INICIAL' },
+                        { side: 'final', number: 2, label: 'PUNTA FINAL' },
+                        { side: 'roll', number: 3, label: 'ROLLO DETALLADO' }
+                      ];
+                      return (
+                        <div key={reserveId || 'reserve-' + reserveNumber} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="px-1 pb-3">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">RESERVA {String(reserveNumber).padStart(2,'0')}</p>
+                            <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">{group.length}/3 FOTOS · SET DE RESERVA</p>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 lg:gap-2.5">
+                            {slots.map(slot => {
+                              const ev = group.find(item => item.reserveSide === slot.side);
+                              return ev ? (
+                                <button key={slot.side} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left">
+                                  <div className="aspect-[4/5] bg-black overflow-hidden">
+                                    <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={slot.label} className="w-full h-full object-cover" loading="lazy" />
+                                  </div>
+                                  <div className="p-2.5"><p className="text-[9px] font-black uppercase text-gray-900">{slot.label}</p><p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p></div>
+                                </button>
+                              ) : (
+                                <div key={slot.side} className="flex flex-col gap-1 min-w-0">
+                                  <div className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700">
+                                    <CameraIcon className="w-8 h-8" />
+                                    <span className="text-[9px] font-black uppercase text-center px-2">FALTA FOTO<br />{slot.label}</span>
+                                  </div>
+                                  {renderProjectUploadButton({
+                                    category: 'RESERVA', groupId: reserveId, groupNumber: reserveNumber,
+                                    groupName: '', photoNumber: slot.number, groupItem: first
+                                  }, slot.label)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
                   })() : storageEvidenceCategory === 'ALTAS' ? (() => {
                     const altaPhotos = evidences                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'ALTAS' && ev.altaId)
                       .sort((a: any, b: any) => {
@@ -8151,7 +8204,7 @@ export default function App() {
                   })() : storageEvidenceCategory === 'PUNTAS_FIBRA' ? (() => {
                     const fiberPhotos = evidences
                       .filter((ev: any) =>
-                        !!ev.photoUrl &&
+                        Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) &&
                         (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') &&
                         ev.fiberPairId
                       )
@@ -8389,7 +8442,7 @@ export default function App() {
                     });
                   })() : (
                     evidences
-                      .filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
                       .map((ev: any, index: number) => (
                         <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                           <div className="aspect-[4/5] bg-black overflow-hidden">
