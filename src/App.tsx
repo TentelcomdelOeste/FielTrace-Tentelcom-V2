@@ -503,7 +503,6 @@ export default function App() {
   const [flashMode, setFlashMode] = useState<'off' | 'on'>('off');
   const [cameraFacing, setCameraFacing] = useState<'rear' | 'front'>('rear');
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
-  const [nativeCameraReady, setNativeCameraReady] = useState(false);
   const [videoProcessing, setVideoProcessing] = useState(false);
   const videoStartedAtRef = useRef<number | null>(null);
   const videoRecordingPathRef = useRef<string | null>(null);
@@ -775,7 +774,6 @@ export default function App() {
     }
 
     document.documentElement.classList.add('native-camera-active');
-    setNativeCameraReady(false);
     setNativeCameraError(null);
 
     (async () => {
@@ -824,12 +822,6 @@ export default function App() {
         console.log('[Camera] native preview ready:', started);
         await CameraPreview.setZoom({ level: cameraZoom });
         await ensureFlashArmed(flashMode);
-        // La vista nativa puede mostrar su superficie gris mientras Android termina
-        // de presentar el primer frame. Cubrimos ese intervalo con negro, sin
-        // modificar la transparencia necesaria para ver la cámara detrás del WebView.
-        await new Promise(resolve => window.setTimeout(resolve, 180));
-        if (!active) return;
-        setNativeCameraReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
         if (!active) return;
@@ -5202,9 +5194,6 @@ export default function App() {
 
           {/* Real-time Camera Bridge */}
           <div id="camera-viewfinder" className="relative flex-1 bg-transparent overflow-hidden" onTouchStart={onCameraTouchStart} onTouchMove={onCameraTouchMove} onTouchEnd={onCameraTouchEnd}>
-            {isNativeCamera && !nativeCameraReady && (
-              <div aria-hidden="true" className="absolute inset-0 z-30 bg-black" />
-            )}
             {!isNativeCamera && (
               <>
                 <video
