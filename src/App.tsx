@@ -42,7 +42,7 @@ import {
   Square
 } from 'lucide-react';
 import { AutoResizingTextarea } from './components/AutoResizingTextarea';
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react';
 
 function getFormattedLocationText(loc: any, selectedProject: any): string {
   if (!loc) return "Buscando...";
@@ -399,6 +399,8 @@ export default function App() {
   const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
   const [webCameraError, setWebCameraError] = useState<string | null>(null);
   const [nativeCameraError, setNativeCameraError] = useState<string | null>(null);
+  // Evita mostrar el fondo negro mientras Android entrega el primer frame del sensor.
+  const [nativeCameraPreviewReady, setNativeCameraPreviewReady] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -454,6 +456,9 @@ export default function App() {
   const videoRecordingPathRef = useRef<string | null>(null);
   const webCameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const webCameraStreamRef = useRef<MediaStream | null>(null);
+  // Serializa el cierre de una sesión nativa antes de abrir la siguiente para evitar
+  // solapamientos stop/start que provocan un destello al entrar a la cámara.
+  const nativeCameraStopPromiseRef = useRef<Promise<void> | null>(null);
   const isNativeCamera = Capacitor.isNativePlatform();
 
   useEffect(() => {
@@ -518,8 +523,8 @@ export default function App() {
     if (capturingRef.current) return;
     const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
     try {
-      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
-      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
+      // Cambiar el estado dispara el cleanup del efecto de cámara, que detiene
+      // la sesión actual y serializa su cierre antes de iniciar el nuevo lente.
       setCameraFacing(nextFacing);
     } catch (error) {
       console.warn('[Camera] switch facing:', error);
@@ -721,29 +726,50 @@ export default function App() {
 
     document.documentElement.classList.add('native-camera-active');
     setNativeCameraError(null);
+    setNativeCameraPreviewReady(false);
+
+    // Limitar cada operación nativa: ninguna promesa pendiente debe dejar la cámara
+    // bloqueada indefinidamente en la pantalla "Preparando cámara".
+    const withCameraTimeout = <T,>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => reject(new Error(label + '_TIMEOUT')), timeoutMs);
+        operation.then(
+          value => { window.clearTimeout(timeoutId); resolve(value); },
+          error => { window.clearTimeout(timeoutId); reject(error); }
+        );
+      });
 
     (async () => {
       try {
-        const permission = await CameraPreview.checkPermissions({ disableAudio: true });
+        const permission = await withCameraTimeout(
+          CameraPreview.checkPermissions({ disableAudio: true }), 5000, 'CAMERA_PERMISSION_CHECK'
+        );
         let cameraPermission = permission?.camera;
         if (cameraPermission !== 'granted') {
-          const requested = await CameraPreview.requestPermissions({
+          const requested = await withCameraTimeout(CameraPreview.requestPermissions({
             disableAudio: true,
             showSettingsAlert: true,
             title: 'Permiso de cámara',
             message: 'Field Trace necesita la cámara para tomar fotografías de evidencia.'
-          });
+          }), 15000, 'CAMERA_PERMISSION_REQUEST');
           cameraPermission = requested?.camera;
         }
-        if (cameraPermission !== 'granted') {
-          throw new Error('CAMERA_PERMISSION_DENIED');
+        if (cameraPermission !== 'granted') throw new Error('CAMERA_PERMISSION_DENIED');
+        if (!active) return;
+
+        // Esperar el cierre anterior con un límite, evitando que un stop pendiente
+        // impida volver a abrir la cámara.
+        const pendingCameraStop = nativeCameraStopPromiseRef.current;
+        if (pendingCameraStop) {
+          await withCameraTimeout(pendingCameraStop, 4000, 'CAMERA_PREVIOUS_SESSION_STOP');
+          if (nativeCameraStopPromiseRef.current === pendingCameraStop) {
+            nativeCameraStopPromiseRef.current = null;
+          }
         }
+        if (!active) return;
 
-        await CameraPreview.stop({ force: true }).catch(() => {});
-
-        // Preview fotográfico estable. No activamos el modo de video aquí:
-        // la captura de fotos usa CameraPreview.capture().
-        const started = await CameraPreview.start({
+        // Solo start() y el tamaño de vista previa pertenecen al camino crítico.
+        const started = await withCameraTimeout(CameraPreview.start({
           position: cameraFacing,
           toBack: true,
           aspectRatio: '16:9',
@@ -752,41 +778,64 @@ export default function App() {
           disableAudio: true,
           initialZoomLevel: 1,
           rotateWhenOrientationChanged: true
-        });
+        }), 10000, 'CAMERA_START');
 
         if (!active) return;
 
+        if (!active) return;
+
+        console.log('[Camera] native preview started:', started);
+        // La vista previa ya se inició: no esperar la geometría, zoom ni flash para
+        // mostrar la cámara. Aplicar estos ajustes secundarios en segundo plano.
         const previewWidth = Math.max(1, Math.round(window.innerWidth));
         const previewHeight = Math.max(1, Math.round(window.innerHeight));
-        await CameraPreview.setPreviewSize({
+        void CameraPreview.setPreviewSize({
           x: 0,
           y: 0,
           width: previewWidth,
           height: previewHeight
-        }).catch(() => {});
+        }).catch(error => {
+          console.warn('[Camera] preview size deferred:', error);
+        });
+        void CameraPreview.setZoom({ level: cameraZoom }).catch(error => {
+          console.warn('[Camera] initial zoom:', error);
+        });
+        void ensureFlashArmed(flashMode).catch(error => {
+          console.warn('[Camera] initial flash:', error);
+        });
 
-        console.log('[Camera] native preview ready:', started);
-        await CameraPreview.setZoom({ level: cameraZoom });
-        await ensureFlashArmed(flashMode);
+        // Sin pausa artificial: liberar la cortina en cuanto start() confirma
+        // que el complemento inició la vista previa.
+        setNativeCameraPreviewReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
         if (!active) return;
-        console.error('[Camera] start:', error);
+        console.error('[Camera] start failed:', error);
         const name = String(error?.name || '');
         const message = String(error?.message || '');
         const detail = name || message ? ' (' + (name || message) + ')' : '.';
+        const timeoutMessage = message.endsWith('_TIMEOUT')
+          ? 'La cámara tardó demasiado en responder. Pulse REINTENTAR para volver a abrirla.'
+          : null;
         setNativeCameraError(
           message === 'CAMERA_PERMISSION_DENIED'
-            ? 'El permiso de cámara está bloqueado. Permita la cámara para Field Trace y vuelva a intentarlo.'
-            : 'No se pudo iniciar la cámara nativa' + detail
+            ? 'El permiso de cámara está bloqueado. Permita el acceso a la cámara para Field Trace y vuelva a intentarlo.'
+            : timeoutMessage || ('No se pudo iniciar la cámara nativa' + detail)
         );
       }
     })();
 
     return () => {
       active = false;
-      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
-      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
+      // Guardar la promesa inmediatamente permite que una reapertura espere este cierre,
+      // en vez de ejecutar start() mientras la sesión anterior aún se está apagando.
+      nativeCameraStopPromiseRef.current = Promise.resolve()
+        .then(() => CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {}))
+        .then(() => CameraPreview.stop({ force: true }))
+        .then(() => undefined)
+        .catch((error) => {
+          console.warn('[Camera] stop:', error);
+        });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
@@ -797,7 +846,8 @@ export default function App() {
   }, [flashMode, currentStep]);
 
 
-  useEffect(() => {
+  // Aplicar transparencia antes del primer paint de la cámara, no después.
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
     return () => document.documentElement.classList.remove('native-camera-active');
   }, [currentStep]);
@@ -5385,6 +5435,12 @@ export default function App() {
                 {cameraZoom % 1 === 0 ? `${cameraZoom}x` : `${cameraZoom.toFixed(1)}x`}
               </button>
             </div>
+            {isNativeCamera && !nativeCameraPreviewReady && !nativeCameraError && (
+              <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-slate-950 text-white" aria-live="polite">
+                <div className="h-9 w-9 rounded-full border-2 border-white/25 border-t-white animate-spin" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">Preparando cámara…</p>
+              </div>
+            )}
           </div>
 
           {/* Shutter Bar */}
@@ -5404,7 +5460,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => void (isRecordingVideo ? stopVideoRecording() : startVideoRecording())}
-                disabled={videoProcessing}
+                disabled={videoProcessing || (isNativeCamera && !nativeCameraPreviewReady)}
                 className={`w-12 h-12 rounded-full border-2 border-white/80 active:scale-95 transition-all flex items-center justify-center ${isRecordingVideo ? 'bg-red-600 text-white' : 'bg-red-500 text-white'} disabled:opacity-50`}
                 title={isRecordingVideo ? 'DETENER VIDEO' : 'GRABAR VIDEO'}
                 aria-label={isRecordingVideo ? 'DETENER VIDEO' : 'GRABAR VIDEO'}
@@ -5417,7 +5473,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={captureBatchPhoto}
-                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
+                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (isNativeCamera && !nativeCameraPreviewReady) || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
                 className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
                 title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
                 aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
