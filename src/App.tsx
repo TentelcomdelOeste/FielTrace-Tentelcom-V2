@@ -793,6 +793,11 @@ export default function App() {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
 
+        // Configurar el tamaño desde el inicio evita mostrar primero el preview
+        // con dimensiones predeterminadas y redimensionarlo después (flash negro).
+        const previewWidth = Math.max(1, Math.round(window.innerWidth));
+        const previewHeight = Math.max(1, Math.round(window.innerHeight));
+
         // No detener la sesión justo antes de abrirla: ese stop/start provoca
         // el parpadeo negro visible en Android. El cleanup del efecto ya detiene
         // la cámara al salir de la pantalla o cambiar de cámara.
@@ -801,6 +806,10 @@ export default function App() {
         const started = await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
+          x: 0,
+          y: 0,
+          width: previewWidth,
+          height: previewHeight,
           aspectRatio: '16:9',
           aspectMode: 'cover',
           storeToFile: false,
@@ -810,15 +819,6 @@ export default function App() {
         });
 
         if (!active) return;
-
-        const previewWidth = Math.max(1, Math.round(window.innerWidth));
-        const previewHeight = Math.max(1, Math.round(window.innerHeight));
-        await CameraPreview.setPreviewSize({
-          x: 0,
-          y: 0,
-          width: previewWidth,
-          height: previewHeight
-        }).catch(() => {});
 
         console.log('[Camera] native preview ready:', started);
         await CameraPreview.setZoom({ level: cameraZoom });
