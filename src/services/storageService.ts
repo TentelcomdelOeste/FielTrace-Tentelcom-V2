@@ -427,7 +427,23 @@ export const storageService = {
    * primero a Firebase Storage cuando existe una copia local pendiente.
    */
   async syncAllLocalData(): Promise<{ projects: number; evidences: number }> {
-    if (!navigator.onLine || syncInProgress) return { projects: 0, evidences: 0 };
+    if (!navigator.onLine) return { projects: 0, evidences: 0 };
+
+    // Un reintento manual no debe darse por fallido solo porque coincidió con
+    // el ciclo automático de sincronización. Esperar el ciclo activo y ejecutar
+    // uno propio, con límite para no bloquear la interfaz indefinidamente.
+    if (syncInProgress) {
+      const waitStartedAt = Date.now();
+      while (syncInProgress && Date.now() - waitStartedAt < 30000) {
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
+      }
+      if (syncInProgress) {
+        console.warn('[StorageService] Reintento aplazado: la sincronización anterior sigue activa tras 30 s.');
+        return { projects: 0, evidences: 0 };
+      }
+      if (!navigator.onLine) return { projects: 0, evidences: 0 };
+    }
+
     syncInProgress = true;
 
     try {
