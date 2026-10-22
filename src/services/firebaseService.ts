@@ -142,7 +142,19 @@ export const firebaseService = {
     const projectUuid = evidence?.projectUuid || `legacy_project_${evidence?.projectId || 'default'}`;
     const evidenceUuid = evidence?.uuid;
     if (evidenceUuid) {
-      await deleteDoc(doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid));
+      // Tombstone permanente: los dispositivos que estuvieron offline pueden
+      // recibir la eliminación al reconectarse sin volver a subir el registro.
+      await setDoc(doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid), {
+        uuid: evidenceUuid,
+        projectUuid: String(projectUuid),
+        isDeleted: true,
+        deletedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        photoUrl: '',
+        photoStoragePath: '',
+        photoPath: '',
+        syncStatus: 'synced'
+      }, { merge: true });
     }
   },
 
@@ -209,6 +221,12 @@ export const firebaseService = {
       // La nube usa UUID permanentes, no los IDs numéricos locales del dispositivo.
       // projects/{projectUuid}/evidences/{evidenceUuid}
       const docRef = doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid);
+      // No permitir que un dispositivo desconectado resucite una foto eliminada.
+      const existingCloudDoc = await getDoc(docRef);
+      if (existingCloudDoc.exists() && existingCloudDoc.data()?.isDeleted === true) {
+        console.info(`[Firebase] Evidencia ${evidenceUuid} omitida: Firebase registra su eliminación.`);
+        return false;
+      }
 
       // Copia limpia sin objetos binarios ni datos pesados de foto
       const cloudPayload = {
@@ -393,7 +411,9 @@ export const firebaseService = {
     const uid = await ensureAuthenticated();
     if (!uid) throw new Error('No fue posible autenticar la sesión anónima.');
     const snapshot = await getDocs(collection(db, 'projects', String(projectUuid), 'evidences'));
-    return snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+    return snapshot.docs
+      .map(item => ({ ...item.data(), uuid: item.data().uuid || item.id }))
+      .filter(item => item.isDeleted !== true);
   },
 
   /**
