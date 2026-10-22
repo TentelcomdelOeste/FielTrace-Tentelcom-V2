@@ -7851,7 +7851,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -7886,7 +7886,7 @@ export default function App() {
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'ALTAS', groupId: altaId, groupNumber: altaNumber, groupName: altaType, photoNumber: missingSide === 'panoramic' ? 1 : 2, groupItem: group[0] }, 'PANORÁMICA / METRAJE')}</div>
                             )}
                           </div>
                         </div>
@@ -7950,7 +7950,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -7970,7 +7970,7 @@ export default function App() {
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'ACEROS', groupId: aceroId, groupNumber: aceroNumber, photoNumber: missingSide === 'photo1' ? 1 : 2, groupItem: group[0] }, 'PANORÁMICA / METRAJE')}</div>
                             )}
                           </div>
                         </div>
@@ -8033,7 +8033,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -8060,7 +8060,7 @@ export default function App() {
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'DESECHOS', groupId: desechoId, groupNumber: desechoNumber, photoNumber: missingSide === 'photo1' ? 1 : 2, groupItem: group[0] }, 'PANORÁMICA / METRAJE')}</div>
                             )}
                           </div>
                         </div>
@@ -8131,7 +8131,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -8151,7 +8151,7 @@ export default function App() {
                                 <CameraIcon className="w-8 h-8" />
                                 <span className="text-[9px] font-black uppercase text-center px-2">                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'MEJORAS', groupId: mejoraId, groupNumber: mejoraNumber, groupName: mejoraType, photoNumber: missingSide === 'before' ? 1 : 2, groupItem: group[0] }, 'ANTES / DESPUÉS')}</div>
                             )}
                           </div>
                         </div>
