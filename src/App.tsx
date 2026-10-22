@@ -269,7 +269,7 @@ const EvidencePhoto = memo(({
     }
 
     return () => { active = false; };
-  }, [src, useThumbnail, evidence?.thumbnailUrl, evidence?.photoPath, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+  }, [src, evidence?.photoPath, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
