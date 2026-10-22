@@ -236,22 +236,23 @@ import { firebaseService, auth, db } from './services/firebaseService';
  * No vuelve a subir ni elimina fotografías.
  */
 const EvidencePhoto = memo(({
-  evidence, src, alt, className, loading = 'lazy'
+  evidence, src, alt, className, loading = 'lazy', useThumbnail = false
 }: {
   evidence: any;
   src?: string | null;
   alt: string;
   className?: string;
   loading?: 'eager' | 'lazy';
+  useThumbnail?: boolean;
 }) => {
-  const getInitialSrc = () => String(src || evidence?.photoUrl || evidence?.photo?.uri || evidence?.photo?.url || '').trim();
+  const getInitialSrc = () => String((useThumbnail && evidence?.thumbnailUrl) || src || evidence?.photoUrl || evidence?.photo?.uri || evidence?.photo?.url || '').trim();
   const [imageSrc, setImageSrc] = useState<string>(getInitialSrc);
   const [retried, setRetried] = useState(false);
 
   useEffect(() => {
     setImageSrc(getInitialSrc());
     setRetried(false);
-  }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+  }, [src, useThumbnail, evidence?.thumbnailUrl, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
@@ -4143,7 +4144,7 @@ export default function App() {
                                             className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left"
                                           >
                                             {imageUrl ? (
-                                              <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
+                                              <EvidencePhoto useThumbnail evidence={ev} src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
                                             ) : (
                                               <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-slate-300 uppercase p-2 text-center">
                                                 <CameraIcon className="w-5 h-5 mb-1 text-slate-300" />
@@ -7516,7 +7517,7 @@ export default function App() {
                                     className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                                   >
                                     <div className="aspect-[4/5] bg-black overflow-hidden">
-                                      <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.napName || 'NAP'} className="w-full h-full object-cover" loading="lazy" />
+                                      <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.napName || 'NAP'} className="w-full h-full object-cover" loading="lazy" />
                                     </div>
                                     <div className="p-2.5 lg:p-2">
                                       <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7631,7 +7632,7 @@ export default function App() {
                                 className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                               >
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7730,7 +7731,7 @@ export default function App() {
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7813,7 +7814,7 @@ export default function App() {
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7911,7 +7912,7 @@ export default function App() {
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7995,7 +7996,7 @@ export default function App() {
                               className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                             >
                               <div className="aspect-[4/5] bg-black overflow-hidden">
-                                <EvidencePhoto
+                                <EvidencePhoto useThumbnail
                                   evidence={ev}
                                   src={ev.photoUrl || ev.photo?.uri || ev.photo?.url}
                                   alt={side === 'initial' ? 'Punta inicial' : 'Punta final'}
@@ -8126,7 +8127,7 @@ export default function App() {
                                     className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                                   >
                                     <div className="aspect-[4/5] bg-black overflow-hidden">
-                                      <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.mufaName || 'MUFA'} className="w-full h-full object-cover" loading="lazy" />
+                                      <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.mufaName || 'MUFA'} className="w-full h-full object-cover" loading="lazy" />
                                     </div>
                                     <div className="p-2.5 lg:p-2">
                                       <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -8183,7 +8184,7 @@ export default function App() {
                       .map((ev: any, index: number) => (
                         <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                           <div className="aspect-[4/5] bg-black overflow-hidden">
-                            <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                            <EvidencePhoto useThumbnail evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                           </div>
                           <div className="p-2.5 lg:p-2">
                             <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight truncate">{ev.categoryLabel || 'Otros'}</p>
