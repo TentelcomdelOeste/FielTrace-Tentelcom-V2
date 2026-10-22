@@ -793,8 +793,9 @@ export default function App() {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
 
-        await CameraPreview.stop({ force: true }).catch(() => {});
-
+        // No detener la sesión justo antes de abrirla: ese stop/start provoca
+        // el parpadeo negro visible en Android. El cleanup del efecto ya detiene
+        // la cámara al salir de la pantalla o cambiar de cámara.
         // Preview fotográfico estable. No activamos el modo de video aquí:
         // la captura de fotos usa CameraPreview.capture().
         const started = await CameraPreview.start({
@@ -3085,56 +3086,11 @@ export default function App() {
       };
 
       if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
-        const capturedSlots = new Set<number>(
-          evidences
-            .filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
-            .map(ev => Number(ev.napPhotoNumber))
-            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
-        );
-        for (const key of pendingSetCaptureKeysRef.current) {
-          const match = key.match(/^NAPS\|(.+)\|(\d+)$/);
-          if (match && match[1] === napCaptureDraft.napId) capturedSlots.add(Number(match[2]));
-        }
-        capturedSlots.add(napCaptureDraft.photoNumber);
-        const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
-          .find(n => !capturedSlots.has(n));
-        const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
-        napCaptureInFlightRef.current = false;
-        if (!nextPhotoNumber || remainingPhotos <= 0 || napCaptureDraft.photoNumber >= 9) {
-          setNapCaptureDraft(null);
-          setShowNapCaptureModal(false);
-          setCurrentStep('history');
-        } else {
-          setNapCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos } : prev);
-        }
+        // No avanzar el contador todavía. La posición solo se confirma después
+        // de que la foto y sus metadatos se hayan guardado en IndexedDB.
       } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
-        const capturedSlots = new Set<number>(
-          evidences
-            .filter(ev => ev.category === 'MUFA' && (
-              (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
-              (!ev.mufaId &&
-                Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
-                String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
-            ))
-            .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
-            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
-        );
-        for (const key of pendingSetCaptureKeysRef.current) {
-          const match = key.match(/^MUFA\|(.+)\|(\d+)$/);
-          if (match && match[1] === mufaCaptureDraft.mufaId) capturedSlots.add(Number(match[2]));
-        }
-        capturedSlots.add(mufaCaptureDraft.photoNumber);
-        const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
-          .find(n => !capturedSlots.has(n));
-        const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
-        mufaCaptureInFlightRef.current = false;
-        if (!nextPhotoNumber || remainingPhotos <= 0 || mufaCaptureDraft.photoNumber >= 9) {
-          setMufaCaptureDraft(null);
-          setShowMufaCaptureModal(false);
-          setCurrentStep('history');
-        } else {
-          setMufaCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos } : prev);
-        }
+        // No avanzar el contador todavía. La posición solo se confirma después
+        // de que la foto y sus metadatos se hayan guardado en IndexedDB.
       } else if (
         selectedEvidenceCategory.id === 'RESERVA' ||
         selectedEvidenceCategory.id === 'ALTAS' ||
@@ -3208,6 +3164,54 @@ export default function App() {
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
           setEvidences(evs);
 
+          // La posición se avanza únicamente después de confirmar la persistencia.
+          // Esto evita saltos de FOTO 4 a FOTO 6 y que la lista se quede atrás si
+          // varias lecturas asíncronas de IndexedDB terminan fuera de orden.
+          if (captureLockKey) pendingSetCaptureKeysRef.current.delete(captureLockKey);
+          if (isNapCapture && napCaptureDraft) {
+            const capturedSlots = new Set(
+              evs.filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
+                .map(ev => Number(ev.napPhotoNumber))
+                .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+            );
+            const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1).find(n => !capturedSlots.has(n));
+            const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
+            napCaptureInFlightRef.current = false;
+            if (!nextPhotoNumber || remainingPhotos <= 0) {
+              setNapCaptureDraft(null);
+              setShowNapCaptureModal(false);
+              setCurrentStep('history');
+            } else {
+              setNapCaptureDraft(prev => prev && prev.napId === napCaptureDraft.napId
+                ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos }
+                : prev);
+            }
+          }
+          if (isMufaCapture && mufaCaptureDraft) {
+            const capturedSlots = new Set(
+              evs.filter(ev => ev.category === 'MUFA' && (
+                (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
+                (!ev.mufaId &&
+                  Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
+                  String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
+              ))
+                .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+                .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+            );
+            const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1).find(n => !capturedSlots.has(n));
+            const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
+            mufaCaptureInFlightRef.current = false;
+            if (!nextPhotoNumber || remainingPhotos <= 0) {
+              setMufaCaptureDraft(null);
+              setShowMufaCaptureModal(false);
+              setCurrentStep('history');
+            } else {
+              setMufaCaptureDraft(prev => prev && prev.mufaId === mufaCaptureDraft.mufaId
+                ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos }
+                : prev);
+            }
+          }
+
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
           alert('No se pudo guardar una fotografía. La captura no se registró; vuelva a entrar en la sección para reintentar la posición pendiente.');
@@ -3218,6 +3222,10 @@ export default function App() {
           if (captureLockKey && !capturePersisted) {
             pendingSetCaptureKeysRef.current.delete(captureLockKey);
           }
+          // Liberar el bloqueo de NAPS/MUFA solo cuando terminó el guardado
+          // (o falló), no inmediatamente después del disparo físico.
+          if (isNapCapture) napCaptureInFlightRef.current = false;
+          if (isMufaCapture) mufaCaptureInFlightRef.current = false;
           if (captureLockKey && activeSetCaptureLockRef.current === captureLockKey) {
             activeSetCaptureLockRef.current = null;
           }
