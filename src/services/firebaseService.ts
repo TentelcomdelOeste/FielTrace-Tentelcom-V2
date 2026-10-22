@@ -375,12 +375,12 @@ export const firebaseService = {
   },
 
   /** Suscripción en tiempo real: cambios, sustituciones y eliminaciones se propagan a los dispositivos conectados. */
-  subscribeCloudProjectEvidences(projectUuid: string, onChange: (evidences: any[]) => void, onError?: (error: Error) => void): () => void {
+  subscribeCloudProjectEvidences(projectUuid: string, onChange: (evidences: any[], fromCache: boolean) => void, onError?: (error: Error) => void): () => void {
     const projectId = String(projectUuid || '').trim();
     if (!projectId) return () => {};
     return onSnapshot(
       collection(db, 'projects', projectId, 'evidences'),
-      snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))),
+      snapshot => onChange(snapshot.docs.map(item => ({ ...item.data(), uuid: item.data().uuid || item.id })), snapshot.metadata.fromCache),
       error => {
         console.error('[Firebase] Suscripción de evidencias interrumpida:', error);
         onError?.(error);
