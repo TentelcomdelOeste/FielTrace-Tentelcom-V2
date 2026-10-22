@@ -1441,8 +1441,8 @@ export default function App() {
         PUNTAS_FIBRA_FINAL: 'fiberPairId', RESERVA: 'reserveId', ACEROS: 'aceroId', DESECHOS: 'desechoId',
         ALTAS: 'altaId', MEJORAS: 'mejoraId'
       };
-      const numberField = numberFields[category];
-      const idField = idFields[category];
+      const numberField = numberFields[category] || '';
+      const idField = idFields[category] || '';
       const groupNumber = Number(slot.groupNumber ?? seed[numberField] ?? 0);
       const groupName = String(slot.groupName ?? seed.napName ?? seed.mufaName ?? seed.altaType ?? seed.mejoraType ?? seed.categoryLabel ?? '').trim();
       const actualGroupId = String(seed[idField] || existing?.[idField] || '').trim();
