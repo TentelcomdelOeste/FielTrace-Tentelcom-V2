@@ -27,6 +27,32 @@ export const db = getFirestore(app, firebaseConfigData.firestoreDatabaseId || '(
 const auth = getAuth(app);
 const storage = getStorage(app);
 
+/** Crea una miniatura WebP para listados sin alterar la fotografía original. */
+async function createEvidenceThumbnail(blob: Blob): Promise<Blob | null> {
+  try {
+    if (typeof createImageBitmap !== 'function') return null;
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const maxDimension = 320;
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      return await new Promise<Blob | null>(resolve => {
+        canvas.toBlob(result => resolve(result), 'image/webp', 0.65);
+      });
+    } finally {
+      bitmap.close();
+    }
+  } catch (error) {
+    console.warn('[Firebase Storage] No se pudo generar la miniatura; se conservará la fotografía original:', error);
+    return null;
+  }
+}
+
 // La identidad debe proceder de una cuenta autorizada; no crear sesiones anónimas.
 // Esperamos a que Firebase restaure su estado persistido antes de decidir si existe sesión.
 let authenticationPromise: Promise<string | null> | null = null;
@@ -56,7 +82,7 @@ export { auth };
 
 export const firebaseService = {
   /** Sube la fotografía original a Firebase Storage y devuelve su URL pública/autenticada. */
-  async uploadEvidencePhoto(image: string | Blob, projectUuid: string, evidenceUuid: string, fileName: string): Promise<{ storagePath: string; downloadUrl: string }> {
+  async uploadEvidencePhoto(image: string | Blob, projectUuid: string, evidenceUuid: string, fileName: string): Promise<{ storagePath: string; downloadUrl: string; thumbnailStoragePath?: string; thumbnailUrl?: string }> {
     if (!image) throw new Error('No hay imagen para subir.');
     const uid = await ensureAuthenticated();
     if (!uid) throw new Error('No fue posible autenticar la sesión para subir la fotografía.');
@@ -72,8 +98,30 @@ export const firebaseService = {
     const storageRef = ref(storage, storagePath);
     await uploadBytes(storageRef, blob, { contentType: blob.type || 'image/jpeg', cacheControl: 'public,max-age=31536000,immutable' });
     const downloadUrl = await getDownloadURL(storageRef);
+
+    // La miniatura es independiente. Si su generación falla, la foto original
+    // sigue guardándose normalmente y la interfaz utiliza el fallback existente.
+    let thumbnailStoragePath: string | undefined;
+    let thumbnailUrl: string | undefined;
+    const thumbnailBlob = await createEvidenceThumbnail(blob);
+    if (thumbnailBlob) {
+      try {
+        thumbnailStoragePath = `projects/${projectUuid}/evidences/${evidenceUuid}/thumb_${safeName}.webp`;
+        const thumbnailRef = ref(storage, thumbnailStoragePath);
+        await uploadBytes(thumbnailRef, thumbnailBlob, {
+          contentType: 'image/webp',
+          cacheControl: 'public,max-age=31536000,immutable'
+        });
+        thumbnailUrl = await getDownloadURL(thumbnailRef);
+      } catch (thumbnailError) {
+        thumbnailStoragePath = undefined;
+        thumbnailUrl = undefined;
+        console.warn('[Firebase Storage] No se pudo subir la miniatura; la foto original está guardada:', thumbnailError);
+      }
+    }
+
     console.log(`[Firebase Storage] ✓ Fotografía ${evidenceUuid} subida: ${storagePath}`);
-    return { storagePath, downloadUrl };
+    return { storagePath, downloadUrl, thumbnailStoragePath, thumbnailUrl };
   },
 
   isOnline(): boolean {
@@ -137,6 +185,14 @@ export const firebaseService = {
     // existe en la referencia consultada.
     if (!storageDeleted && lastStorageError && lastStorageError?.code !== 'storage/object-not-found') {
       throw lastStorageError;
+    }
+
+    if (evidence?.thumbnailStoragePath) {
+      try {
+        await deleteObject(ref(storage, String(evidence.thumbnailStoragePath)));
+      } catch (thumbnailError: any) {
+        if (thumbnailError?.code !== 'storage/object-not-found') throw thumbnailError;
+      }
     }
 
     const projectUuid = evidence?.projectUuid || `legacy_project_${evidence?.projectId || 'default'}`;
@@ -220,6 +276,8 @@ export const firebaseService = {
         photoPath: evidence.photoPath || '',
         photoStoragePath: evidence.photoStoragePath || '',
         photoUrl: verifiedPhotoUrl || evidence.photoUrl || '',
+        thumbnailStoragePath: evidence.thumbnailStoragePath || '',
+        thumbnailUrl: evidence.thumbnailUrl || '',
 
         category: evidence.category || 'OTROS',
         categoryLabel: evidence.categoryLabel || 'Otros',
@@ -346,6 +404,13 @@ export const firebaseService = {
       if (evidence?.photoStoragePath) {
         try {
           await deleteObject(ref(storage, evidence.photoStoragePath));
+        } catch (error: any) {
+          if (error?.code !== 'storage/object-not-found') throw error;
+        }
+      }
+      if (evidence?.thumbnailStoragePath) {
+        try {
+          await deleteObject(ref(storage, evidence.thumbnailStoragePath));
         } catch (error: any) {
           if (error?.code !== 'storage/object-not-found') throw error;
         }

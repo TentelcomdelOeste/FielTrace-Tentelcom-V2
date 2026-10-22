@@ -334,6 +334,8 @@ export const storageService = {
 
         evidenceToSave.photoStoragePath = remote.storagePath;
         evidenceToSave.photoUrl = remote.downloadUrl;
+        evidenceToSave.thumbnailStoragePath = remote.thumbnailStoragePath;
+        evidenceToSave.thumbnailUrl = remote.thumbnailUrl;
         await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
       } catch (uploadError) {
         console.warn('[StorageService] Foto pendiente de subida a Firebase Storage:', uploadError);
@@ -354,10 +356,9 @@ export const storageService = {
             await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
           }
 
-          // La copia local solo se elimina después de confirmar Firestore.
-          if (evidenceToSave.photoUrl && evidenceToSave.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidenceToSave.photoPath);
-          }
+          // Conservamos la copia local como respaldo de lectura y reintento.
+          // Una URL puede existir aunque Storage devuelva 402 por facturación; no
+          // borrar el único respaldo hasta que la foto se pueda abrir de verdad.
         } else {
           evidenceToSave.syncStatus = 'pending';
           evidenceToSave.syncError = 'La fotografía o sus metadatos todavía no se han confirmado en Firebase.';
@@ -505,6 +506,10 @@ export const storageService = {
                 evidenceForCloud.photoUrl = remote.downloadUrl;
                 evidence.photoStoragePath = remote.storagePath;
                 evidence.photoUrl = remote.downloadUrl;
+                evidenceForCloud.thumbnailStoragePath = remote.thumbnailStoragePath;
+                evidenceForCloud.thumbnailUrl = remote.thumbnailUrl;
+                evidence.thumbnailStoragePath = remote.thumbnailStoragePath;
+                evidence.thumbnailUrl = remote.thumbnailUrl;
                 await manager.put(STORE_EVIDENCES, evidence);
               } catch (uploadError) {
                 console.warn('[StorageService] Reintento de foto fallido:', uploadError);
@@ -522,12 +527,13 @@ export const storageService = {
           evidence.syncError = undefined;
           evidence.photoStoragePath = evidenceForCloud.photoStoragePath || evidence.photoStoragePath;
           evidence.photoUrl = evidenceForCloud.photoUrl || evidence.photoUrl;
+          evidence.thumbnailStoragePath = evidenceForCloud.thumbnailStoragePath || evidence.thumbnailStoragePath;
+          evidence.thumbnailUrl = evidenceForCloud.thumbnailUrl || evidence.thumbnailUrl;
           evidence.retryCount = 0;
           evidence.syncSchemaVersion = CURRENT_SYNC_SCHEMA_VERSION;
           if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
-          if (evidence.photoUrl && evidence.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidence.photoPath);
-          }
+          // Mantener STORE_PHOTOS permite abrir la evidencia sin depender de
+          // Storage cuando la facturación o la conexión impiden descargarla.
           evidencesSynced++;
         } else {
           evidence.syncStatus = 'failed';
