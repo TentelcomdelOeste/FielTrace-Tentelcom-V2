@@ -793,35 +793,32 @@ export default function App() {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
 
-        await CameraPreview.stop({ force: true }).catch(() => {});
-
-        // Preview fotográfico estable. No activamos el modo de video aquí:
-        // la captura de fotos usa CameraPreview.capture().
+        // No detenemos/reiniciamos una sesión al entrar a la pantalla.
+        // El cleanup del efecto anterior es el responsable de cerrarla.
+        // Establecer dimensiones dentro de start evita redimensionar la superficie
+        // nativa después del primer frame, lo que podía generar un segundo flash.
+        const previewWidth = Math.max(1, Math.round(window.innerWidth));
+        const previewHeight = Math.max(1, Math.round(window.innerHeight));
         const started = await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
-          aspectRatio: '16:9',
+          x: 0,
+          y: 0,
+          width: previewWidth,
+          height: previewHeight,
           aspectMode: 'cover',
           storeToFile: false,
           disableAudio: true,
-          initialZoomLevel: 1,
+          initialZoomLevel: cameraZoom,
           rotateWhenOrientationChanged: true
         });
 
         if (!active) return;
 
-        const previewWidth = Math.max(1, Math.round(window.innerWidth));
-        const previewHeight = Math.max(1, Math.round(window.innerHeight));
-        await CameraPreview.setPreviewSize({
-          x: 0,
-          y: 0,
-          width: previewWidth,
-          height: previewHeight
-        }).catch(() => {});
-
         console.log('[Camera] native preview ready:', started);
-        await CameraPreview.setZoom({ level: cameraZoom });
-        await ensureFlashArmed(flashMode);
+        // El flash apagado es el estado predeterminado; no reconfiguramos CameraX
+        // innecesariamente al abrir la cámara.
+        if (flashMode === 'on') await ensureFlashArmed('on');
         setNativeCameraError(null);
       } catch (error: any) {
         if (!active) return;
@@ -844,12 +841,6 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
-
-  useEffect(() => {
-    if (currentStep !== 'camera') return;
-    void ensureFlashArmed(flashMode);
-  }, [flashMode, currentStep]);
-
 
   useEffect(() => {
     document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
