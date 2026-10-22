@@ -277,25 +277,29 @@ const EvidencePhoto = memo(({
   const recoverImage = async () => {
     if (retried) return;
     setRetried(true);
-    const storagePath = String(evidence?.photoStoragePath || '').trim();
-    if (storagePath) {
-      try {
-        const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
-        if (freshUrl && freshUrl !== imageSrc) {
-          setImageSrc(freshUrl);
-          return;
-        }
-      } catch (error) {
-        console.warn('[EvidencePhoto] No se pudo renovar la URL de Storage:', error);
-      }
-    }
+
+    // Preferir la copia local al fallar la URL remota: Storage puede responder
+    // con error de facturación aunque la referencia de descarga exista.
     const photoPath = String(evidence?.photoPath || '').trim();
     if (photoPath) {
       try {
         const localUrl = await storageService.getPhotoBlob(photoPath);
-        if (localUrl) setImageSrc(localUrl);
+        if (localUrl) {
+          setImageSrc(localUrl);
+          return;
+        }
       } catch (error) {
         console.warn('[EvidencePhoto] No se pudo recuperar la copia local:', error);
+      }
+    }
+
+    const storagePath = String(evidence?.photoStoragePath || '').trim();
+    if (storagePath) {
+      try {
+        const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+        if (freshUrl && freshUrl !== imageSrc) setImageSrc(freshUrl);
+      } catch (error) {
+        console.warn('[EvidencePhoto] No se pudo renovar la URL de Storage:', error);
       }
     }
   };
