@@ -7,7 +7,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL, getBytes, deleteObject } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
@@ -142,7 +142,19 @@ export const firebaseService = {
     const projectUuid = evidence?.projectUuid || `legacy_project_${evidence?.projectId || 'default'}`;
     const evidenceUuid = evidence?.uuid;
     if (evidenceUuid) {
-      await deleteDoc(doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid));
+      // Tombstone permanente: los dispositivos que estuvieron offline pueden
+      // recibir la eliminación al reconectarse sin volver a subir el registro.
+      await setDoc(doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid), {
+        uuid: evidenceUuid,
+        projectUuid: String(projectUuid),
+        isDeleted: true,
+        deletedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        photoUrl: '',
+        photoStoragePath: '',
+        photoPath: '',
+        syncStatus: 'synced'
+      }, { merge: true });
     }
   },
 
@@ -209,6 +221,12 @@ export const firebaseService = {
       // La nube usa UUID permanentes, no los IDs numéricos locales del dispositivo.
       // projects/{projectUuid}/evidences/{evidenceUuid}
       const docRef = doc(db, 'projects', String(projectUuid), 'evidences', evidenceUuid);
+      // No permitir que un dispositivo desconectado resucite una foto eliminada.
+      const existingCloudDoc = await getDoc(docRef);
+      if (existingCloudDoc.exists() && existingCloudDoc.data()?.isDeleted === true) {
+        console.info(`[Firebase] Evidencia ${evidenceUuid} omitida: Firebase registra su eliminación.`);
+        return false;
+      }
 
       // Copia limpia sin objetos binarios ni datos pesados de foto
       const cloudPayload = {
@@ -374,12 +392,28 @@ export const firebaseService = {
       });
   },
 
+  /** Suscripción en tiempo real: cambios, sustituciones y eliminaciones se propagan a los dispositivos conectados. */
+  subscribeCloudProjectEvidences(projectUuid: string, onChange: (evidences: any[], fromCache: boolean) => void, onError?: (error: Error) => void): () => void {
+    const projectId = String(projectUuid || '').trim();
+    if (!projectId) return () => {};
+    return onSnapshot(
+      collection(db, 'projects', projectId, 'evidences'),
+      snapshot => onChange(snapshot.docs.map(item => ({ ...item.data(), uuid: item.data().uuid || item.id })), snapshot.metadata.fromCache),
+      error => {
+        console.error('[Firebase] Suscripción de evidencias interrumpida:', error);
+        onError?.(error);
+      }
+    );
+  },
+
   /** Obtiene todas las evidencias de un proyecto compartido desde Firestore. */
   async getCloudProjectEvidences(projectUuid: string): Promise<any[]> {
     const uid = await ensureAuthenticated();
     if (!uid) throw new Error('No fue posible autenticar la sesión anónima.');
     const snapshot = await getDocs(collection(db, 'projects', String(projectUuid), 'evidences'));
-    return snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+    return snapshot.docs
+      .map(item => ({ ...item.data(), uuid: item.data().uuid || item.id }))
+      .filter(item => item.isDeleted !== true);
   },
 
   /**
@@ -446,15 +480,22 @@ export const firebaseService = {
 
       await setDoc(docRef, projectPayload, { merge: true });
 
-      // Confirmación de lectura para que el estado local "synced" solo se
-      // establezca después de comprobar que el proyecto existe en Firestore.
+      // Confirmar que el documento remoto contiene los datos esenciales que
+      // otra sesión consulta en "Proyectos compartidos", no solo que existe.
       const confirmation = await getDoc(docRef);
       if (!confirmation.exists()) {
         console.error(`[Firebase] ✗ Firestore no confirmó el proyecto ${projectUuid}.`);
         return false;
       }
+      const confirmedData = confirmation.data();
+      if (String(confirmedData.uuid || confirmation.id) !== String(projectUuid) ||
+          String(confirmedData.name || '') !== String(projectPayload.name) ||
+          String(confirmedData.client || '') !== String(projectPayload.client)) {
+        console.error(`[Firebase] ✗ El documento ${projectUuid} no contiene los metadatos recién sincronizados.`);
+        return false;
+      }
 
-      console.log(`[Firebase] ✓ Proyecto ${projectUuid} confirmado en Firestore.`);
+      console.log(`[Firebase] ✓ Proyecto ${projectUuid} confirmado en Firestore para consulta compartida.`);
       return true;
     } catch (e) {
       console.error('[Firebase] Error sincronizando proyecto:', e);

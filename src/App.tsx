@@ -42,7 +42,7 @@ import {
   Square
 } from 'lucide-react';
 import { AutoResizingTextarea } from './components/AutoResizingTextarea';
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react';
 
 function getFormattedLocationText(loc: any, selectedProject: any): string {
   if (!loc) return "Buscando...";
@@ -235,6 +235,20 @@ import { firebaseService, auth, db } from './services/firebaseService';
  * Primero renueva la URL usando el path de Storage y luego intenta la copia local.
  * No vuelve a subir ni elimina fotografías.
  */
+const getMemoryPhotoSlotNumber = (ev: any, category: string): number => {
+  switch (category) {
+    case 'NAPS': return Number(ev?.napPhotoNumber ?? ev?.photoNumber ?? 0);
+    case 'MUFA': return Number(ev?.mufaPhotoNumber ?? ev?.photoNumber ?? 0);
+    case 'PUNTAS_FIBRA': return ev?.fiberSide === 'initial' || ev?.category === 'PUNTAS_FIBRA_INICIAL' ? 1 : ev?.fiberSide === 'final' || ev?.category === 'PUNTAS_FIBRA_FINAL' ? 2 : 0;
+    case 'RESERVA': return ev?.reserveSide === 'initial' ? 1 : ev?.reserveSide === 'final' ? 2 : ev?.reserveSide === 'roll' ? 3 : 0;
+    case 'ACEROS': return ev?.aceroSide === 'photo1' ? 1 : ev?.aceroSide === 'photo2' ? 2 : 0;
+    case 'DESECHOS': return ev?.desechoSide === 'photo1' ? 1 : ev?.desechoSide === 'photo2' ? 2 : 0;
+    case 'ALTAS': return ev?.altaSide === 'panoramic' ? 1 : ev?.altaSide === 'meterage' ? 2 : 0;
+    case 'MEJORAS': return ev?.mejoraSide === 'before' ? 1 : ev?.mejoraSide === 'after' ? 2 : 0;
+    default: return 0;
+  }
+};
+
 const EvidencePhoto = memo(({
   evidence, src, alt, className, loading = 'lazy'
 }: {
@@ -247,40 +261,94 @@ const EvidencePhoto = memo(({
   const getInitialSrc = () => String(src || evidence?.photoUrl || evidence?.photo?.uri || evidence?.photo?.url || '').trim();
   const [imageSrc, setImageSrc] = useState<string>(getInitialSrc);
   const [retried, setRetried] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
-    setImageSrc(getInitialSrc());
+    let active = true;
+    let localObjectUrl: string | null = null;
+    const initial = getInitialSrc();
+    setImageSrc(initial);
     setRetried(false);
-  }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+    setImageFailed(false);
+    if (!initial && evidence?.photoPath) {
+      void storageService.getPhotoBlob(String(evidence.photoPath)).then(localUrl => {
+        if (!active || !localUrl) return;
+        localObjectUrl = localUrl.startsWith('blob:') ? localUrl : null;
+        setImageSrc(localUrl);
+        setImageFailed(false);
+      }).catch(error => console.warn('[EvidencePhoto] No se pudo cargar la copia local:', error));
+    }
+    return () => {
+      active = false;
+      if (localObjectUrl) URL.revokeObjectURL(localObjectUrl);
+    };
+  }, [src, evidence?.photoPath, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
     setRetried(true);
+    // Prioridad 1: copia local persistida. Una URL file:// antigua o una URL
+    // de Storage todavía no disponible no debe ocultar la fotografía capturada.
+    const photoPath = String(evidence?.photoPath || '').trim();
+    if (photoPath) {
+      try {
+        const localUrl = await storageService.getPhotoBlob(photoPath);
+        if (localUrl) {
+          setImageSrc(localUrl);
+          setImageFailed(false);
+          return;
+        }
+      } catch (error) {
+        console.warn('[EvidencePhoto] No se pudo recuperar la copia local:', error);
+      }
+    }
+    // Prioridad 2: renovar URL remota solo si no existe una copia local disponible.
     const storagePath = String(evidence?.photoStoragePath || '').trim();
     if (storagePath) {
       try {
         const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
-        if (freshUrl && freshUrl !== imageSrc) {
+        if (freshUrl) {
           setImageSrc(freshUrl);
+          setImageFailed(false);
           return;
         }
       } catch (error) {
         console.warn('[EvidencePhoto] No se pudo renovar la URL de Storage:', error);
       }
     }
-    const photoPath = String(evidence?.photoPath || '').trim();
-    if (photoPath) {
-      try {
-        const localUrl = await storageService.getPhotoBlob(photoPath);
-        if (localUrl) setImageSrc(localUrl);
-      } catch (error) {
-        console.warn('[EvidencePhoto] No se pudo recuperar la copia local:', error);
-      }
-    }
+    setImageFailed(true);
   };
 
-  if (!imageSrc) return <div className={className} role="img" aria-label={alt} />;
-  return <img src={imageSrc} alt={alt} className={className} loading={loading} onError={() => { void recoverImage(); }} />;
+  if (!imageSrc || imageFailed) {
+    return (
+      <div className={className + ' bg-black/70 flex flex-col items-center justify-center gap-1 text-center text-white/80 p-2'} role="img" aria-label={alt}>
+        <CameraIcon className="w-5 h-5 opacity-60" />
+        <span className="text-[8px] font-bold uppercase">{imageFailed ? 'FOTO NO DISPONIBLE' : 'CARGANDO FOTO'}</span>
+        {imageFailed && <button type="button" className="text-[8px] underline font-black" onClick={async (event) => {
+          event.stopPropagation();
+          setRetried(true);
+          setImageFailed(false);
+          try {
+            const storagePath = String(evidence?.photoStoragePath || '').trim();
+            if (storagePath) {
+              const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+              if (freshUrl) { setImageSrc(freshUrl); return; }
+            }
+            const photoPath = String(evidence?.photoPath || '').trim();
+            if (photoPath) {
+              const localUrl = await storageService.getPhotoBlob(photoPath);
+              if (localUrl) { setImageSrc(localUrl); return; }
+            }
+          } catch (error) { console.warn('[EvidencePhoto] Reintento manual fallido:', error); }
+          setImageFailed(true);
+        }}>REINTENTAR</button>}
+      </div>
+    );
+  }
+  return <img src={imageSrc} alt={alt} className={className} loading={loading} onError={() => {
+    if (retried) setImageFailed(true);
+    else void recoverImage();
+  }} />;
 });
 
 import { signOut } from 'firebase/auth';
@@ -361,6 +429,12 @@ export default function App() {
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
   const [evidenceCategory, setEvidenceCategory] = useState<EvidenceCategory | null>(null);
+  const [isExtraPhotoMode, setIsExtraPhotoMode] = useState(false);
+  useEffect(() => {
+    if (evidenceCategory !== 'EXTRAS') setIsExtraPhotoMode(false);
+  }, [evidenceCategory]);
+  const [projectRefreshLoading, setProjectRefreshLoading] = useState(false);
+  const [projectRefreshMessage, setProjectRefreshMessage] = useState('');
   const [fiberCaptureDraft, setFiberCaptureDraft] = useState<{
     side: 'initial' | 'final';
     pairId: string;
@@ -482,9 +556,14 @@ export default function App() {
   const [showEvidenceList, setShowEvidenceList] = useState(false);
   const [showStorageEvidenceViewer, setShowStorageEvidenceViewer] = useState(false);
   const [storageEvidenceCategory, setStorageEvidenceCategory] = useState<EvidenceCategory | null>(null);
-  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<{ category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number } | null>(null);
+  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<any | null>(null);
   const memoryUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [memoryUploadLoading, setMemoryUploadLoading] = useState(false);
+  const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<any | null>(null);
+  const [memoryDeleteLoading, setMemoryDeleteLoading] = useState(false);
+  const [pendingProjectPhotoUpload, setPendingProjectPhotoUpload] = useState<any>(null);
+  const projectPhotoUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [projectPhotoUploadLoading, setProjectPhotoUploadLoading] = useState(false);
   const [showQuickConfig, setShowQuickConfig] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'project' | 'field' | 'evidence', id?: number, index?: number } | null>(null);
   const [confirmClearAllStep, setConfirmClearAllStep] = useState<0 | 1 | 2>(0);
@@ -509,6 +588,15 @@ export default function App() {
   const webCameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const webCameraStreamRef = useRef<MediaStream | null>(null);
   const isNativeCamera = Capacitor.isNativePlatform();
+
+  // El plugin nativo mantiene una única sesión de cámara. Serializamos start/stop
+  // para que cerrar y volver a abrir rápidamente no deje sesiones superpuestas.
+  const nativeCameraLifecycleRef = useRef<Promise<void>>(Promise.resolve());
+  const enqueueNativeCameraOperation = (operation: () => Promise<void>) => {
+    const next = nativeCameraLifecycleRef.current.catch(() => {}).then(operation);
+    nativeCameraLifecycleRef.current = next.catch(() => {});
+    return next;
+  };
 
   useEffect(() => {
     let listenerHandle: { remove: () => Promise<void> } | null = null;
@@ -568,16 +656,11 @@ export default function App() {
   const onCameraTouchMove = (e: TouchEvent) => { if (e.touches.length===2 && pinchStartDist.current) { const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY; void applyNativeZoom(Math.max(1,Math.min(8,pinchStartZoom.current*(Math.hypot(dx,dy)/pinchStartDist.current)))); } };
   const onCameraTouchEnd = () => { pinchStartDist.current=null; };
 
-  const switchCameraFacing = async () => {
+  const switchCameraFacing = () => {
     if (capturingRef.current) return;
-    const nextFacing = cameraFacing === 'rear' ? 'front' : 'rear';
-    try {
-      // En Android reiniciamos el preview nativo; en navegador el efecto reinicia getUserMedia.
-      if (isNativeCamera) await CameraPreview.stop({ force: true }).catch(() => {});
-      setCameraFacing(nextFacing);
-    } catch (error) {
-      console.warn('[Camera] switch facing:', error);
-    }
+    // No ejecutar stop() aquí: el cleanup del efecto ya cierra la sesión.
+    // Hacer ambas cosas en paralelo producía doble stop y podía competir con start().
+    setCameraFacing((current) => current === 'rear' ? 'front' : 'rear');
   };
 
   const ensureFlashArmed = async (targetMode: 'off' | 'on') => {
@@ -776,7 +859,7 @@ export default function App() {
     document.documentElement.classList.add('native-camera-active');
     setNativeCameraError(null);
 
-    (async () => {
+    void enqueueNativeCameraOperation(async () => {
       try {
         const permission = await CameraPreview.checkPermissions({ disableAudio: true });
         let cameraPermission = permission?.camera;
@@ -792,14 +875,17 @@ export default function App() {
         if (cameraPermission !== 'granted') {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
+        if (!active) return;
 
-        await CameraPreview.stop({ force: true }).catch(() => {});
-
-        // Preview fotográfico estable. No activamos el modo de video aquí:
-        // la captura de fotos usa CameraPreview.capture().
+        // IMPORTANTE: @capgo/camera-preview rechaza width/height junto con aspectRatio.
+        // Al omitir width/height, el plugin usa el tamaño real del WebView desde el inicio,
+        // sin una segunda operación setPreviewSize que pueda producir un destello negro.
+        // Mantenemos un único start y aspectRatio para conservar el encuadre de la cámara.
         const started = await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
+          x: 0,
+          y: 0,
           aspectRatio: '16:9',
           aspectMode: 'cover',
           storeToFile: false,
@@ -810,37 +896,39 @@ export default function App() {
 
         if (!active) return;
 
-        const previewWidth = Math.max(1, Math.round(window.innerWidth));
-        const previewHeight = Math.max(1, Math.round(window.innerHeight));
-        await CameraPreview.setPreviewSize({
-          x: 0,
-          y: 0,
-          width: previewWidth,
-          height: previewHeight
-        }).catch(() => {});
-
         console.log('[Camera] native preview ready:', started);
-        await CameraPreview.setZoom({ level: cameraZoom });
-        await ensureFlashArmed(flashMode);
         setNativeCameraError(null);
+        // Un fallo de zoom/flash no significa que el preview no haya arrancado.
+        await CameraPreview.setZoom({ level: cameraZoom }).catch((error) => {
+          console.warn('[Camera] Initial zoom unavailable:', error);
+        });
+        await ensureFlashArmed(flashMode);
       } catch (error: any) {
         if (!active) return;
         console.error('[Camera] start:', error);
-        const name = String(error?.name || '');
-        const message = String(error?.message || '');
-        const detail = name || message ? ' (' + (name || message) + ')' : '.';
+        const name = String(error?.name || '').trim();
+        const message = String(
+          error?.message || error?.errorMessage || error?.cause?.message || error?.code || ''
+        ).trim();
+        const detail = message || (name && name !== 'Error' ? name : '');
         setNativeCameraError(
           message === 'CAMERA_PERMISSION_DENIED'
             ? 'El permiso de cámara está bloqueado. Permita la cámara para Field Trace y vuelva a intentarlo.'
-            : 'No se pudo iniciar la cámara nativa' + detail
+            : detail
+              ? 'No se pudo iniciar la cámara nativa: ' + detail
+              : 'No se pudo iniciar la cámara. Verifique el permiso de cámara y vuelva a intentarlo.'
         );
       }
-    })();
+    });
 
     return () => {
       active = false;
-      void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
-      void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
+      void enqueueNativeCameraOperation(async () => {
+        await CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
+        await CameraPreview.stop({ force: true }).catch((error) => {
+          console.warn('[Camera] stop:', error);
+        });
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
@@ -851,10 +939,72 @@ export default function App() {
   }, [flashMode, currentStep]);
 
 
-  useEffect(() => {
+  // Aplicar la transparencia antes del primer paint de la pantalla de cámara.
+  // useEffect se ejecutaba después de pintar el fondo gris del body, causando el destello.
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
     return () => document.documentElement.classList.remove('native-camera-active');
   }, [currentStep]);
+
+  // Mantener sincronizadas en tiempo real las evidencias compartidas del proyecto.
+  // Firebase es la fuente canónica para cambios hechos desde Memoria Fotográfica
+  // en otro dispositivo; las capturas locales pendientes se conservan.
+  const activeSharedProjectUuid = String(
+    currentStep === 'history' ? (selectedProject?.uuid || '') :
+    currentStep === 'memory' ? (memorySelectedProject?.uuid || '') : ''
+  ).trim();
+  useEffect(() => {
+    if (!activeSharedProjectUuid || (currentStep !== 'history' && currentStep !== 'memory')) return;
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
+    const connect = () => {
+      if (!active || !navigator.onLine || unsubscribe) return;
+      unsubscribe = firebaseService.subscribeCloudProjectEvidences(
+        activeSharedProjectUuid,
+        (remoteEvidences, fromCache) => {
+          if (!active || fromCache) return;
+          void (async () => {
+            try {
+              const localEvidences = await storageService.reconcileCloudProjectEvidences(activeSharedProjectUuid, remoteEvidences);
+              if (!active) return;
+              const visibleRemoteEvidences = remoteEvidences.filter((item: any) => item.isDeleted !== true);
+              if (currentStep === 'history') {
+                setEvidences(localEvidences);
+                setViewingEvidence(previous => {
+                  if (!previous) return previous;
+                  // Si otro dispositivo eliminó esta evidencia, cerrar su detalle.
+                  return localEvidences.find(item => item.uuid === previous.uuid) || null;
+                });
+              } else {
+                setMemorySelectedProject((previous: any) => previous && String(previous.uuid || previous.id) === activeSharedProjectUuid
+                  ? { ...previous, _evidences: visibleRemoteEvidences }
+                  : previous);
+                setMemorySelectedPhoto((previous: any) => previous
+                  ? visibleRemoteEvidences.find((item: any) => item.uuid === previous.uuid) || null
+                  : previous);
+                setMemoryProjects(previous => previous.map(project => String(project.uuid || project.id) === activeSharedProjectUuid
+                  ? { ...project, _evidences: visibleRemoteEvidences }
+                  : project));
+              }
+            } catch (error) {
+              console.warn('[SharedEvidenceSync] No se pudieron aplicar los cambios remotos:', error);
+            }
+          })();
+        },
+        error => console.warn('[SharedEvidenceSync] La suscripción requiere reconexión:', error)
+      );
+    };
+    const disconnect = () => { unsubscribe?.(); unsubscribe = null; };
+    connect();
+    window.addEventListener('online', connect);
+    window.addEventListener('offline', disconnect);
+    return () => {
+      active = false;
+      disconnect();
+      window.removeEventListener('online', connect);
+      window.removeEventListener('offline', disconnect);
+    };
+  }, [currentStep, activeSharedProjectUuid]);
 
   // Load last Field Trace album thumbnail when entering camera (survives app restart)
   useEffect(() => {
@@ -961,6 +1111,56 @@ export default function App() {
       setSyncRunning(false);
     }
   }, [refreshSyncSummary, syncRunning]);
+
+  const refreshCurrentProjectEvidence = useCallback(async () => {
+    if (!selectedProject?.id || projectRefreshLoading) return;
+    setProjectRefreshLoading(true);
+    setProjectRefreshMessage('Actualizando fotografías y sincronización...');
+    try {
+      await storageService.syncAllLocalData();
+      const fresh = await storageService.getEvidencesByProject(selectedProject.id);
+      setEvidences(fresh);
+      if (viewingEvidence?.id != null) {
+        const refreshedDetail = fresh.find(item => item.id === viewingEvidence.id || item.uuid === viewingEvidence.uuid);
+        if (refreshedDetail) setViewingEvidence(refreshedDetail);
+      }
+      await refreshSyncSummary();
+      const pending = fresh.filter(item => item.syncStatus !== 'synced' || ((item.photoPath || item.photoStoragePath) && !item.photoUrl)).length;
+      setProjectRefreshMessage(pending ? 'Actualizado. ' + pending + ' elemento(s) siguen pendientes; se reintentará la sincronización.' : 'Actualizado. Las fotografías y los datos están sincronizados.');
+    } catch (error) {
+      console.error('[ProjectRefresh] Error al actualizar evidencias:', error);
+      setProjectRefreshMessage('No se pudo completar la actualización. Las fotos locales se conservan.');
+    } finally {
+      setProjectRefreshLoading(false);
+    }
+  }, [selectedProject?.id, projectRefreshLoading, viewingEvidence, refreshSyncSummary]);
+
+  // Mantener la vista del proyecto al día cuando la subida en segundo plano
+  // termina; no obligar a salir y volver a entrar para actualizar photoUrl.
+  useEffect(() => {
+    if (currentStep !== 'history' || !selectedProject?.id) return;
+    let active = true;
+    const refreshLocalEvidenceState = async () => {
+      try {
+        const fresh = await storageService.getEvidencesByProject(selectedProject.id!);
+        if (!active) return;
+        setEvidences(previous => {
+          const prevSignature = previous.map(item => [item.uuid, item.photoUrl, item.syncStatus].join(':')).join('|');
+          const nextSignature = fresh.map(item => [item.uuid, item.photoUrl, item.syncStatus].join(':')).join('|');
+          return prevSignature === nextSignature ? previous : fresh;
+        });
+        setViewingEvidence(previous => {
+          if (!previous) return previous;
+          return fresh.find(item => item.id === previous.id || item.uuid === previous.uuid) || previous;
+        });
+      } catch (error) {
+        console.warn('[ProjectRefresh] No se pudo actualizar la vista local:', error);
+      }
+    };
+    void refreshLocalEvidenceState();
+    const interval = window.setInterval(() => { void refreshLocalEvidenceState(); }, 2500);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [currentStep, selectedProject?.id]);
 
   const retrySyncEvidence = useCallback(async (id: number) => {
     if (retryingEvidenceId != null) return;
@@ -1195,27 +1395,32 @@ export default function App() {
       alert('El Técnico Responsable es obligatorio.');
       return;
     }
-    
-    // Normalize data
-    const normalizedProject = {
-      ...editingProject,
-      name: editingProject.name.toUpperCase(),
-      client: editingProject.client.toUpperCase(),
-      techName: toTitleCase(editingProject.techName),      createdAt: editingProject.createdAt || new Date()
-    } as Project;
 
-    let id;
-    if (editingProject.id) {
-      await storageService.updateProject(editingProject.id, normalizedProject);
-      id = editingProject.id;    } else {
-      id = await storageService.createProject(normalizedProject);
+    try {
+      const normalizedProject = {
+        ...editingProject,
+        name: editingProject.name.toUpperCase(),
+        client: editingProject.client.toUpperCase(),
+        techName: toTitleCase(editingProject.techName),
+        createdAt: editingProject.createdAt || new Date()
+      } as Project;
+
+      const id = normalizedProject.id != null
+        ? (await storageService.updateProject(normalizedProject.id, normalizedProject), normalizedProject.id)
+        : await storageService.createProject(normalizedProject);
+
+      const savedProject = await storageService.getProject(id);
+      if (!savedProject) throw new Error('El proyecto no se encontró después de guardarlo.');
+
+      setSelectedProject(savedProject);
+      await loadData();
+      // Guardar solo vuelve a las secciones. La cámara se abre únicamente
+      // cuando el usuario selecciona explícitamente una sección.
+      setCurrentStep('history');
+    } catch (error) {
+      console.error('[ProjectSave] No se pudo guardar el proyecto:', error);
+      alert('No se pudieron guardar los cambios. Los datos siguen en pantalla; revise la conexión e inténtelo nuevamente.');
     }
-    
-    const savedProject = await storageService.getProject(id);
-    setSelectedProject(savedProject);
-    loadData();
-    // After saving, go directly to camera
-    setCurrentStep('camera');
   };
 
   const handleSelectProject = async (p: Project) => {
@@ -1262,15 +1467,19 @@ export default function App() {
     }
   };
 
-  const uploadMissingMemoryPhoto = (slot: { category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number }) => {
+  const uploadMissingMemoryPhoto = (slot: any) => {
     setPendingMemoryUpload(slot);
-    memoryUploadInputRef.current?.click();
+    if (memoryUploadInputRef.current) {
+      memoryUploadInputRef.current.value = '';
+      memoryUploadInputRef.current.click();
+    }
   };
 
   const handleMemoryUploadFile = async (file: File | undefined) => {
     const slot = pendingMemoryUpload;
     if (!file || !slot || !file.type.startsWith('image/')) {
       if (file) alert('Selecciona una fotografía válida.');
+      setPendingMemoryUpload(null);
       return;
     }
     setMemoryUploadLoading(true);
@@ -1278,39 +1487,96 @@ export default function App() {
       const project = memorySelectedProject;
       const projectUuid = String(project?.uuid || project?.id || '');
       if (!projectUuid) throw new Error('No se encontró el identificador del proyecto.');
-
-      const uuid = crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+      const category = String(slot.category || '').toUpperCase();
+      const existing = slot.existingEvidence || null;
+      const siblings: any[] = Array.isArray(slot.groupItems) ? slot.groupItems : (slot.groupItem ? [slot.groupItem] : []);
+      const seed: any = slot.groupItem || siblings[0] || existing || {};
       const now = new Date();
-      const remote = await firebaseService.uploadEvidencePhoto(file, projectUuid, uuid, file.name);
-
-      const evidence = {
-        id: null, uuid, projectId: project?.id ?? null, projectUuid, projectName: project?.name || '',
-        photoPath: file.name, photoStoragePath: remote.storagePath, photoUrl: remote.downloadUrl,
-        category: slot.category, categoryLabel: 'NAPS',
-        capturedAt: now.toISOString(), fecha: now.toLocaleDateString('es-ES'),
-        hora: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now(), latitude: 0, longitude: 0, gpsAccuracy: null, ubicacion: '',
-        baseFields: { posteId: '', tecnico: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '' },
-        tecnico: '', posteId: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '',
-        customFields: [], sharedWhatsApp: false, locked: false,
-        napId: slot.napId, napNumber: slot.napNumber, napName: slot.napName, napPhotoNumber: slot.photoNumber,
-        createdAt: now.toISOString(), updatedAt: now.toISOString(), syncStatus: 'synced', retryCount: 0, schemaVersion: 3
+      const uuid = String(existing?.uuid || (crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8))));
+      const numberFields: Record<string, string> = {
+        NAPS: 'napNumber', MUFA: 'mufaNumber', PUNTAS_FIBRA: 'fiberPairNumber', PUNTAS_FIBRA_INICIAL: 'fiberPairNumber',
+        PUNTAS_FIBRA_FINAL: 'fiberPairNumber', RESERVA: 'reserveNumber', ACEROS: 'aceroNumber', DESECHOS: 'desechoNumber',
+        ALTAS: 'altaNumber', MEJORAS: 'mejoraNumber'
       };
+      const idFields: Record<string, string> = {
+        NAPS: 'napId', MUFA: 'mufaId', PUNTAS_FIBRA: 'fiberPairId', PUNTAS_FIBRA_INICIAL: 'fiberPairId',
+        PUNTAS_FIBRA_FINAL: 'fiberPairId', RESERVA: 'reserveId', ACEROS: 'aceroId', DESECHOS: 'desechoId',
+        ALTAS: 'altaId', MEJORAS: 'mejoraId'
+      };
+      const numberField = numberFields[category] || '';
+      const idField = idFields[category] || '';
+      const groupNumber = Number(slot.groupNumber ?? seed[numberField] ?? 0);
+      const groupName = String(slot.groupName ?? seed.napName ?? seed.mufaName ?? seed.altaType ?? seed.mejoraType ?? seed.categoryLabel ?? '').trim();
+      const actualGroupId = String(seed[idField] || existing?.[idField] || '').trim();
+      const stableGroupId = actualGroupId || (category === 'MUFA' ? '' :
+        'memory_' + category.toLowerCase() + '_' + projectUuid + '_' +
+        String(seed.uuid || slot.groupId || groupNumber || 'set').replace(/[^a-zA-Z0-9_-]/g, '_'));
 
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const photoPath = 'FT_MEMORY_' + uuid + '.' + extension;
+      const remote = await firebaseService.uploadEvidencePhoto(file, projectUuid, uuid, photoPath);
+      const labels: Record<string, string> = {
+        NAPS: 'NAPS', MUFA: 'MUFA', PUNTAS_FIBRA: 'PUNTAS DE FIBRA', PUNTAS_FIBRA_INICIAL: 'PUNTAS DE FIBRA',
+        PUNTAS_FIBRA_FINAL: 'PUNTAS DE FIBRA', RESERVA: 'RESERVAS', ACEROS: 'ACEROS',
+        DESECHOS: 'DESECHOS', ALTAS: 'ALTAS', MEJORAS: 'MEJORAS'
+      };
+      const evidence: any = {
+        ...(existing || {}), uuid, projectId: project?.id ?? existing?.projectId ?? null, projectUuid,
+        projectName: project?.name || existing?.projectName || '', photoPath,
+        photoStoragePath: remote.storagePath, photoUrl: remote.downloadUrl,
+        category, categoryLabel: labels[category] || existing?.categoryLabel || category,
+        capturedAt: existing?.capturedAt || now.toISOString(),
+        fecha: existing?.fecha || now.toLocaleDateString('es-ES'),
+        hora: existing?.hora || now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: existing?.timestamp || Date.now(), latitude: existing?.latitude ?? 0, longitude: existing?.longitude ?? 0,
+        gpsAccuracy: existing?.gpsAccuracy ?? null, ubicacion: existing?.ubicacion || '',
+        baseFields: existing?.baseFields || { posteId: '', tecnico: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '' },
+        tecnico: existing?.tecnico || '', posteId: existing?.posteId || '',
+        observaciones: existing?.observaciones || 'Fotografía subida desde Memoria Fotográfica.',
+        materiales: existing?.materiales || '', customFields: existing?.customFields || [],
+        sharedWhatsApp: existing?.sharedWhatsApp || false, locked: existing?.locked ?? true,
+        createdAt: existing?.createdAt || now.toISOString(), updatedAt: now.toISOString(),
+        syncStatus: 'synced', retryCount: 0, schemaVersion: 3
+      };
+      if (idField && stableGroupId) evidence[idField] = stableGroupId;
+      if (numberField && Number.isFinite(groupNumber)) evidence[numberField] = groupNumber;
+      const photoNumber = Number(slot.photoNumber || 1);
+      if (category === 'NAPS') Object.assign(evidence, { napName: groupName || seed.napName || '', napPhotoNumber: photoNumber });
+      if (category === 'MUFA') Object.assign(evidence, { mufaName: groupName || seed.mufaName || '', mufaPhotoNumber: photoNumber, photoNumber });
+      if (['PUNTAS_FIBRA', 'PUNTAS_FIBRA_INICIAL', 'PUNTAS_FIBRA_FINAL'].includes(category)) {
+        evidence.category = photoNumber === 1 ? 'PUNTAS_FIBRA_INICIAL' : 'PUNTAS_FIBRA_FINAL';
+        Object.assign(evidence, { fiberSide: photoNumber === 1 ? 'initial' : 'final', fiberMeterage: seed.fiberMeterage ?? seed.metraje, fiberReelNumber: seed.fiberReelNumber ?? seed.reelNumber, fiberCount: seed.fiberCount });
+      }
+      if (category === 'RESERVA') Object.assign(evidence, { reserveSide: photoNumber === 1 ? 'initial' : photoNumber === 2 ? 'final' : 'roll', reserveMeterage: seed.reserveMeterage ?? seed.metraje, reserveReelNumber: seed.reserveReelNumber ?? seed.reelNumber, reserveFiberCount: seed.reserveFiberCount ?? seed.fiberCount });
+      if (category === 'ACEROS') Object.assign(evidence, { aceroSide: photoNumber === 1 ? 'photo1' : 'photo2', aceroPhotoType: photoNumber === 1 ? 'panoramic' : 'meterage', aceroMeterage: seed.aceroMeterage });
+      if (category === 'DESECHOS') Object.assign(evidence, { desechoSide: photoNumber === 1 ? 'photo1' : 'photo2', desechoPhotoType: photoNumber === 1 ? 'panoramic' : 'meterage', desechoMeterage: seed.desechoMeterage });
+      if (category === 'ALTAS') Object.assign(evidence, { altaType: groupName || seed.altaType || 'ALTAS EN ACERO', altaSide: photoNumber === 1 ? 'panoramic' : 'meterage', altaMeterage: seed.altaMeterage, altaReelNumber: seed.altaReelNumber, altaFiberCount: seed.altaFiberCount });
+      if (category === 'MEJORAS') Object.assign(evidence, { mejoraType: groupName || seed.mejoraType || 'PODAS', mejoraSide: photoNumber === 1 ? 'before' : 'after' });
+
+      if (!actualGroupId && stableGroupId && category !== 'MUFA') {
+        for (const sibling of siblings) {
+          if (!sibling?.uuid || sibling.uuid === uuid || sibling[idField]) continue;
+          const ok = await firebaseService.syncEvidenceToCloud({ ...sibling, [idField]: stableGroupId, updatedAt: now.toISOString() });
+          if (!ok) throw new Error('No se pudo conservar el grupo original al reparar la posición faltante. Comprueba la conexión e inténtalo nuevamente.');
+        }
+      }
       if (!(await firebaseService.syncEvidenceToCloud(evidence))) {
         throw new Error('La fotografía se subió a Storage, pero no se pudo guardar su registro en Firestore.');
       }
-
       const append = (projectItem: any) => {
         if (!projectItem) return projectItem;
         const current = Array.isArray(projectItem._evidences) ? projectItem._evidences : [];
-        return { ...projectItem, _evidences: [...current.filter((ev: any) => ev.uuid !== uuid), evidence] };
+        const withRepairedSiblings = current.map((item: any) => {
+          if (!stableGroupId || item[idField] || !siblings.some(sibling => sibling.uuid === item.uuid)) return item;
+          return { ...item, [idField]: stableGroupId };
+        });
+        return { ...projectItem, _evidences: [...withRepairedSiblings.filter((ev: any) => ev.uuid !== uuid), evidence] };
       };
       setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? append(p) : p));
       setMemorySelectedProject((prev: any) => append(prev));
       setPendingMemoryUpload(null);
       if (memoryUploadInputRef.current) memoryUploadInputRef.current.value = '';
-      alert('Fotografía subida correctamente y asociada a la posición seleccionada.');
+      alert(existing ? 'Fotografía reemplazada en la misma posición.' : 'Fotografía subida y asociada a la posición seleccionada.');
     } catch (error: any) {
       console.error('[Memory Upload] Error:', error);
       alert(error?.message || 'No se pudo subir la fotografía.');
@@ -1319,12 +1585,125 @@ export default function App() {
     }
   };
 
+  const deleteMemoryPhoto = async () => {
+    const target = memoryDeleteTarget;
+    const project = memorySelectedProject;
+    if (!target || !project) return;
+    setMemoryDeleteLoading(true);
+    try {
+      await firebaseService.deleteEvidenceFromCloud({ ...target, projectUuid: target.projectUuid || project.uuid || project.id });
+      const projectUuid = String(project.uuid || project.id);
+      const removeTarget = (item: any) => ({ ...item, _evidences: (item._evidences || []).filter((ev: any) => ev.uuid !== target.uuid) });
+      setMemorySelectedProject((prev: any) => prev ? removeTarget(prev) : prev);
+      setMemoryProjects(prev => prev.map(item => String(item.uuid || item.id) === projectUuid ? removeTarget(item) : item));
+      setMemorySelectedPhoto(null);
+      setMemoryDeleteTarget(null);
+    } catch (error: any) {
+      console.error('[Memory Delete] Error eliminando fotografía:', error);
+      alert(error?.message || 'No se pudo eliminar la fotografía.');
+    } finally {
+      setMemoryDeleteLoading(false);
+    }
+  };
+
+  const startProjectPhotoUpload = (slot: any) => {
+    setPendingProjectPhotoUpload(slot);
+    if (projectPhotoUploadInputRef.current) {
+      projectPhotoUploadInputRef.current.value = '';
+      projectPhotoUploadInputRef.current.click();
+    }
+  };
+
+  const handleProjectPhotoUploadFile = async (file: File | undefined) => {
+    const slot = pendingProjectPhotoUpload;
+    if (!file || !slot || !file.type.startsWith('image/')) {
+      if (file) alert('Selecciona un archivo de imagen válido.');
+      return;
+    }
+    if (!selectedProject?.id || !selectedProject?.uuid) {
+      alert('No se encontró el proyecto activo para asociar la fotografía.');
+      return;
+    }
+    setProjectPhotoUploadLoading(true);
+    try {
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      const now = new Date();
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const photoPath = 'FT_UPLOAD_' + uuid + '.' + extension;
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('No se pudo leer la imagen seleccionada.'));
+        reader.onerror = () => reject(new Error('No se pudo leer la imagen seleccionada.'));
+        reader.readAsDataURL(file);
+      });
+      const category = String(slot.category || evidenceCategory || 'OTROS');
+      const labels: Record<string,string> = {
+        NAPS:'NAPS', MUFA:'MUFA', PUNTAS_FIBRA:'PUNTAS DE FIBRA', PUNTAS_FIBRA_INICIAL:'PUNTAS DE FIBRA',
+        PUNTAS_FIBRA_FINAL:'PUNTAS DE FIBRA', RESERVA:'RESERVAS', ACEROS:'ACEROS', DESECHOS:'DESECHOS',
+        ALTAS:'ALTAS', MEJORAS:'MEJORAS'
+      };
+      const evidence: any = {
+        uuid, projectId: selectedProject.id, projectUuid: selectedProject.uuid, projectName: selectedProject.name || '',
+        photoPath, category, categoryLabel: labels[category] || category,
+        capturedAt: now.toISOString(), fecha: now.toLocaleDateString('es-ES'),
+        hora: now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}),
+        timestamp: now.getTime(), latitude: null, longitude: null, gpsAccuracy: null, ubicacion: '',
+        baseFields: { tecnico: selectedProject.techName || 'TECNICO', observaciones: 'Fotografía subida desde el proyecto.' },
+        customFields: [], sharedWhatsApp: false, locked: true, createdAt: now, updatedAt: now,
+        syncStatus: 'pending', retryCount: 0
+      };
+      const group = slot.groupItem || {};
+      const n = Number(slot.photoNumber || 1);
+      const groupId = String(slot.groupId || group.napId || group.mufaId || group.fiberPairId || group.reserveId || group.aceroId || group.desechoId || group.altaId || group.mejoraId || '');
+      const groupNumber = Number(slot.groupNumber || group.napNumber || group.mufaNumber || group.fiberPairNumber || group.reserveNumber || group.aceroNumber || group.desechoNumber || group.altaNumber || group.mejoraNumber || 1);
+      const groupName = String(slot.groupName || group.napName || group.altaType || group.mejoraType || '');
+      if (category === 'NAPS') Object.assign(evidence,{napId:groupId,napNumber:groupNumber,napName:groupName,napPhotoNumber:n});
+      if (category === 'MUFA') Object.assign(evidence,{mufaId:groupId,mufaNumber:groupNumber,mufaName:groupName,mufaPhotoNumber:n,photoNumber:n});
+      if (category === 'ACEROS') Object.assign(evidence,{aceroId:groupId,aceroNumber:groupNumber,aceroSide:n===1?'photo1':'photo2',aceroPhotoType:n===1?'panoramic':'meterage',aceroMeterage:group.aceroMeterage});
+      if (category === 'DESECHOS') Object.assign(evidence,{desechoId:groupId,desechoNumber:groupNumber,desechoSide:n===1?'photo1':'photo2',desechoPhotoType:n===1?'panoramic':'meterage'});
+      if (category === 'ALTAS') Object.assign(evidence,{altaId:groupId,altaNumber:groupNumber,altaType:groupName||'ALTAS EN ACERO',altaSide:n===1?'panoramic':'meterage'});
+      if (category === 'MEJORAS') Object.assign(evidence,{mejoraId:groupId,mejoraNumber:groupNumber,mejoraType:groupName||'PODAS',mejoraSide:n===1?'before':'after'});
+      if (category === 'PUNTAS_FIBRA' || category === 'PUNTAS_FIBRA_INICIAL' || category === 'PUNTAS_FIBRA_FINAL') Object.assign(evidence,{
+        category: n===1?'PUNTAS_FIBRA_INICIAL':'PUNTAS_FIBRA_FINAL',
+        fiberPairId:groupId,fiberPairNumber:groupNumber,fiberSide:n===1?'initial':'final',
+        metraje:group.metraje,reelNumber:group.reelNumber,fiberCount:group.fiberCount
+      });
+      if (category === 'RESERVA') Object.assign(evidence,{reserveId:groupId,reserveNumber:groupNumber,reserveSide:n===1?'initial':n===2?'final':'roll',metraje:group.metraje,reelNumber:group.reelNumber,fiberCount:group.fiberCount});
+      const projectId = selectedProject.id;
+      await storageService.addEvidence(evidence, dataUrl);
+      const refreshed = await storageService.getEvidencesByProject(projectId);
+      setEvidences(refreshed);
+      setPendingProjectPhotoUpload(null);
+      if (projectPhotoUploadInputRef.current) projectPhotoUploadInputRef.current.value = '';
+      alert('Fotografía guardada en el proyecto. La sincronización con Firebase continuará en segundo plano.');
+    } catch (error: any) {
+      console.error('[Project Photo Upload] Error:', error);
+      alert(error?.message || 'No se pudo guardar la fotografía.');
+    } finally {
+      setProjectPhotoUploadLoading(false);
+    }
+  };
+
+  const renderProjectUploadButton = (slot: any, label: string) => (
+    <button type="button" disabled={projectPhotoUploadLoading}
+      onClick={(event) => { event.stopPropagation(); startProjectPhotoUpload(slot); }}
+      className="w-full mt-1 px-2 py-2 rounded-xl border border-blue-200 bg-white text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50">
+      {projectPhotoUploadLoading ? 'GUARDANDO...' : 'SUBIR FOTO · ' + label}
+    </button>
+  );
+
+
   const loadMemoryDashboard = async () => {
     if (!userPermissions.memory) { setCurrentStep('home'); return; }
     setCurrentStep('memory');
     setMemoryLoading(true);
     setMemorySelectedProject(null);
     try {
+      if (navigator.onLine) {
+        await storageService.syncAllLocalData().catch(error => {
+          console.warn('[Memory Dashboard] La sincronización local sigue pendiente:', error);
+        });
+      }
       const remoteProjects = await firebaseService.getCloudProjects();
       const summaries = await Promise.all(remoteProjects.map(async (project: any) => {
         const uuid = String(project.uuid || project.id);
@@ -1344,6 +1723,22 @@ export default function App() {
     } finally {
       setMemoryLoading(false);
     }
+  };
+
+  const refreshMemorySelectedProject = async () => {
+    const selected = memorySelectedProject;
+    const projectUuid = String(selected?.uuid || selected?.id || '');
+    if (!projectUuid || !navigator.onLine) { alert('No hay conexión para actualizar las fotografías desde Firebase.'); return; }
+    setMemoryLoading(true);
+    try {
+      await storageService.syncAllLocalData().catch(error => console.warn('[Memory] Sincronización pendiente:', error));
+      const _evidences = await firebaseService.getCloudProjectEvidences(projectUuid);
+      setMemorySelectedProject({ ...selected, _evidences });
+      setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? { ...p, _evidences } : p));
+    } catch (error) {
+      console.error('[Memory] No se pudieron actualizar las fotografías:', error);
+      alert('No se pudieron actualizar las fotografías. Comprueba la conexión e inténtalo de nuevo.');
+    } finally { setMemoryLoading(false); }
   };
 
   const memoryCategorySummary = (project: any, category: string) => {
@@ -1390,12 +1785,9 @@ export default function App() {
     const groupList = Array.from(groups.entries()).map(([id, items]) => {
       let normalizedItems = items;
       if (category === 'MUFA') {
-        // MUFA es un set fijo de 9 fotografías. La existencia de la foto se
-        // determina por su URL, NO por mufaPhotoNumber. En registros históricos
-        // ese metadato puede faltar, pero la fotografía sigue siendo válida.
-        // El visor trabaja con las fotografías reales y las presenta 1/9 ... 9/9.
+        // Conservamos registros sin URL para que su posición se pueda reparar
+        // desde Memoria Fotográfica en vez de ocultarla y bloquearla.
         normalizedItems = [...items]
-          .filter(hasPhoto)
           .sort((a, b) => {
             const slotA = Number(a.mufaPhotoNumber ?? a.photoNumber ?? 0);
             const slotB = Number(b.mufaPhotoNumber ?? b.photoNumber ?? 0);
@@ -2873,7 +3265,8 @@ export default function App() {
       const hora = capturedAt.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
-      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
+      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)
+        || (isExtraPhotoMode ? { id: 'EXTRAS' as EvidenceCategory, label: 'Fotos extras del proyecto' } : undefined);
       if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
 
       if (selectedEvidenceCategory.id === 'RESERVA' && reserveCaptureDraft?.reserveId && reserveCaptureDraft.reelNumber?.trim()) {
@@ -3080,56 +3473,11 @@ export default function App() {
       };
 
       if (selectedEvidenceCategory.id === 'NAPS' && napCaptureDraft) {
-        const capturedSlots = new Set<number>(
-          evidences
-            .filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
-            .map(ev => Number(ev.napPhotoNumber))
-            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
-        );
-        for (const key of pendingSetCaptureKeysRef.current) {
-          const match = key.match(/^NAPS\|(.+)\|(\d+)$/);
-          if (match && match[1] === napCaptureDraft.napId) capturedSlots.add(Number(match[2]));
-        }
-        capturedSlots.add(napCaptureDraft.photoNumber);
-        const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
-          .find(n => !capturedSlots.has(n));
-        const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
-        napCaptureInFlightRef.current = false;
-        if (!nextPhotoNumber || remainingPhotos <= 0 || napCaptureDraft.photoNumber >= 9) {
-          setNapCaptureDraft(null);
-          setShowNapCaptureModal(false);
-          setCurrentStep('history');
-        } else {
-          setNapCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos } : prev);
-        }
+        // No avanzar el contador todavía. La posición solo se confirma después
+        // de que la foto y sus metadatos se hayan guardado en IndexedDB.
       } else if (selectedEvidenceCategory.id === 'MUFA' && mufaCaptureDraft) {
-        const capturedSlots = new Set<number>(
-          evidences
-            .filter(ev => ev.category === 'MUFA' && (
-              (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
-              (!ev.mufaId &&
-                Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
-                String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
-            ))
-            .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
-            .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
-        );
-        for (const key of pendingSetCaptureKeysRef.current) {
-          const match = key.match(/^MUFA\|(.+)\|(\d+)$/);
-          if (match && match[1] === mufaCaptureDraft.mufaId) capturedSlots.add(Number(match[2]));
-        }
-        capturedSlots.add(mufaCaptureDraft.photoNumber);
-        const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1)
-          .find(n => !capturedSlots.has(n));
-        const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
-        mufaCaptureInFlightRef.current = false;
-        if (!nextPhotoNumber || remainingPhotos <= 0 || mufaCaptureDraft.photoNumber >= 9) {
-          setMufaCaptureDraft(null);
-          setShowMufaCaptureModal(false);
-          setCurrentStep('history');
-        } else {
-          setMufaCaptureDraft(prev => prev ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos } : prev);
-        }
+        // No avanzar el contador todavía. La posición solo se confirma después
+        // de que la foto y sus metadatos se hayan guardado en IndexedDB.
       } else if (
         selectedEvidenceCategory.id === 'RESERVA' ||
         selectedEvidenceCategory.id === 'ALTAS' ||
@@ -3189,17 +3537,67 @@ export default function App() {
             }
           }
           if (!savedToGallerySuccess) {
-            console.error("[AtomicCapture] Error: No se pudo guardar la fotografía. Abortando registro de evidencia.");
-            return;
+            // La galería del sistema es secundaria: no debe impedir que la foto
+            // se guarde en el almacenamiento persistente propio de Field Trace.
+            console.warn("[AtomicCapture] No se pudo guardar en la galería nativa; se continuará con el guardado local de Field Trace.");
           }
 
-          // 3. Guardar Evidence en IndexedDB para que aparezca inmediatamente en el proyecto
+          // 3. Guardar primero la evidencia y su imagen en IndexedDB.
+          // La persistencia de Field Trace no depende de que la galería del teléfono funcione.
           await storageService.addEvidence(evidenceObject, finalImage);
           capturePersisted = true;
 
           // 4. Actualizar estado de UI
           const evs = await storageService.getEvidencesByProject(selectedProject.id!);
           setEvidences(evs);
+
+          // La posición se avanza únicamente después de confirmar la persistencia.
+          // Esto evita saltos de FOTO 4 a FOTO 6 y que la lista se quede atrás si
+          // varias lecturas asíncronas de IndexedDB terminan fuera de orden.
+          if (captureLockKey) pendingSetCaptureKeysRef.current.delete(captureLockKey);
+          if (isNapCapture && napCaptureDraft) {
+            const capturedSlots = new Set(
+              evs.filter(ev => ev.category === 'NAPS' && ev.napId === napCaptureDraft.napId)
+                .map(ev => Number(ev.napPhotoNumber))
+                .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+            );
+            const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1).find(n => !capturedSlots.has(n));
+            const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
+            napCaptureInFlightRef.current = false;
+            if (!nextPhotoNumber || remainingPhotos <= 0) {
+              setNapCaptureDraft(null);
+              setShowNapCaptureModal(false);
+              setCurrentStep('history');
+            } else {
+              setNapCaptureDraft(prev => prev && prev.napId === napCaptureDraft.napId
+                ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos }
+                : prev);
+            }
+          }
+          if (isMufaCapture && mufaCaptureDraft) {
+            const capturedSlots = new Set(
+              evs.filter(ev => ev.category === 'MUFA' && (
+                (ev.mufaId && ev.mufaId === mufaCaptureDraft.mufaId) ||
+                (!ev.mufaId &&
+                  Number(ev.mufaNumber) === Number(mufaCaptureDraft.mufaNumber) &&
+                  String(ev.mufaName || '').trim().toUpperCase() === String(mufaCaptureDraft.mufaName || '').trim().toUpperCase())
+              ))
+                .map(ev => Number(ev.mufaPhotoNumber ?? ev.photoNumber))
+                .filter(n => Number.isInteger(n) && n >= 1 && n <= 9)
+            );
+            const nextPhotoNumber = Array.from({ length: 9 }, (_, i) => i + 1).find(n => !capturedSlots.has(n));
+            const remainingPhotos = Math.max(0, 9 - capturedSlots.size);
+            mufaCaptureInFlightRef.current = false;
+            if (!nextPhotoNumber || remainingPhotos <= 0) {
+              setMufaCaptureDraft(null);
+              setShowMufaCaptureModal(false);
+              setCurrentStep('history');
+            } else {
+              setMufaCaptureDraft(prev => prev && prev.mufaId === mufaCaptureDraft.mufaId
+                ? { ...prev, photoNumber: nextPhotoNumber, remainingPhotos }
+                : prev);
+            }
+          }
 
         } catch (e: any) {
           console.error("Fallo procesamiento asíncrono en captura", e);
@@ -3211,6 +3609,10 @@ export default function App() {
           if (captureLockKey && !capturePersisted) {
             pendingSetCaptureKeysRef.current.delete(captureLockKey);
           }
+          // Liberar el bloqueo de NAPS/MUFA solo cuando terminó el guardado
+          // (o falló), no inmediatamente después del disparo físico.
+          if (isNapCapture) napCaptureInFlightRef.current = false;
+          if (isMufaCapture) mufaCaptureInFlightRef.current = false;
           if (captureLockKey && activeSetCaptureLockRef.current === captureLockKey) {
             activeSetCaptureLockRef.current = null;
           }
@@ -3389,7 +3791,7 @@ export default function App() {
         .map(ev => ev.fiberPairId as string)
     )
   ).map(pairId => {
-    const pairEvidences = evidences.filter(ev => ev.fiberPairId === pairId && !!ev.photoUrl);
+    const pairEvidences = evidences.filter(ev => ev.fiberPairId === pairId && Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url));
     const initial = pairEvidences.find(ev => ev.category === 'PUNTAS_FIBRA_INICIAL');
     const final = pairEvidences.find(ev => ev.category === 'PUNTAS_FIBRA_FINAL');
     return {
@@ -3407,7 +3809,7 @@ export default function App() {
   );
 
   const evidenceCategoryProgress = EVIDENCE_CATEGORIES.map(category => {
-    const categoryEvidences = evidences.filter(ev => ev.category === category.id && !!ev.photoUrl);
+    const categoryEvidences = evidences.filter(ev => ev.category === category.id && Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url));
     if (category.id === 'RESERVA') {
       const reserveIds = Array.from(new Set(categoryEvidences.map(ev => ev.reserveId).filter(Boolean)));
       const completedReserves = reserveIds.filter(id =>
@@ -3679,6 +4081,7 @@ export default function App() {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto px-5 py-7 sm:px-6 sm:py-8 xl:px-8 xl:pt-8 xl:pb-8 no-scrollbar">
           <input ref={memoryUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleMemoryUploadFile(e.target.files?.[0])} />
+          <input ref={projectPhotoUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleProjectPhotoUploadFile(e.target.files?.[0])} />
 
           <AnimatePresence mode="wait">
             {/* HOME VIEW */}
@@ -3931,7 +4334,7 @@ export default function App() {
                     <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950 xl:text-white">Memoria Fotográfica</h2>
                     <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest xl:text-blue-200/70">Proyectos almacenados en Firebase</p>
                   </div>
-                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center xl:bg-blue-900/40 xl:text-blue-200">
+                  <button type="button" onClick={() => { void refreshMemorySelectedProject(); }} disabled={memoryLoading} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center disabled:opacity-50 xl:bg-blue-900/40 xl:text-blue-200">
                     <RefreshCcw className={"w-4 h-4 " + (memoryLoading ? 'animate-spin' : '')} />
                   </button>
                 </div>
@@ -4133,86 +4536,91 @@ export default function App() {
                                     </div>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 lg:gap-2">
-                                      {group.items.map((ev: any, photoIndex: number) => {
-                                        const imageUrl = ev.photoUrl || ev.photo?.uri || '';
-                                        return (
-                                          <button
-                                            key={String(ev.uuid || ev.id || photoIndex)}
-                                            type="button"
-                                            onClick={() => imageUrl && setMemorySelectedPhoto(ev)}
-                                            className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left"
-                                          >
-                                            {imageUrl ? (
-                                              <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
-                                            ) : (
-                                              <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-slate-300 uppercase p-2 text-center">
-                                                <CameraIcon className="w-5 h-5 mb-1 text-slate-300" />
-                                                Sin foto
-                                              </div>
-                                            )}
-                                            <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white px-2 py-1.5 lg:px-2.5 lg:py-2">
-                                              <p className="text-[7px] font-black uppercase truncate lg:text-[9px] lg:leading-tight">
-                                                {category.id === 'NAPS'
-                                                  ? getNapsPhotoTitle(Number(ev.napPhotoNumber || photoIndex + 1))
-                                                  : 'FOTO ' + (photoIndex + 1) + '/' + group.required}
-                                              </p>
-                                              <p className="text-[7px] text-white/80 truncate lg:text-[8px] lg:leading-tight lg:mt-0.5">
-                                                {category.id === 'NAPS'
-                                                  ? 'NAP' + (group.name ? ' · ' + String(group.name).toUpperCase() : '')
-                                                  : (ev.categoryLabel || ev.category || category.label)}
-                                              </p>
-                                            </div>
-                                          </button>
-                                        );
-                                      })}
                                       {(() => {
-                                        const slots = category.id === 'NAPS'
-                                          ? Array.from({ length: 9 }, (_, i) => i + 1)
-                                          : Array.from({ length: Math.max(0, group.required - group.items.length) }, (_, i) => group.items.length + i + 1);
-
-                                        return slots
-                                          .filter(photoNumber => !group.items.some((item: any) =>
-                                            category.id === 'NAPS'
-                                              ? Number(item.napPhotoNumber) === photoNumber
-                                              : false
-                                          ))
-                                          .map((photoNumber) => (
-                                            <div
-                                              key={'missing-' + group.id + '-' + photoNumber}
-                                              className="min-h-[180px] lg:min-h-[120px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 lg:p-2 gap-2"
-                                            >
+                                        const slotMap = new Map<number, any>();
+                                        const orderedItems = [...group.items].sort((a: any, b: any) =>
+                                          Number(Boolean(b.photoUrl || b.photo?.uri || b.photo?.url)) -
+                                          Number(Boolean(a.photoUrl || a.photo?.uri || a.photo?.url))
+                                        );
+                                        orderedItems.forEach((item: any) => {
+                                          const explicit = getMemoryPhotoSlotNumber(item, category.id);
+                                          if (explicit >= 1 && explicit <= group.required && !slotMap.has(explicit)) {
+                                            slotMap.set(explicit, item);
+                                          }
+                                        });
+                                        orderedItems.forEach((item: any) => {
+                                          const explicit = getMemoryPhotoSlotNumber(item, category.id);
+                                          if (explicit >= 1 && explicit <= group.required) return;
+                                          const firstFree = Array.from({ length: group.required }, (_, i) => i + 1).find(n => !slotMap.has(n));
+                                          if (firstFree) slotMap.set(firstFree, item);
+                                        });
+                                        const seed = group.items[0] || {};
+                                        const groupId = category.id === 'NAPS' ? seed.napId
+                                          : category.id === 'MUFA' ? seed.mufaId
+                                          : category.id === 'PUNTAS_FIBRA' ? seed.fiberPairId
+                                          : category.id === 'RESERVA' ? seed.reserveId
+                                          : category.id === 'ACEROS' ? seed.aceroId
+                                          : category.id === 'DESECHOS' ? seed.desechoId
+                                          : category.id === 'ALTAS' ? seed.altaId
+                                          : category.id === 'MEJORAS' ? seed.mejoraId : '';
+                                        const groupName = category.id === 'NAPS' ? seed.napName
+                                          : category.id === 'MUFA' ? seed.mufaName
+                                          : category.id === 'ALTAS' ? seed.altaType
+                                          : category.id === 'MEJORAS' ? seed.mejoraType
+                                          : seed.categoryLabel || '';
+                                        return Array.from({ length: group.required }, (_, index) => index + 1).map(photoNumber => {
+                                          const ev = slotMap.get(photoNumber);
+                                          const imageUrl = String(ev?.photoUrl || ev?.photo?.uri || ev?.photo?.url || '').trim();
+                                          if (ev && imageUrl) {
+                                            return (
+                                              <div key={'photo-' + group.id + '-' + photoNumber} role="button" tabIndex={0}
+                                                onClick={() => setMemorySelectedPhoto(ev)}
+                                                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setMemorySelectedPhoto(ev); }}
+                                                className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left">
+                                                <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + photoNumber}
+                                                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
+                                                <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white px-2 py-1.5 lg:px-2.5 lg:py-2">
+                                                  <p className="text-[7px] font-black uppercase truncate lg:text-[9px] lg:leading-tight">
+                                                    {category.id === 'NAPS' ? getNapsPhotoTitle(photoNumber) : 'FOTO ' + photoNumber + '/' + group.required}
+                                                  </p>
+                                                  <p className="text-[7px] text-white/80 truncate lg:text-[8px] lg:leading-tight lg:mt-0.5">
+                                                    {category.id === 'NAPS' ? 'NAP' + (groupName ? ' · ' + String(groupName).toUpperCase() : '')
+                                                      : category.id === 'ACEROS' ? (photoNumber === 1 ? 'ACEROS · PANORÁMICA' : 'ACEROS · METRAJE')
+                                                      : category.id === 'DESECHOS' ? (photoNumber === 1 ? 'DESECHOS · PANORÁMICA' : 'DESECHOS · METRAJE')
+                                                      : category.id === 'PUNTAS_FIBRA' ? (photoNumber === 1 ? 'PUNTA INICIAL' : 'PUNTA FINAL')
+                                                      : category.id === 'RESERVA' ? (photoNumber === 1 ? 'PUNTA INICIAL' : photoNumber === 2 ? 'PUNTA FINAL' : 'ROLLO DETALLADO')
+                                                      : category.id === 'MEJORAS' ? (String(groupName || category.label).toUpperCase() + (photoNumber === 1 ? ' · ANTES' : ' · DESPUÉS'))
+                                                      : (ev.categoryLabel || ev.category || category.label)}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                          return (
+                                            <div key={'missing-' + group.id + '-' + photoNumber}
+                                              className="min-h-[180px] lg:min-h-[120px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center text-center p-3 lg:p-2 gap-2">
                                               <CameraIcon className="w-6 h-6 text-blue-400" />
-                                              <p className="text-[8px] font-black uppercase text-blue-700">FALTA FOTO</p>
+                                              <p className="text-[8px] font-black uppercase text-blue-700">{ev ? 'FOTO NO DISPONIBLE' : 'FALTA FOTO'}</p>
                                               <p className="text-[8px] font-black uppercase text-blue-600">
-                                                {category.id === 'NAPS'
-                                                  ? getNapsPhotoTitle(photoNumber) + ' NAP'
-                                                  : 'FOTO ' + photoNumber}
+                                                {category.id === 'NAPS' ? getNapsPhotoTitle(photoNumber) + ' NAP' : 'FOTO ' + photoNumber}
                                               </p>
-
-                                              {category.id === 'NAPS' && (
-                                                <>
-                                                  <button
-                                                    type="button"
-                                                    disabled={memoryUploadLoading}
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      uploadMissingMemoryPhoto({
-                                                        category: 'NAPS',
-                                                        napId: String(group.id),
-                                                        napNumber: Number(group.number),
-                                                        napName: String(group.name || ''),
-                                                        photoNumber
-                                                      });
-                                                    }}
-                                                    className="w-full px-2.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
-                                                  >
-                                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
-                                                  </button>
-
-                                                </>
-                                              )}
+                                              <button type="button" disabled={memoryUploadLoading}
+                                                onClick={() => uploadMissingMemoryPhoto({
+                                                  category: category.id as EvidenceCategory,
+                                                  groupId: String(groupId || group.id || ''),
+                                                  groupNumber: Number(group.number ?? 0),
+                                                  groupName: String(groupName || ''),
+                                                  photoNumber,
+                                                  groupItem: seed,
+                                                  groupItems: group.items,
+                                                  existingEvidence: ev || undefined
+                                                })}
+                                                className="w-full px-2.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50">
+                                                {memoryUploadLoading ? 'SUBIENDO...' : ev ? 'REEMPLAZAR / SUBIR FOTO' : 'SUBIR FOTO DESDE EL TELÉFONO'}
+                                              </button>
                                             </div>
-                                          ));
+                                          );
+                                        });
                                       })()}
                                     </div>
                                   </section>
@@ -4223,6 +4631,20 @@ export default function App() {
                         );
                       })()
                     )}
+                  </div>
+                )}
+
+                {memoryDeleteTarget && (
+                  <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm" onClick={() => { if (!memoryDeleteLoading) setMemoryDeleteTarget(null); }}>
+                    <div className="w-full max-w-sm space-y-4 rounded-3xl bg-white p-6 text-center shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600"><Trash2 className="h-7 w-7" /></div>
+                      <h3 className="text-base font-black uppercase tracking-tight text-gray-950">¿Eliminar fotografía?</h3>
+                      <p className="text-sm text-gray-600">Se eliminará esta fotografía de Firebase Storage y su registro del proyecto. Esta acción no se puede deshacer.</p>
+                      <div className="flex gap-3 pt-1">
+                        <button type="button" disabled={memoryDeleteLoading} onClick={() => setMemoryDeleteTarget(null)} className="flex-1 rounded-xl bg-gray-100 py-3 text-[10px] font-black uppercase text-gray-700 disabled:opacity-50">Cancelar</button>
+                        <button type="button" disabled={memoryDeleteLoading} onClick={() => void deleteMemoryPhoto()} className="flex-1 rounded-xl bg-red-600 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50">{memoryDeleteLoading ? 'Eliminando...' : 'Sí, eliminar'}</button>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -4246,6 +4668,13 @@ export default function App() {
                            (memorySelectedPhoto.mufaNumber ? 'MUFA ' + memorySelectedPhoto.mufaNumber : '') || 'FOTOGRAFÍA'}
                         </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); setMemoryDeleteTarget(memorySelectedPhoto); }}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-[10px] font-black uppercase tracking-wide text-white shadow-lg"
+                      >
+                        <Trash2 className="w-4 h-4" /> Eliminar fotografía
+                      </button>
                     </div>
                   </div>
                 )}
@@ -4275,14 +4704,30 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setCurrentStep('camera')}
+                  <button
+                    type="button"
+                    onClick={() => { void refreshCurrentProjectEvidence(); }}
+                    disabled={projectRefreshLoading || isProcessing}
+                    title="Actualizar información y reintentar sincronización"
+                    aria-label="Actualizar fotos y sincronización"
+                    className="w-10 h-10 bg-white border border-gray-100 text-blue-600 shadow-sm rounded-xl flex items-center justify-center shrink-0 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    <RefreshCcw className={"w-4 h-4 " + (projectRefreshLoading ? 'animate-spin' : '')} />
+                  </button>
+                  <button
+                    onClick={() => { setIsExtraPhotoMode(true); setEvidenceCategory('EXTRAS'); setProjectRefreshMessage(''); setCurrentStep('camera'); }}
                     disabled={isProcessing}
+                    title="Tomar fotos extras del proyecto (no se incluyen en secciones ni memoria fotográfica)"
+                    aria-label="Tomar foto extra del proyecto"
                     className="w-12 h-12 bg-blue-600 text-white shadow-[0_8px_20px_-4px_rgba(37,99,235,0.5)] rounded-2xl flex items-center justify-center shrink-0 active:scale-95 transition-all disabled:opacity-50"
                   >
                     <CameraIcon className="w-6 h-6" />
                   </button>
                 </div>
+
+                {projectRefreshMessage && (
+                  <p className="px-1 text-[9px] font-bold text-gray-500" role="status">{projectRefreshMessage}</p>
+                )}
 
                 {/* EVIDENCE CHECKLIST - PROJECT LEVEL */}
                 <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-4 space-y-4">
@@ -4656,17 +5101,26 @@ export default function App() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Resp.</label>
-                      <input 
-                        type="text" 
-                        value={editingProject.techName || ''}
-                        onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
-                        className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold" 
-                        placeholder="Nombre completo"
-                      />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Responsable</label>
+                      <label className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editingProject.showTech !== false}
+                          onChange={(e) => setEditingProject({...editingProject, showTech: e.target.checked})}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Mostrar en foto
+                      </label>
                     </div>
+                    <input
+                      type="text"
+                      value={editingProject.techName || ''}
+                      onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:border-blue-500 focus:ring-0 outline-none"
+                      placeholder="Nombre completo del técnico"
+                    />
                   </div>
 
                   <div className="bg-blue-50 p-5 rounded-[2rem] border border-blue-100">
@@ -4676,7 +5130,6 @@ export default function App() {
                         { key: 'showDateTime', label: 'Fecha y Hora' },
                         { key: 'showGps', label: 'GPS' },
                         { key: 'showLocation', label: 'Ubicación' },
-                        { key: 'showTech', label: 'Técnico' },
                       ].map((field) => (
                         <label key={field.key} className="flex items-center gap-2 cursor-pointer group">
                           <input 
@@ -4981,7 +5434,7 @@ export default function App() {
                   onClick={handleSaveProject}
                   className="w-full py-5 bg-blue-600 text-white rounded-[2rem] text-[13px] font-black uppercase tracking-widest shadow-2xl shadow-blue-600/20 active:scale-95 transition-all"
                 >
-                  Guardar y Abrir Cámara
+                  Guardar
                 </button>
               </motion.div>
             )}
@@ -5152,7 +5605,7 @@ export default function App() {
           <div className="absolute top-1 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
             <div className="bg-black/25 backdrop-blur-md border border-white/10 rounded-lg px-2.5 py-1 shadow-sm">
               <p className="text-[8px] font-semibold text-white/75 whitespace-nowrap">
-                Evidencia: {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
+                Evidencia: {isExtraPhotoMode ? 'Fotos extras del proyecto' : EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
               </p>
               {evidenceCategory === 'NAPS' && napCaptureDraft && (
                 <p className="text-[9px] font-black text-white whitespace-nowrap mt-0.5">
@@ -7469,7 +7922,7 @@ export default function App() {
                 }>
                   {storageEvidenceCategory === 'NAPS' ? (() => {
                     const napPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'NAPS' && ev.napId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'NAPS' && ev.napId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.napNumber || 0) - Number(b.napNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7542,20 +7995,11 @@ export default function App() {
                                   <span className="text-[9px] font-black uppercase text-center px-2">
                                     FALTA FOTO<br />{getNapsPhotoTitle(photoNumber)} NAP
                                   </span>
-                                  <button
-                                    type="button"
-                                    disabled={memoryUploadLoading}
-                                    onClick={() => uploadMissingMemoryPhoto({
-                                      category: 'NAPS',
-                                      napId: group[0]?.napId || '',
-                                      napNumber: Number(group[0]?.napNumber || groupIndex + 1),
-                                      napName: group[0]?.napName || '',
-                                      photoNumber
-                                    })}
-                                    className="w-full px-2 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50"
-                                  >
-                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO DESDE EL TELÉFONO'}
-                                  </button>
+                                  {renderProjectUploadButton({
+                                    category: 'NAPS', groupId: group[0]?.napId || '',
+                                    groupNumber: Number(group[0]?.napNumber || groupIndex + 1),
+                                    groupName: group[0]?.napName || '', photoNumber, groupItem: group[0]
+                                  }, 'FOTO ' + photoNumber)}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -7581,8 +8025,61 @@ export default function App() {
                         </div>
                       );
                     });
+                  })() : storageEvidenceCategory === 'RESERVA' ? (() => {
+                    const reservePhotos = evidences.filter((ev: any) =>
+                      Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) &&
+                      ev.category === 'RESERVA' && ev.reserveId
+                    );
+                    const groups = Array.from(reservePhotos.reduce((map: Map<string, any[]>, ev: any) => {
+                      const key = ev.reserveId || 'reserve-' + (ev.reserveNumber || ev.id || ev.uuid);
+                      if (!map.has(key)) map.set(key, []);
+                      map.get(key)!.push(ev);
+                      return map;
+                    }, new Map<string, any[]>()).values());
+                    return groups.map((group: any[], groupIndex: number) => {
+                      const first = group[0] || {};
+                      const reserveId = String(first.reserveId || '');
+                      const reserveNumber = Number(first.reserveNumber || groupIndex + 1);
+                      const slots = [
+                        { side: 'initial', number: 1, label: 'PUNTA INICIAL' },
+                        { side: 'final', number: 2, label: 'PUNTA FINAL' },
+                        { side: 'roll', number: 3, label: 'ROLLO DETALLADO' }
+                      ];
+                      return (
+                        <div key={reserveId || 'reserve-' + reserveNumber} className="bg-white rounded-3xl border border-blue-100 shadow-sm p-3">
+                          <div className="px-1 pb-3">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">RESERVA {String(reserveNumber).padStart(2,'0')}</p>
+                            <p className="text-[8px] font-bold uppercase text-gray-400 mt-1">{group.length}/3 FOTOS · SET DE RESERVA</p>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 lg:gap-2.5">
+                            {slots.map(slot => {
+                              const ev = group.find(item => item.reserveSide === slot.side);
+                              return ev ? (
+                                <button key={slot.side} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left">
+                                  <div className="aspect-[4/5] bg-black overflow-hidden">
+                                    <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={slot.label} className="w-full h-full object-cover" loading="lazy" />
+                                  </div>
+                                  <div className="p-2.5"><p className="text-[9px] font-black uppercase text-gray-900">{slot.label}</p><p className="text-[8px] font-bold text-gray-400 mt-1">{ev.fecha} {ev.hora || ''}</p></div>
+                                </button>
+                              ) : (
+                                <div key={slot.side} className="flex flex-col gap-1 min-w-0">
+                                  <div className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700">
+                                    <CameraIcon className="w-8 h-8" />
+                                    <span className="text-[9px] font-black uppercase text-center px-2">FALTA FOTO<br />{slot.label}</span>
+                                  </div>
+                                  {renderProjectUploadButton({
+                                    category: 'RESERVA', groupId: reserveId, groupNumber: reserveNumber,
+                                    groupName: '', photoNumber: slot.number, groupItem: first
+                                  }, slot.label)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
                   })() : storageEvidenceCategory === 'ALTAS' ? (() => {
-                    const altaPhotos = evidences                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ALTAS' && ev.altaId)
+                    const altaPhotos = evidences                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'ALTAS' && ev.altaId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.altaNumber || 0) - Number(b.altaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7643,7 +8140,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -7678,7 +8175,7 @@ export default function App() {
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'panoramic' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'ALTAS', groupId: altaId, groupNumber: altaNumber, groupName: altaType, photoNumber: missingSide === 'panoramic' ? 1 : 2, groupItem: group[0] }, 'PANORÁMICA / METRAJE')}</div>
                             )}
                           </div>
                         </div>
@@ -7686,7 +8183,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'ACEROS' ? (() => {
                     const aceroPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ACEROS' && ev.aceroId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'ACEROS' && ev.aceroId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.aceroNumber || 0) - Number(b.aceroNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7742,7 +8239,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -7762,7 +8259,7 @@ export default function App() {
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'ACEROS', groupId: aceroId, groupNumber: aceroNumber, photoNumber: missingSide === 'photo1' ? 1 : 2, groupItem: group[0] }, 'PANORÁMICA / METRAJE')}</div>
                             )}
                           </div>
                         </div>
@@ -7770,7 +8267,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'DESECHOS' ? (() => {
                     const desechoPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'DESECHOS' && ev.desechoId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'DESECHOS' && ev.desechoId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.desechoNumber || 0) - Number(b.desechoNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7825,7 +8322,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -7852,7 +8349,7 @@ export default function App() {
                                 <span className="text-[9px] font-black uppercase text-center px-2">
                                   TOMAR FOTO<br />{missingSide === 'photo1' ? 'PANORÁMICA' : 'METRAJE'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'DESECHOS', groupId: desechoId, groupNumber: desechoNumber, photoNumber: missingSide === 'photo1' ? 1 : 2, groupItem: group[0] }, 'PANORÁMICA / METRAJE')}</div>
                             )}
                           </div>
                         </div>
@@ -7860,7 +8357,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'MEJORAS' ? (() => {
                     const mejoraPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MEJORAS' && ev.mejoraId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'MEJORAS' && ev.mejoraId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.mejoraNumber || 0) - Number(b.mejoraNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7923,7 +8420,7 @@ export default function App() {
                             ))}
 
                             {missingSide && (
-                              <button
+                              <div className="flex flex-col gap-1 min-w-0"><button
                                 type="button"
                                 onClick={() => {
                                   setViewingEvidence(null);
@@ -7943,7 +8440,7 @@ export default function App() {
                                 <CameraIcon className="w-8 h-8" />
                                 <span className="text-[9px] font-black uppercase text-center px-2">                                  TOMAR FOTO<br />{missingSide === 'before' ? 'ANTES' : 'DESPUÉS'}
                                 </span>
-                              </button>
+                              </button>{renderProjectUploadButton({ category: 'MEJORAS', groupId: mejoraId, groupNumber: mejoraNumber, groupName: mejoraType, photoNumber: missingSide === 'before' ? 1 : 2, groupItem: group[0] }, 'ANTES / DESPUÉS')}</div>
                             )}
                           </div>
                         </div>
@@ -7952,7 +8449,7 @@ export default function App() {
                   })() : storageEvidenceCategory === 'PUNTAS_FIBRA' ? (() => {
                     const fiberPhotos = evidences
                       .filter((ev: any) =>
-                        !!ev.photoUrl &&
+                        Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) &&
                         (ev.category === 'PUNTAS_FIBRA_INICIAL' || ev.category === 'PUNTAS_FIBRA_FINAL') &&
                         ev.fiberPairId
                       )
@@ -8019,23 +8516,28 @@ export default function App() {
                         }
 
                         return (
-                          <button
-                            key={`fiber-missing-${pairNumber}-${side}`}
-                            type="button"
-                            onClick={() => {
-                              setViewingEvidence(null);
-                              setShowStorageEvidenceViewer(false);
-                              setStorageEvidenceCategory(null);
-                              setEvidenceCategory('PUNTAS_FIBRA');
-                              openFiberSide(side, pairId);
-                            }}
-                            className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
-                          >
-                            <CameraIcon className="w-8 h-8" />
-                            <span className="text-[9px] font-black uppercase text-center px-2">
-                              TOMAR FOTO<br />{side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
-                            </span>
-                          </button>
+                          <div key={`fiber-missing-${pairNumber}-${side}`} className="flex flex-col gap-1 min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewingEvidence(null);
+                                setShowStorageEvidenceViewer(false);
+                                setStorageEvidenceCategory(null);
+                                setEvidenceCategory('PUNTAS_FIBRA');
+                                openFiberSide(side, pairId);
+                              }}
+                              className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                            >
+                              <CameraIcon className="w-8 h-8" />
+                              <span className="text-[9px] font-black uppercase text-center px-2">
+                                TOMAR FOTO<br />{side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL'}
+                              </span>
+                            </button>
+                            {renderProjectUploadButton({
+                              category: 'PUNTAS_FIBRA', groupId: pairId, groupNumber: pairNumber,
+                              photoNumber: side === 'initial' ? 1 : 2, groupItem: first
+                            }, side === 'initial' ? 'PUNTA INICIAL' : 'PUNTA FINAL')}
+                          </div>
                         );
                       };
 
@@ -8071,7 +8573,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'MUFA' ? (() => {
                     const mufaPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA')
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'MUFA')
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.mufaNumber || 0) - Number(b.mufaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -8141,8 +8643,8 @@ export default function App() {
                               }
 
                               return (
+                                <div key={`mufa-missing-${photoNumber}`} className="flex flex-col gap-1 min-w-0">
                                 <button
-                                  key={`nap-missing-${photoNumber}`}
                                   type="button"
                                   onClick={() => {
                                     const mufaId = group[0]?.mufaId || '';
@@ -8171,6 +8673,12 @@ export default function App() {
                                     TOMAR FOTO<br />FOTO {photoNumber}/9
                                   </span>
                                 </button>
+                                {renderProjectUploadButton({
+                                  category: 'MUFA', groupId: group[0]?.mufaId || '',
+                                  groupNumber: Number(group[0]?.mufaNumber || groupIndex + 1),
+                                  groupName: group[0]?.mufaName || '', photoNumber, groupItem: group[0]
+                                }, 'FOTO ' + photoNumber)}
+                                </div>
                               );
                             })}
                           </div>
@@ -8179,7 +8687,7 @@ export default function App() {
                     });
                   })() : (
                     evidences
-                      .filter((ev: any) => !!ev.photoUrl && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && (!storageEvidenceCategory || ev.category === storageEvidenceCategory))
                       .map((ev: any, index: number) => (
                         <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                           <div className="aspect-[4/5] bg-black overflow-hidden">
@@ -8260,17 +8768,10 @@ export default function App() {
                 )}
               </div>
               <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
-                {viewingEvidence.photoUrl ? (
-                  <EvidencePhoto evidence={viewingEvidence} src={viewingEvidence.photoUrl || viewingEvidence.photo?.uri || viewingEvidence.photo?.url} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" loading="eager" />
-                ) : (
-                  <div className="p-8 text-center text-white/60">
-                    <CameraIcon className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                    <p className="text-[10px] font-black uppercase tracking-widest">Fotografía todavía no disponible en Storage</p>
-                  </div>
-                )}
+                <EvidencePhoto evidence={viewingEvidence} src={viewingEvidence.photoUrl || viewingEvidence.photo?.uri || viewingEvidence.photo?.url} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" loading="eager" />
               </div>
               <p className="text-center text-[10px] text-gray-400 pt-2">
-                {viewingEvidence.photoUrl ? 'Esta es la fotografía que utilizará la memoria de Excel.' : 'La fotografía aún está pendiente de subir a Firebase Storage.'}
+                {viewingEvidence.photoUrl ? 'Fotografía disponible en Firebase Storage.' : 'Mostrando la copia local si existe. La sincronización con Firebase puede seguir pendiente.'}
               </p>
             </div>
           </motion.div>

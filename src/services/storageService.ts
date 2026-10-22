@@ -244,8 +244,11 @@ export const storageService = {
     const id = await manager.add(STORE_PROJECTS, projectToSave);
     const savedProject = await manager.get<Project>(STORE_PROJECTS, id);
 
-    // Guardado local primero; con conexión disponible, sincronización inmediata.
-    await syncProjectImmediately(savedProject);
+    // El guardado local ya está confirmado. La sincronización remota no debe
+    // bloquear la navegación ni impedir que el usuario continúe trabajando offline.
+    void syncProjectImmediately(savedProject).catch(error => {
+      console.warn('[StorageService] Proyecto guardado localmente; sincronización pendiente:', error);
+    });
     return id;
   },
 
@@ -277,8 +280,11 @@ export const storageService = {
     };
     await manager.put(STORE_PROJECTS, updated);
 
-    // Los cambios de configuración también se sincronizan inmediatamente.
-    await syncProjectImmediately(updated);
+    // Persistir localmente es la operación crítica. La sincronización remota
+    // se ejecuta en segundo plano para evitar que editar/guardar quede bloqueado.
+    void syncProjectImmediately(updated).catch(error => {
+      console.warn('[StorageService] Cambios del proyecto guardados localmente; sincronización pendiente:', error);
+    });
   },
 
   /**
@@ -290,12 +296,9 @@ export const storageService = {
   async addEvidence(evidence: Evidence, imageBase64: string): Promise<number> {
     const project = await this.getProject(evidence.projectId);
 
-    // Garantiza que el proyecto padre exista/esté actualizado en Firestore
-    // antes de iniciar la sincronización de la evidencia.
-    if (navigator.onLine && project) {
-      await syncProjectImmediately(project);
-    }
-
+    // Nunca esperar a Firebase antes de guardar la evidencia localmente.
+    // La sincronización del proyecto padre se realizará en segundo plano después
+    // de confirmar el archivo y sus metadatos en IndexedDB.
     const evidenceToSave: Evidence = {
       ...evidence,
       projectUuid: evidence.projectUuid || project?.uuid,
@@ -311,63 +314,88 @@ export const storageService = {
     let photoBlob: Blob | undefined;
     if (imageBase64) {
       try {
-        photoBlob = await (await fetch(imageBase64)).blob();
+        // En Android WebView, fetch(data:image/...) puede fallar para capturas grandes.
+        // Decodificamos explícitamente los data URL para asegurar que IndexedDB reciba el Blob.
+        if (imageBase64.startsWith('data:')) {
+          const comma = imageBase64.indexOf(',');
+          if (comma < 0) throw new Error('Data URL sin separador de contenido.');
+          const header = imageBase64.slice(0, comma);
+          const payload = imageBase64.slice(comma + 1);
+          const mime = header.match(/^data:([^;]+)/i)?.[1] || 'image/jpeg';
+          if (/;base64/i.test(header)) {
+            const binary = atob(payload);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            photoBlob = new Blob([bytes], { type: mime });
+          } else {
+            photoBlob = new Blob([decodeURIComponent(payload)], { type: mime });
+          }
+        } else {
+          photoBlob = await (await fetch(imageBase64)).blob();
+        }
+        if (!photoBlob || photoBlob.size <= 0) throw new Error('La fotografía convertida está vacía.');
       } catch (error) {
         console.error('[StorageService] No se pudo preparar la copia local de la fotografía:', error);
         throw new Error('No se pudo preparar la fotografía para guardarla de forma segura.');
       }
     }
 
-    const evidenceId = await manager.addEvidenceAtomically(evidenceToSave, photoBlob);
-
-    // SEGUNDO: si hay conexión, intentamos Storage inmediatamente.
-    // Si falla, la evidencia permanece PENDING y la copia local queda intacta
-    // para que el sincronizador la reintente después.
-    if (navigator.onLine && evidenceToSave.projectUuid && photoBlob) {
-      try {
-        const remote = await firebaseService.uploadEvidencePhoto(
-          photoBlob,
-          evidenceToSave.projectUuid,
-          evidenceToSave.uuid,
-          evidenceToSave.photoPath
-        );
-
-        evidenceToSave.photoStoragePath = remote.storagePath;
-        evidenceToSave.photoUrl = remote.downloadUrl;
-        await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
-      } catch (uploadError) {
-        console.warn('[StorageService] Foto pendiente de subida a Firebase Storage:', uploadError);
-      }
+    // Si el registro tiene referencia a una foto, no permitir guardarlo sin su Blob local.
+    if (evidenceToSave.photoPath && !photoBlob) {
+      throw new Error('La fotografía no contiene datos locales para guardarse. Vuelve a tomarla.');
     }
 
-    // TERCERO: Firestore solo puede quedar "synced" cuando la fotografía,
-    // si existe, ya tiene una referencia válida de Storage.
+    const evidenceId = await manager.addEvidenceAtomically(evidenceToSave, photoBlob);
+
+    // La evidencia y su Blob ya están persistidos localmente. Desde este punto
+    // toda operación remota es de fondo: un timeout/permisos/red no puede bloquear
+    // la cámara ni provocar la pérdida de la fotografía.
     if (navigator.onLine) {
-      try {
-        const success = await firebaseService.syncEvidenceToCloud(evidenceToSave);
-        if (success) {
-          evidenceToSave.syncStatus = 'synced';
-          evidenceToSave.lastSyncedAt = new Date();
-          evidenceToSave.syncError = undefined;
-          evidenceToSave.retryCount = 0;
-          if (evidenceId) {
+      void (async () => {
+        try {
+          if (project) await syncProjectImmediately(project);
+
+          if (evidenceToSave.projectUuid && photoBlob) {
+            const remote = await firebaseService.uploadEvidencePhoto(
+              photoBlob,
+              evidenceToSave.projectUuid,
+              evidenceToSave.uuid,
+              evidenceToSave.photoPath
+            );
+            evidenceToSave.photoStoragePath = remote.storagePath;
+            evidenceToSave.photoUrl = remote.downloadUrl;
             await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
           }
 
-          // La copia local solo se elimina después de confirmar Firestore.
-          if (evidenceToSave.photoUrl && evidenceToSave.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidenceToSave.photoPath);
+          // Solo se declara sincronizada si los metadatos se aceptan en Firestore
+          // y, cuando hay foto, existe URL confirmada de Storage.
+          const photoReady = !evidenceToSave.photoPath || Boolean(evidenceToSave.photoUrl);
+          if (photoReady) {
+            const success = await firebaseService.syncEvidenceToCloud(evidenceToSave);
+            if (success) {
+              evidenceToSave.syncStatus = 'synced';
+              evidenceToSave.lastSyncedAt = new Date();
+              evidenceToSave.syncError = undefined;
+              evidenceToSave.retryCount = 0;
+              await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
+              // Mantener el Blob local permite abrir la foto dentro de la app incluso
+              // si la URL remota falla o el dispositivo está sin conexión.
+            }
           }
-        } else {
-          evidenceToSave.syncStatus = 'pending';
-          evidenceToSave.syncError = 'La fotografía o sus metadatos todavía no se han confirmado en Firebase.';
-          if (evidenceId) {
-            await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
+        } catch (syncError) {
+          console.warn('[StorageService] Evidencia guardada localmente; sincronización pendiente:', syncError);
+          try {
+            const latest = await manager.get<Evidence>(STORE_EVIDENCES, evidenceId);
+            if (latest) {
+              latest.syncStatus = 'pending';
+              latest.syncError = String((syncError as any)?.message || syncError);
+              await manager.put(STORE_EVIDENCES, latest);
+            }
+          } catch (persistError) {
+            console.error('[StorageService] No se pudo actualizar el estado pendiente:', persistError);
           }
         }
-      } catch (syncError) {
-        console.error('[StorageService] Error en sincronización inicial de evidencia:', syncError);
-      }
+      })();
     }
 
     return evidenceId;
@@ -515,6 +543,17 @@ export const storageService = {
           }
         }
 
+        // No sincronizar metadatos ni marcar como completada una evidencia
+        // mientras su archivo fotográfico siga sin URL confirmada en Storage.
+        if (evidenceRequiresPhoto && !evidenceForCloud.photoUrl) {
+          evidence.syncStatus = 'pending';
+          evidence.retryCount = (evidence.retryCount ?? 0) + 1;
+          evidence.syncError = evidenceForCloud.syncError ||
+            'Fotografía pendiente: falta confirmar su subida a Firebase Storage.';
+          if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
+          continue;
+        }
+
         const success = await firebaseService.syncEvidenceToCloud(evidenceForCloud);
         if (success) {
           evidence.syncStatus = 'synced';
@@ -525,9 +564,8 @@ export const storageService = {
           evidence.retryCount = 0;
           evidence.syncSchemaVersion = CURRENT_SYNC_SCHEMA_VERSION;
           if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
-          if (evidence.photoUrl && evidence.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidence.photoPath);
-          }
+          // No borrar STORE_PHOTOS al sincronizar: es la copia persistente
+          // que permite visualizar evidencias desde Field Trace sin depender de la red.
           evidencesSynced++;
         } else {
           evidence.syncStatus = 'failed';
@@ -786,8 +824,96 @@ export const storageService = {
     return localProject;
   },
 
+  /**
+   * Aplica el estado canónico de Firebase al almacenamiento local compartido.
+   * Solo reemplaza registros ya sincronizados; las capturas locales pendientes
+   * nunca se pisan con datos remotos.
+   */
+  async reconcileCloudProjectEvidences(projectUuid: string, remoteEvidences: any[]): Promise<Evidence[]> {
+    const canonicalProjectUuid = String(projectUuid || '').trim();
+    if (!canonicalProjectUuid) return [];
+    const [projects, allLocal] = await Promise.all([
+      manager.getAll<Project>(STORE_PROJECTS),
+      manager.getAll<Evidence>(STORE_EVIDENCES)
+    ]);
+    const localProject = projects.find(project => String(project.uuid || '') === canonicalProjectUuid);
+    const localProjectId = localProject?.id;
+    const localForProject = allLocal.filter(item =>
+      String((item as any).projectUuid || '') === canonicalProjectUuid ||
+      (localProjectId != null && item.projectId === localProjectId)
+    );
+    const remoteByUuid = new Map<string, any>();
+    const remotelyDeletedUuids = new Set<string>();
+    for (const remote of remoteEvidences || []) {
+      const uuid = String(remote?.uuid || '').trim();
+      if (!uuid) continue;
+      if (remote?.isDeleted === true) {
+        remotelyDeletedUuids.add(uuid);
+        continue;
+      }
+      remoteByUuid.set(uuid, remote);
+    }
+
+    for (const [uuid, remote] of remoteByUuid) {
+      const existing = allLocal.find(item => String((item as any).uuid || '') === uuid);
+      // No destruir una captura o sustitución local que aún no llegó a la nube.
+      if (existing && existing.syncStatus !== 'synced') continue;
+      const remotePhotoChanged = Boolean(existing && remote.photoUrl && existing.photoUrl &&
+        (remote.photoUrl !== existing.photoUrl || (remote.photoStoragePath && remote.photoStoragePath !== existing.photoStoragePath)));
+      if (remotePhotoChanged && existing?.photoPath) {
+        // No dejar una miniatura/blob de la foto anterior como respaldo de la sustitución.
+        try { await manager.delete(STORE_PHOTOS, existing.photoPath); } catch (_) {}
+      }
+      const normalized: any = {
+        ...(existing || {}),
+        ...remote,
+        uuid,
+        projectUuid: canonicalProjectUuid,
+        projectId: existing?.projectId ?? localProjectId ?? remote.projectId ?? null,
+        // Si cambió la foto remota, descartar la ruta local anterior para no
+        // mostrar accidentalmente la imagen sustituida cuando falle la URL nueva.
+        photoPath: remotePhotoChanged ? (remote.photoPath || '') : (existing?.photoPath || remote.photoPath || ''),
+        photoUrl: remote.photoUrl || existing?.photoUrl || '',
+        photoStoragePath: remote.photoStoragePath || existing?.photoStoragePath || '',
+        syncStatus: 'synced',
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
+        retryCount: 0,
+        syncError: undefined,
+        updatedAt: remote.updatedAt || new Date().toISOString()
+      };
+      if (existing?.id != null) {
+        normalized.id = existing.id;
+        await manager.put(STORE_EVIDENCES, normalized);
+      } else {
+        // Nunca reutilizar el ID numérico local de otro dispositivo.
+        delete normalized.id;
+        await manager.add(STORE_EVIDENCES, normalized);
+      }
+    }
+
+    // Si Firebase ya no tiene un registro que localmente se consideraba
+    // sincronizado, fue eliminado desde otro dispositivo: retirarlo también aquí.
+    for (const local of localForProject) {
+      const uuid = String((local as any).uuid || '').trim();
+      if (!uuid || local.id == null) continue;
+      const deletedByAnotherDevice = remotelyDeletedUuids.has(uuid);
+      if (!deletedByAnotherDevice && (local.syncStatus !== 'synced' || remoteByUuid.has(uuid))) continue;
+      await manager.delete(STORE_EVIDENCES, local.id);
+      if (local.photoPath) {
+        try { await manager.delete(STORE_PHOTOS, local.photoPath); } catch (_) {}
+      }
+    }
+
+    return localProjectId != null
+      ? this.getEvidencesByProject(localProjectId)
+      : (Array.from(remoteByUuid.values()) as Evidence[]);
+  },
+
   async getCloudProjectEvidences(projectUuid: string): Promise<Evidence[]> {
     const remoteEvidences = await firebaseService.getCloudProjectEvidences(projectUuid);
+    // Al abrir/actualizar Memoria Fotográfica también reconciliamos IndexedDB:
+    // evita que una eliminación remota permanezca como registro local obsoleto.
+    await this.reconcileCloudProjectEvidences(projectUuid, remoteEvidences);
     return remoteEvidences as Evidence[];
   },
 
