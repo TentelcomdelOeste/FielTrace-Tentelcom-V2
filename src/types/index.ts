@@ -110,6 +110,9 @@ export interface Evidence {
   /** Referencias remotas de la fotografía en Firebase Storage. */
   photoStoragePath?: string;
   photoUrl?: string;
+  /** Versión ligera para listados; la original se conserva aparte. */
+  thumbnailStoragePath?: string;
+  thumbnailUrl?: string;
   /** Categoría seleccionada por el técnico para preparar la memoria fotográfica. */
   category?: EvidenceCategory;
   /** Texto visible de la categoría al momento de la captura. */
