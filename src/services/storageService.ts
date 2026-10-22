@@ -547,6 +547,86 @@ export const storageService = {
     }
   },
 
+
+  /**
+   * Aplica la versión confirmada de Firestore al almacenamiento local del
+   * proyecto. Las evidencias pendientes/fallidas se conservan para no perder
+   * capturas o ediciones que todavía no han llegado a la nube.
+   */
+  async reconcileCloudProjectEvidences(projectId: number, projectUuid: string, remoteEvidences: any[]): Promise<Evidence[]> {
+    const localEvidences = await manager.getAll<Evidence>(STORE_EVIDENCES);
+    const localProject = await manager.get<Project>(STORE_PROJECTS, projectId);
+    const projectUuidNormalized = String(projectUuid);
+    const remoteByUuid = new Map<string, any>();
+
+    for (const remote of remoteEvidences) {
+      const uuid = String(remote.uuid || remote.id || '').trim();
+      if (uuid) remoteByUuid.set(uuid, remote);
+    }
+
+    const toDate = (value: any, fallback: Date) => {
+      if (!value) return fallback;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+    };
+
+    // Primero incorporamos/actualizamos los documentos que existen en la nube.
+    for (const [uuid, remote] of remoteByUuid) {
+      const local = localEvidences.find(item =>
+        item.uuid === uuid && String(item.projectUuid || localProject?.uuid || '') === projectUuidNormalized
+      );
+
+      // Nunca pisar trabajo local que aún no haya sido confirmado por Firestore.
+      if (local && local.syncStatus !== 'synced') continue;
+
+      const normalized: any = {
+        ...(local || {}),
+        ...remote,
+        uuid,
+        projectId,
+        projectUuid: projectUuidNormalized,
+        projectName: remote.projectName || localProject?.name || '',
+        createdAt: toDate(remote.createdAt || remote.capturedAt, local?.createdAt ? new Date(local.createdAt) : new Date()),
+        updatedAt: toDate(remote.updatedAt || remote.createdAt || remote.capturedAt, new Date()),
+        capturedAt: remote.capturedAt ? toDate(remote.capturedAt, new Date()) : local?.capturedAt,
+        gpsCapturedAt: remote.gpsCapturedAt ? toDate(remote.gpsCapturedAt, new Date()) : local?.gpsCapturedAt,
+        lastSyncedAt: new Date(),
+        syncStatus: 'synced',
+        syncSchemaVersion: CURRENT_SYNC_SCHEMA_VERSION,
+        syncError: undefined,
+        retryCount: 0
+      };
+
+      // Los IDs numéricos de otro dispositivo no son IDs locales válidos.
+      delete normalized.id;
+      if (local?.id != null) {
+        normalized.id = local.id;
+        await manager.put(STORE_EVIDENCES, normalized);
+      } else {
+        const newId = await manager.add(STORE_EVIDENCES, normalized);
+        normalized.id = newId;
+      }
+    }
+
+    // Solo quitamos evidencias marcadas como sincronizadas cuando la nube
+    // confirma que ya no existen. Pendientes/fallidas permanecen intactas.
+    for (const local of localEvidences) {
+      if (
+        String(local.projectUuid || localProject?.uuid || '') !== projectUuidNormalized ||
+        local.syncStatus !== 'synced' ||
+        !local.uuid ||
+        remoteByUuid.has(String(local.uuid))
+      ) continue;
+
+      if (local.id != null) await manager.delete(STORE_EVIDENCES, local.id);
+      if (local.photoPath) {
+        try { await manager.delete(STORE_PHOTOS, local.photoPath); } catch {}
+      }
+    }
+
+    return this.getEvidencesByProject(projectId);
+  },
+
   async syncPendingEvidences(): Promise<number> {
     const result = await this.syncAllLocalData();
     return result.evidences;
