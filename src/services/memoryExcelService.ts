@@ -239,7 +239,9 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
       if (data instanceof ArrayBuffer) {
         blob = new Blob([data]);
       } else if (ArrayBuffer.isView(data)) {
-        blob = new Blob([new Uint8Array(data.buffer, data.byteOffset, data.byteLength)]);
+        const copiedBytes = new Uint8Array(data.byteLength);
+        copiedBytes.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+        blob = new Blob([copiedBytes.buffer]);
       } else if (typeof data === 'string') {
         // CapacitorHttp entrega arraybuffer/blob como base64 en Android/iOS.
         const binary = atob(data);
