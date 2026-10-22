@@ -824,6 +824,75 @@ export const storageService = {
     return localProject;
   },
 
+  /**
+   * Aplica el estado canónico de Firebase al almacenamiento local compartido.
+   * Solo reemplaza registros ya sincronizados; las capturas locales pendientes
+   * nunca se pisan con datos remotos.
+   */
+  async reconcileCloudProjectEvidences(projectUuid: string, remoteEvidences: any[]): Promise<Evidence[]> {
+    const canonicalProjectUuid = String(projectUuid || '').trim();
+    if (!canonicalProjectUuid) return [];
+    const [projects, allLocal] = await Promise.all([
+      manager.getAll<Project>(STORE_PROJECTS),
+      manager.getAll<Evidence>(STORE_EVIDENCES)
+    ]);
+    const localProject = projects.find(project => String(project.uuid || '') === canonicalProjectUuid);
+    const localProjectId = localProject?.id;
+    const localForProject = allLocal.filter(item =>
+      String((item as any).projectUuid || '') === canonicalProjectUuid ||
+      (localProjectId != null && item.projectId === localProjectId)
+    );
+    const remoteByUuid = new Map<string, any>();
+    for (const remote of remoteEvidences || []) {
+      const uuid = String(remote?.uuid || '').trim();
+      if (uuid) remoteByUuid.set(uuid, remote);
+    }
+
+    for (const [uuid, remote] of remoteByUuid) {
+      const existing = allLocal.find(item => String((item as any).uuid || '') === uuid);
+      // No destruir una captura o sustitución local que aún no llegó a la nube.
+      if (existing && existing.syncStatus !== 'synced') continue;
+      const normalized: any = {
+        ...(existing || {}),
+        ...remote,
+        uuid,
+        projectUuid: canonicalProjectUuid,
+        projectId: existing?.projectId ?? localProjectId ?? remote.projectId ?? null,
+        // Conservar la clave local de IndexedDB si esta evidencia ya existe.
+        photoPath: existing?.photoPath || remote.photoPath || '',
+        photoUrl: remote.photoUrl || existing?.photoUrl || '',
+        photoStoragePath: remote.photoStoragePath || existing?.photoStoragePath || '',
+        syncStatus: 'synced',
+        retryCount: 0,
+        syncError: undefined,
+        updatedAt: remote.updatedAt || new Date().toISOString()
+      };
+      if (existing?.id != null) {
+        normalized.id = existing.id;
+        await manager.put(STORE_EVIDENCES, normalized);
+      } else {
+        // Nunca reutilizar el ID numérico local de otro dispositivo.
+        delete normalized.id;
+        await manager.add(STORE_EVIDENCES, normalized);
+      }
+    }
+
+    // Si Firebase ya no tiene un registro que localmente se consideraba
+    // sincronizado, fue eliminado desde otro dispositivo: retirarlo también aquí.
+    for (const local of localForProject) {
+      const uuid = String((local as any).uuid || '').trim();
+      if (local.syncStatus !== 'synced' || !uuid || remoteByUuid.has(uuid) || local.id == null) continue;
+      await manager.delete(STORE_EVIDENCES, local.id);
+      if (local.photoPath) {
+        try { await manager.delete(STORE_PHOTOS, local.photoPath); } catch (_) {}
+      }
+    }
+
+    return localProjectId != null
+      ? this.getEvidencesByProject(localProjectId)
+      : (Array.from(remoteByUuid.values()) as Evidence[]);
+  },
+
   async getCloudProjectEvidences(projectUuid: string): Promise<Evidence[]> {
     const remoteEvidences = await firebaseService.getCloudProjectEvidences(projectUuid);
     return remoteEvidences as Evidence[];
