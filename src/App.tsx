@@ -453,6 +453,7 @@ export default function App() {
   const [webCameraRetryTick, setWebCameraRetryTick] = useState(0);
   const [webCameraError, setWebCameraError] = useState<string | null>(null);
   const [nativeCameraError, setNativeCameraError] = useState<string | null>(null);
+  const [nativeCameraPreviewReady, setNativeCameraPreviewReady] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -608,8 +609,12 @@ export default function App() {
   }, [currentStep]);
 
   useEffect(() => {
-    if (currentStep !== 'camera') return;
+    if (currentStep !== 'camera') {
+      setNativeCameraPreviewReady(false);
+      return;
+    }
     let active = true;
+    setNativeCameraPreviewReady(false);
     void locationService.startWatching();
     void locationService.getCurrentPosition();
 
@@ -810,6 +815,7 @@ export default function App() {
         if (!active) return;
 
         console.log('[Camera] native preview ready:', started);
+        setNativeCameraPreviewReady(true);
         // El flash apagado es el estado predeterminado; no reconfiguramos CameraX
         // innecesariamente al abrir la cámara.
         if (flashMode === 'on') await ensureFlashArmed('on');
@@ -830,6 +836,7 @@ export default function App() {
 
     return () => {
       active = false;
+      setNativeCameraPreviewReady(false);
       void CameraPreview.setFlashMode({ flashMode: 'off' }).catch(() => {});
       void CameraPreview.stop({ force: true }).catch((error) => console.warn('[Camera] stop:', error));
     };
@@ -837,9 +844,12 @@ export default function App() {
   }, [currentStep, cameraFacing, isNativeCamera, cameraPermissionTick, webCameraRetryTick]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('native-camera-active', currentStep === 'camera');
+    document.documentElement.classList.toggle(
+      'native-camera-active',
+      currentStep === 'camera' && isNativeCamera && nativeCameraPreviewReady
+    );
     return () => document.documentElement.classList.remove('native-camera-active');
-  }, [currentStep]);
+  }, [currentStep, isNativeCamera, nativeCameraPreviewReady]);
 
   // Load last Field Trace album thumbnail when entering camera (survives app restart)
   useEffect(() => {
@@ -2889,8 +2899,10 @@ export default function App() {
       const hora = capturedAt.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
-      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
-      if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
+      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory) || {
+        id: 'SIN_CATEGORIA' as EvidenceCategory,
+        label: 'Sin categoría'
+      };
 
       if (selectedEvidenceCategory.id === 'RESERVA' && reserveCaptureDraft?.reserveId && reserveCaptureDraft.reelNumber?.trim()) {
         try {
@@ -4292,7 +4304,18 @@ export default function App() {
                     </div>
                   </div>
                   <button 
-                    onClick={() => setCurrentStep('camera')}
+                    onClick={() => {
+                      setEvidenceCategory(null);
+                      setFiberCaptureDraft(null);
+                      setReserveCaptureDraft(null);
+                      setNapCaptureDraft(null);
+                      setMufaCaptureDraft(null);
+                      setAltaCaptureDraft(null);
+                      setAceroCaptureDraft(null);
+                      setDesechoCaptureDraft(null);
+                      setMejoraCaptureDraft(null);
+                      setCurrentStep('camera');
+                    }}
                     disabled={isProcessing}
                     className="w-12 h-12 bg-blue-600 text-white shadow-[0_8px_20px_-4px_rgba(37,99,235,0.5)] rounded-2xl flex items-center justify-center shrink-0 active:scale-95 transition-all disabled:opacity-50"
                   >
@@ -5173,7 +5196,7 @@ export default function App() {
       {currentStep === 'camera' && selectedProject && (
         <div
           key="camera"
-          className="fixed inset-0 bg-transparent z-50 flex flex-col pointer-events-auto"
+          className={`fixed inset-0 ${isNativeCamera && !nativeCameraPreviewReady ? 'bg-black' : 'bg-transparent'} z-50 flex flex-col pointer-events-auto`}
         >
           {/* Category selected from the project checklist */}
           <div className="absolute top-1 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
@@ -5499,10 +5522,10 @@ export default function App() {
               <button
                 type="button"
                 onClick={captureBatchPhoto}
-                disabled={!evidenceCategory || isRecordingVideo || videoProcessing || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
+                disabled={isRecordingVideo || videoProcessing || (evidenceCategory === 'MEJORAS' && (isProcessing || mejoraCaptureInFlightRef.current))}
                 className="w-16 h-16 bg-white rounded-full p-1 border-[6px] border-white/20 active:scale-95 transition-transform disabled:opacity-40"
-                title={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
-                aria-label={evidenceCategory ? 'Capturar fotografía' : 'Seleccione primero el tipo de evidencia'}
+                title="Capturar fotografía"
+                aria-label="Capturar fotografía"
               >
                 <div className="w-full h-full bg-white rounded-full shadow-inner flex items-center justify-center">
                   <div className="w-10 h-10 border-4 border-gray-100 rounded-full"></div>
