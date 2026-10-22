@@ -247,10 +247,12 @@ const EvidencePhoto = memo(({
   const getInitialSrc = () => String(src || evidence?.photoUrl || evidence?.photo?.uri || evidence?.photo?.url || '').trim();
   const [imageSrc, setImageSrc] = useState<string>(getInitialSrc);
   const [retried, setRetried] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
     setImageSrc(getInitialSrc());
     setRetried(false);
+    setImageFailed(false);
   }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
@@ -262,6 +264,7 @@ const EvidencePhoto = memo(({
         const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
         if (freshUrl && freshUrl !== imageSrc) {
           setImageSrc(freshUrl);
+          setImageFailed(false);
           return;
         }
       } catch (error) {
@@ -272,15 +275,36 @@ const EvidencePhoto = memo(({
     if (photoPath) {
       try {
         const localUrl = await storageService.getPhotoBlob(photoPath);
-        if (localUrl) setImageSrc(localUrl);
+        if (localUrl) {
+          setImageSrc(localUrl);
+          setImageFailed(false);
+          return;
+        }
       } catch (error) {
         console.warn('[EvidencePhoto] No se pudo recuperar la copia local:', error);
       }
     }
+    setImageFailed(true);
   };
 
-  if (!imageSrc) return <div className={className} role="img" aria-label={alt} />;
-  return <img src={imageSrc} alt={alt} className={className} loading={loading} onError={() => { void recoverImage(); }} />;
+  if (!imageSrc || imageFailed) {
+    return (
+      <div className={className + ' bg-black/70 flex flex-col items-center justify-center gap-1 text-center text-white/80 p-2'} role="img" aria-label={alt}>
+        <CameraIcon className="w-5 h-5 opacity-60" />
+        <span className="text-[8px] font-bold uppercase">{imageFailed ? 'FOTO NO DISPONIBLE' : 'CARGANDO FOTO'}</span>
+        {imageFailed && <button type="button" className="text-[8px] underline font-black" onClick={(event) => {
+          event.stopPropagation();
+          setRetried(false);
+          setImageFailed(false);
+          void recoverImage();
+        }}>REINTENTAR</button>}
+      </div>
+    );
+  }
+  return <img src={imageSrc} alt={alt} className={className} loading={loading} onError={() => {
+    if (retried) setImageFailed(true);
+    else void recoverImage();
+  }} />;
 });
 
 import { signOut } from 'firebase/auth';
@@ -1404,12 +1428,9 @@ export default function App() {
     const groupList = Array.from(groups.entries()).map(([id, items]) => {
       let normalizedItems = items;
       if (category === 'MUFA') {
-        // MUFA es un set fijo de 9 fotografías. La existencia de la foto se
-        // determina por su URL, NO por mufaPhotoNumber. En registros históricos
-        // ese metadato puede faltar, pero la fotografía sigue siendo válida.
-        // El visor trabaja con las fotografías reales y las presenta 1/9 ... 9/9.
+        // Conservamos registros sin URL para que su posición se pueda reparar
+        // desde Memoria Fotográfica en vez de ocultarla y bloquearla.
         normalizedItems = [...items]
-          .filter(hasPhoto)
           .sort((a, b) => {
             const slotA = Number(a.mufaPhotoNumber ?? a.photoNumber ?? 0);
             const slotB = Number(b.mufaPhotoNumber ?? b.photoNumber ?? 0);
