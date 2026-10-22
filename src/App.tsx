@@ -249,9 +249,27 @@ const EvidencePhoto = memo(({
   const [retried, setRetried] = useState(false);
 
   useEffect(() => {
-    setImageSrc(getInitialSrc());
+    let active = true;
+    const initialSrc = getInitialSrc();
+    setImageSrc(initialSrc);
     setRetried(false);
-  }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+
+    // En APK puede existir una copia local aunque photoUrl esté vacía o Firebase
+    // no esté disponible. Cargarla desde IndexedDB sin esperar a un evento onError.
+    if (!initialSrc && evidence?.photoPath) {
+      void storageService.getPhotoBlob(String(evidence.photoPath)).then(localUrl => {
+        if (!active) {
+          if (localUrl?.startsWith('blob:')) URL.revokeObjectURL(localUrl);
+          return;
+        }
+        if (localUrl) setImageSrc(localUrl);
+      }).catch(error => {
+        console.warn('[EvidencePhoto] No se pudo cargar el respaldo local:', error);
+      });
+    }
+
+    return () => { active = false; };
+  }, [src, useThumbnail, evidence?.thumbnailUrl, evidence?.photoPath, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
