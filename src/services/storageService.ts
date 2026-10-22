@@ -334,6 +334,8 @@ export const storageService = {
 
         evidenceToSave.photoStoragePath = remote.storagePath;
         evidenceToSave.photoUrl = remote.downloadUrl;
+        evidenceToSave.thumbnailStoragePath = remote.thumbnailStoragePath;
+        evidenceToSave.thumbnailUrl = remote.thumbnailUrl;
         await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
       } catch (uploadError) {
         console.warn('[StorageService] Foto pendiente de subida a Firebase Storage:', uploadError);
@@ -505,6 +507,10 @@ export const storageService = {
                 evidenceForCloud.photoUrl = remote.downloadUrl;
                 evidence.photoStoragePath = remote.storagePath;
                 evidence.photoUrl = remote.downloadUrl;
+                evidenceForCloud.thumbnailStoragePath = remote.thumbnailStoragePath;
+                evidenceForCloud.thumbnailUrl = remote.thumbnailUrl;
+                evidence.thumbnailStoragePath = remote.thumbnailStoragePath;
+                evidence.thumbnailUrl = remote.thumbnailUrl;
                 await manager.put(STORE_EVIDENCES, evidence);
               } catch (uploadError) {
                 console.warn('[StorageService] Reintento de foto fallido:', uploadError);
@@ -522,6 +528,8 @@ export const storageService = {
           evidence.syncError = undefined;
           evidence.photoStoragePath = evidenceForCloud.photoStoragePath || evidence.photoStoragePath;
           evidence.photoUrl = evidenceForCloud.photoUrl || evidence.photoUrl;
+          evidence.thumbnailStoragePath = evidenceForCloud.thumbnailStoragePath || evidence.thumbnailStoragePath;
+          evidence.thumbnailUrl = evidenceForCloud.thumbnailUrl || evidence.thumbnailUrl;
           evidence.retryCount = 0;
           evidence.syncSchemaVersion = CURRENT_SYNC_SCHEMA_VERSION;
           if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
