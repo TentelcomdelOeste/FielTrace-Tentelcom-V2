@@ -7516,12 +7516,7 @@ export default function App() {
                                     className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                                   >
                                     <div className="aspect-[4/5] bg-black overflow-hidden">
-                                      <img
-                                        src={ev.photoUrl}
-                                        alt={ev.napName || 'NAP'}
-                                        className="w-full h-full object-cover"
-                                        loading="lazy"
-                                      />
+                                      <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.napName || 'NAP'} className="w-full h-full object-cover" loading="lazy" />
                                     </div>
                                     <div className="p-2.5 lg:p-2">
                                       <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -8131,12 +8126,7 @@ export default function App() {
                                     className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                                   >
                                     <div className="aspect-[4/5] bg-black overflow-hidden">
-                                      <img
-                                        src={ev.photoUrl}
-                                        alt={ev.mufaName || 'MUFA'}
-                                        className="w-full h-full object-cover"
-                                        loading="lazy"
-                                      />
+                                      <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.mufaName || 'MUFA'} className="w-full h-full object-cover" loading="lazy" />
                                     </div>
                                     <div className="p-2.5 lg:p-2">
                                       <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -8193,7 +8183,7 @@ export default function App() {
                       .map((ev: any, index: number) => (
                         <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                           <div className="aspect-[4/5] bg-black overflow-hidden">
-                            <img src={ev.photoUrl} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
+                            <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                           </div>
                           <div className="p-2.5 lg:p-2">
                             <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight truncate">{ev.categoryLabel || 'Otros'}</p>
