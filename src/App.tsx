@@ -1389,6 +1389,11 @@ export default function App() {
     setMemoryLoading(true);
     setMemorySelectedProject(null);
     try {
+      if (navigator.onLine) {
+        await storageService.syncAllLocalData().catch(error => {
+          console.warn('[Memory Dashboard] La sincronización local sigue pendiente:', error);
+        });
+      }
       const remoteProjects = await firebaseService.getCloudProjects();
       const summaries = await Promise.all(remoteProjects.map(async (project: any) => {
         const uuid = String(project.uuid || project.id);
@@ -4256,8 +4261,9 @@ export default function App() {
                                           const imageUrl = String(ev?.photoUrl || ev?.photo?.uri || ev?.photo?.url || '').trim();
                                           if (ev && imageUrl) {
                                             return (
-                                              <button key={'photo-' + group.id + '-' + photoNumber} type="button"
+                                              <div key={'photo-' + group.id + '-' + photoNumber} role="button" tabIndex={0}
                                                 onClick={() => setMemorySelectedPhoto(ev)}
+                                                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setMemorySelectedPhoto(ev); }}
                                                 className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left">
                                                 <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + photoNumber}
                                                   className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
@@ -4266,10 +4272,16 @@ export default function App() {
                                                     {category.id === 'NAPS' ? getNapsPhotoTitle(photoNumber) : 'FOTO ' + photoNumber + '/' + group.required}
                                                   </p>
                                                   <p className="text-[7px] text-white/80 truncate lg:text-[8px] lg:leading-tight lg:mt-0.5">
-                                                    {category.id === 'NAPS' ? 'NAP' + (groupName ? ' · ' + String(groupName).toUpperCase() : '') : (ev.categoryLabel || ev.category || category.label)}
+                                                    {category.id === 'NAPS' ? 'NAP' + (groupName ? ' · ' + String(groupName).toUpperCase() : '')
+                                                      : category.id === 'ACEROS' ? (photoNumber === 1 ? 'ACEROS · PANORÁMICA' : 'ACEROS · METRAJE')
+                                                      : category.id === 'DESECHOS' ? (photoNumber === 1 ? 'DESECHOS · PANORÁMICA' : 'DESECHOS · METRAJE')
+                                                      : category.id === 'PUNTAS_FIBRA' ? (photoNumber === 1 ? 'PUNTA INICIAL' : 'PUNTA FINAL')
+                                                      : category.id === 'RESERVA' ? (photoNumber === 1 ? 'PUNTA INICIAL' : photoNumber === 2 ? 'PUNTA FINAL' : 'ROLLO DETALLADO')
+                                                      : category.id === 'MEJORAS' ? (String(groupName || category.label).toUpperCase() + (photoNumber === 1 ? ' · ANTES' : ' · DESPUÉS'))
+                                                      : (ev.categoryLabel || ev.category || category.label)}
                                                   </p>
                                                 </div>
-                                              </button>
+                                              </div>
                                             );
                                           }
                                           return (
