@@ -483,7 +483,7 @@ export default function App() {
   const [showEvidenceList, setShowEvidenceList] = useState(false);
   const [showStorageEvidenceViewer, setShowStorageEvidenceViewer] = useState(false);
   const [storageEvidenceCategory, setStorageEvidenceCategory] = useState<EvidenceCategory | null>(null);
-  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<{ category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number } | null>(null);
+  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<{ target?: 'memory' | 'project'; category: EvidenceCategory; napId?: string; napNumber?: number; napName?: string; photoNumber: number; mufaId?: string; mufaNumber?: number; mufaName?: string } | null>(null);
   const memoryUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [memoryUploadLoading, setMemoryUploadLoading] = useState(false);
   const [showQuickConfig, setShowQuickConfig] = useState(false);
@@ -1288,8 +1288,8 @@ export default function App() {
     }
   };
 
-  const uploadMissingMemoryPhoto = (slot: { category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number }) => {
-    setPendingMemoryUpload(slot);
+  const uploadMissingMemoryPhoto = (slot: { target?: 'memory' | 'project'; category: EvidenceCategory; napId?: string; napNumber?: number; napName?: string; photoNumber: number; mufaId?: string; mufaNumber?: number; mufaName?: string }) => {
+    setPendingMemoryUpload({ target: 'memory', ...slot });
     memoryUploadInputRef.current?.click();
   };
 
@@ -1301,7 +1301,8 @@ export default function App() {
     }
     setMemoryUploadLoading(true);
     try {
-      const project = memorySelectedProject;
+      const isProjectUpload = slot.target === 'project';
+      const project: any = isProjectUpload ? selectedProject : memorySelectedProject;
       const projectUuid = String(project?.uuid || project?.id || '');
       if (!projectUuid) throw new Error('No se encontró el identificador del proyecto.');
 
@@ -1312,14 +1313,22 @@ export default function App() {
       const evidence = {
         id: null, uuid, projectId: project?.id ?? null, projectUuid, projectName: project?.name || '',
         photoPath: file.name, photoStoragePath: remote.storagePath, photoUrl: remote.downloadUrl,
-        category: slot.category, categoryLabel: 'NAPS',
+        category: slot.category, categoryLabel: slot.category === 'MUFA' ? 'MUFA' : 'NAPS',
         capturedAt: now.toISOString(), fecha: now.toLocaleDateString('es-ES'),
         hora: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
         timestamp: Date.now(), latitude: 0, longitude: 0, gpsAccuracy: null, ubicacion: '',
         baseFields: { posteId: '', tecnico: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '' },
         tecnico: '', posteId: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '',
         customFields: [], sharedWhatsApp: false, locked: false,
-        napId: slot.napId, napNumber: slot.napNumber, napName: slot.napName, napPhotoNumber: slot.photoNumber,
+        napId: slot.category === 'NAPS' ? slot.napId : undefined,
+        napNumber: slot.category === 'NAPS' ? slot.napNumber : undefined,
+        napName: slot.category === 'NAPS' ? slot.napName : undefined,
+        napPhotoNumber: slot.category === 'NAPS' ? slot.photoNumber : undefined,
+        mufaId: slot.category === 'MUFA' ? (slot.mufaId || '') : undefined,
+        mufaNumber: slot.category === 'MUFA' ? slot.mufaNumber : undefined,
+        mufaName: slot.category === 'MUFA' ? (slot.mufaName || '') : undefined,
+        mufaPhotoNumber: slot.category === 'MUFA' ? slot.photoNumber : undefined,
+        photoNumber: slot.photoNumber,
         createdAt: now.toISOString(), updatedAt: now.toISOString(), syncStatus: 'synced', retryCount: 0, schemaVersion: 3
       };
 
@@ -1327,13 +1336,18 @@ export default function App() {
         throw new Error('La fotografía se subió a Storage, pero no se pudo guardar su registro en Firestore.');
       }
 
-      const append = (projectItem: any) => {
-        if (!projectItem) return projectItem;
-        const current = Array.isArray(projectItem._evidences) ? projectItem._evidences : [];
-        return { ...projectItem, _evidences: [...current.filter((ev: any) => ev.uuid !== uuid), evidence] };
-      };
-      setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? append(p) : p));
-      setMemorySelectedProject((prev: any) => append(prev));
+      if (isProjectUpload) {
+        evidence.id = await storageService.addEvidenceAtomically(evidence, file);
+        setEvidences(await storageService.getEvidencesByProject(project.id));
+      } else {
+        const append = (projectItem: any) => {
+          if (!projectItem) return projectItem;
+          const current = Array.isArray(projectItem._evidences) ? projectItem._evidences : [];
+          return { ...projectItem, _evidences: [...current.filter((ev: any) => ev.uuid !== uuid), evidence] };
+        };
+        setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? append(p) : p));
+        setMemorySelectedProject((prev: any) => append(prev));
+      }
       setPendingMemoryUpload(null);
       if (memoryUploadInputRef.current) memoryUploadInputRef.current.value = '';
       alert('Fotografía subida correctamente y asociada a la posición seleccionada.');
@@ -4217,7 +4231,7 @@ export default function App() {
                                                   : 'FOTO ' + photoNumber}
                                               </p>
 
-                                              {category.id === 'NAPS' && (
+                                              {(category.id === 'NAPS' || category.id === 'MUFA') && (
                                                 <>
                                                   <button
                                                     type="button"
@@ -4225,10 +4239,13 @@ export default function App() {
                                                     onClick={(e) => {
                                                       e.stopPropagation();
                                                       uploadMissingMemoryPhoto({
-                                                        category: 'NAPS',
-                                                        napId: String(group.id),
-                                                        napNumber: Number(group.number),
-                                                        napName: String(group.name || ''),
+                                                        category: category.id as EvidenceCategory,
+                                                        napId: category.id === 'NAPS' ? String(group.id) : undefined,
+                                                        napNumber: category.id === 'NAPS' ? Number(group.number) : undefined,
+                                                        napName: category.id === 'NAPS' ? String(group.name || '') : undefined,
+                                                        mufaId: category.id === 'MUFA' ? String(group.id) : undefined,
+                                                        mufaNumber: category.id === 'MUFA' ? Number(group.number) : undefined,
+                                                        mufaName: category.id === 'MUFA' ? String(group.name || '') : undefined,
                                                         photoNumber
                                                       });
                                                     }}
@@ -8191,36 +8208,40 @@ export default function App() {
                               }
 
                               return (
-                                <button
-                                  key={`nap-missing-${photoNumber}`}
-                                  type="button"
-                                  onClick={() => {
-                                    const mufaId = group[0]?.mufaId || '';
-                                    const mufaNumber = Number(group[0]?.mufaNumber || groupIndex + 1);
-                                    const mufaName = group[0]?.mufaName || '';
-                                    setViewingEvidence(null);
-                                    setShowStorageEvidenceViewer(false);
-                                    setStorageEvidenceCategory(null);
-                                    setEvidenceCategory('MUFA');
-                                    // Captura puntual: al volver de la cámara se regresa
-                                    // al visor después de completar únicamente esta foto.
-                                    setMufaCaptureDraft({
-                                      mufaId,
-                                      mufaNumber,
-                                      mufaName,
-                                      photoNumber,
-                                      remainingPhotos: 1
-                                    });
-                                    setShowNapCaptureModal(false);
-                                    setCurrentStep('camera');
-                                  }}
-                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 active:scale-[0.98] transition-transform"
+                                <div
+                                  key={`mufa-missing-${photoNumber}`}
+                                  className="aspect-[4/5] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/60 flex flex-col items-center justify-center gap-2 text-blue-700 p-2"
                                 >
-                                  <CameraIcon className="w-8 h-8" />
-                                  <span className="text-[9px] font-black uppercase text-center px-2">
-                                    TOMAR FOTO<br />FOTO {photoNumber}/9
-                                  </span>
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const mufaId = group[0]?.mufaId || '';
+                                      const mufaNumber = Number(group[0]?.mufaNumber || groupIndex + 1);
+                                      const mufaName = group[0]?.mufaName || '';
+                                      setViewingEvidence(null);
+                                      setShowStorageEvidenceViewer(false);
+                                      setStorageEvidenceCategory(null);
+                                      setEvidenceCategory('MUFA');
+                                      setMufaCaptureDraft({ mufaId, mufaNumber, mufaName, photoNumber, remainingPhotos: 1 });
+                                      setShowNapCaptureModal(false);
+                                      setCurrentStep('camera');
+                                    }}
+                                    className="w-full flex flex-col items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                                  >
+                                    <CameraIcon className="w-8 h-8" />
+                                    <span className="text-[9px] font-black uppercase text-center px-2">
+                                      TOMAR FOTO<br />FOTO {photoNumber}/9
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={memoryUploadLoading}
+                                    onClick={() => uploadMissingMemoryPhoto({ target: 'project', category: 'MUFA', mufaId: group[0]?.mufaId || '', mufaNumber: Number(group[0]?.mufaNumber || groupIndex + 1), mufaName: group[0]?.mufaName || '', photoNumber })}
+                                    className="w-full px-1.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[7px] font-black uppercase disabled:opacity-50"
+                                  >
+                                    {memoryUploadLoading ? 'SUBIENDO...' : 'SUBIR FOTO'}
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
