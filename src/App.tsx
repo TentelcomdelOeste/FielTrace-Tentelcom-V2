@@ -793,20 +793,13 @@ export default function App() {
           throw new Error('CAMERA_PERMISSION_DENIED');
         }
 
-        // No detenemos/reiniciamos una sesión al entrar a la pantalla.
-        // El cleanup del efecto anterior es el responsable de cerrarla.
-        // Establecer dimensiones dentro de start evita redimensionar la superficie
-        // nativa después del primer frame, lo que podía generar un segundo flash.
-        const previewWidth = Math.max(1, Math.round(window.innerWidth));
-        const previewHeight = Math.max(1, Math.round(window.innerHeight));
+        // Let the native preview fill its container to avoid viewport/surface size mismatch.
         const started = await CameraPreview.start({
           position: cameraFacing,
           toBack: true,
           x: 0,
           y: 0,
-          width: previewWidth,
-          height: previewHeight,
-          aspectMode: 'cover',
+          aspectRatio: 'fill',
           storeToFile: false,
           disableAudio: true,
           initialZoomLevel: cameraZoom,
