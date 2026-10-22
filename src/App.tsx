@@ -1195,27 +1195,32 @@ export default function App() {
       alert('El Técnico Responsable es obligatorio.');
       return;
     }
-    
-    // Normalize data
-    const normalizedProject = {
-      ...editingProject,
-      name: editingProject.name.toUpperCase(),
-      client: editingProject.client.toUpperCase(),
-      techName: toTitleCase(editingProject.techName),      createdAt: editingProject.createdAt || new Date()
-    } as Project;
 
-    let id;
-    if (editingProject.id) {
-      await storageService.updateProject(editingProject.id, normalizedProject);
-      id = editingProject.id;    } else {
-      id = await storageService.createProject(normalizedProject);
+    try {
+      const normalizedProject = {
+        ...editingProject,
+        name: editingProject.name.toUpperCase(),
+        client: editingProject.client.toUpperCase(),
+        techName: toTitleCase(editingProject.techName),
+        createdAt: editingProject.createdAt || new Date()
+      } as Project;
+
+      const id = normalizedProject.id != null
+        ? (await storageService.updateProject(normalizedProject.id, normalizedProject), normalizedProject.id)
+        : await storageService.createProject(normalizedProject);
+
+      const savedProject = await storageService.getProject(id);
+      if (!savedProject) throw new Error('El proyecto no se encontró después de guardarlo.');
+
+      setSelectedProject(savedProject);
+      await loadData();
+      // Guardar solo vuelve a las secciones. La cámara se abre únicamente
+      // cuando el usuario selecciona explícitamente una sección.
+      setCurrentStep('history');
+    } catch (error) {
+      console.error('[ProjectSave] No se pudo guardar el proyecto:', error);
+      alert('No se pudieron guardar los cambios. Los datos siguen en pantalla; revise la conexión e inténtelo nuevamente.');
     }
-    
-    const savedProject = await storageService.getProject(id);
-    setSelectedProject(savedProject);
-    await loadData();
-    // Guardar el proyecto lleva a sus secciones; la cámara se abre solo al elegir una sección.
-    setCurrentStep('history');
   };
 
   const handleSelectProject = async (p: Project) => {
@@ -3189,11 +3194,13 @@ export default function App() {
             }
           }
           if (!savedToGallerySuccess) {
-            console.error("[AtomicCapture] Error: No se pudo guardar la fotografía. Abortando registro de evidencia.");
-            return;
+            // La galería del sistema es secundaria: no debe impedir que la foto
+            // se guarde en el almacenamiento persistente propio de Field Trace.
+            console.warn("[AtomicCapture] No se pudo guardar en la galería nativa; se continuará con el guardado local de Field Trace.");
           }
 
-          // 3. Guardar Evidence en IndexedDB para que aparezca inmediatamente en el proyecto
+          // 3. Guardar primero la evidencia y su imagen en IndexedDB.
+          // La persistencia de Field Trace no depende de que la galería del teléfono funcione.
           await storageService.addEvidence(evidenceObject, finalImage);
           capturePersisted = true;
 
@@ -4989,7 +4996,7 @@ export default function App() {
                   onClick={handleSaveProject}
                   className="w-full py-5 bg-blue-600 text-white rounded-[2rem] text-[13px] font-black uppercase tracking-widest shadow-2xl shadow-blue-600/20 active:scale-95 transition-all"
                 >
-                  Guardar y Abrir Cámara
+                  Guardar
                 </button>
               </motion.div>
             )}
