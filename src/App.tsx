@@ -728,38 +728,48 @@ export default function App() {
     setNativeCameraError(null);
     setNativeCameraPreviewReady(false);
 
+    // Limitar cada operación nativa: ninguna promesa pendiente debe dejar la cámara
+    // bloqueada indefinidamente en la pantalla "Preparando cámara".
+    const withCameraTimeout = <T,>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => reject(new Error(label + '_TIMEOUT')), timeoutMs);
+        operation.then(
+          value => { window.clearTimeout(timeoutId); resolve(value); },
+          error => { window.clearTimeout(timeoutId); reject(error); }
+        );
+      });
+
     (async () => {
       try {
-        const permission = await CameraPreview.checkPermissions({ disableAudio: true });
+        const permission = await withCameraTimeout(
+          CameraPreview.checkPermissions({ disableAudio: true }), 5000, 'CAMERA_PERMISSION_CHECK'
+        );
         let cameraPermission = permission?.camera;
         if (cameraPermission !== 'granted') {
-          const requested = await CameraPreview.requestPermissions({
+          const requested = await withCameraTimeout(CameraPreview.requestPermissions({
             disableAudio: true,
             showSettingsAlert: true,
             title: 'Permiso de cámara',
             message: 'Field Trace necesita la cámara para tomar fotografías de evidencia.'
-          });
+          }), 15000, 'CAMERA_PERMISSION_REQUEST');
           cameraPermission = requested?.camera;
         }
-        if (cameraPermission !== 'granted') {
-          throw new Error('CAMERA_PERMISSION_DENIED');
-        }
+        if (cameraPermission !== 'granted') throw new Error('CAMERA_PERMISSION_DENIED');
+        if (!active) return;
 
-        // Si venimos de otra sesión, esperar a que su cierre termine. No detener
-        // la cámara de nuevo al abrir: ese stop redundante apaga el preview y causa
-        // un parpadeo visible antes de que start() vuelva a dibujar la imagen.
+        // Esperar el cierre anterior con un límite, evitando que un stop pendiente
+        // impida volver a abrir la cámara.
         const pendingCameraStop = nativeCameraStopPromiseRef.current;
         if (pendingCameraStop) {
-          await pendingCameraStop;
+          await withCameraTimeout(pendingCameraStop, 4000, 'CAMERA_PREVIOUS_SESSION_STOP');
           if (nativeCameraStopPromiseRef.current === pendingCameraStop) {
             nativeCameraStopPromiseRef.current = null;
           }
         }
         if (!active) return;
 
-        // Preview fotográfico estable. No activamos el modo de video aquí:
-        // la captura de fotos usa CameraPreview.capture().
-        const started = await CameraPreview.start({
+        // Solo start() y el tamaño de vista previa pertenecen al camino crítico.
+        const started = await withCameraTimeout(CameraPreview.start({
           position: cameraFacing,
           toBack: true,
           aspectRatio: '16:9',
@@ -768,38 +778,50 @@ export default function App() {
           disableAudio: true,
           initialZoomLevel: 1,
           rotateWhenOrientationChanged: true
-        });
+        }), 10000, 'CAMERA_START');
 
         if (!active) return;
 
         const previewWidth = Math.max(1, Math.round(window.innerWidth));
         const previewHeight = Math.max(1, Math.round(window.innerHeight));
-        await CameraPreview.setPreviewSize({
+        await withCameraTimeout(CameraPreview.setPreviewSize({
           x: 0,
           y: 0,
           width: previewWidth,
           height: previewHeight
-        }).catch(() => {});
+        }), 2500, 'CAMERA_PREVIEW_SIZE').catch(error => {
+          // Si el tamaño no se puede aplicar, conservar el preview nativo por defecto.
+          console.warn('[Camera] preview size deferred:', error);
+        });
 
-        console.log('[Camera] native preview ready:', started);
-        await CameraPreview.setZoom({ level: cameraZoom });
-        await ensureFlashArmed(flashMode);
-        // CameraPreview.start() puede resolverse antes del primer frame de imagen.
-        // Mantener una cortina breve oculta el negro inicial del preview nativo.
-        await new Promise(resolve => window.setTimeout(resolve, 800));
         if (!active) return;
+
+        console.log('[Camera] native preview started:', started);
+        // Zoom y flash no deben retrasar la aparición de la imagen.
+        void CameraPreview.setZoom({ level: cameraZoom }).catch(error => {
+          console.warn('[Camera] initial zoom:', error);
+        });
+        void ensureFlashArmed(flashMode).catch(error => {
+          console.warn('[Camera] initial flash:', error);
+        });
+
+        // Sin pausa artificial de 800 ms: liberar la cortina tras iniciar el preview
+        // y configurar su geometría. Los errores de apertura tienen salida controlada.
         setNativeCameraPreviewReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
         if (!active) return;
-        console.error('[Camera] start:', error);
+        console.error('[Camera] start failed:', error);
         const name = String(error?.name || '');
         const message = String(error?.message || '');
         const detail = name || message ? ' (' + (name || message) + ')' : '.';
+        const timeoutMessage = message.endsWith('_TIMEOUT')
+          ? 'La cámara tardó demasiado en responder. Pulse REINTENTAR para volver a abrirla.'
+          : null;
         setNativeCameraError(
           message === 'CAMERA_PERMISSION_DENIED'
-            ? 'El permiso de cámara está bloqueado. Permita la cámara para Field Trace y vuelva a intentarlo.'
-            : 'No se pudo iniciar la cámara nativa' + detail
+            ? 'El permiso de cámara está bloqueado. Permita el acceso a la cámara para Field Trace y vuelva a intentarlo.'
+            : timeoutMessage || ('No se pudo iniciar la cámara nativa' + detail)
         );
       }
     })();
