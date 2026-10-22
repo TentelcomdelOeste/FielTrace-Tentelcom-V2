@@ -543,6 +543,17 @@ export const storageService = {
           }
         }
 
+        // No sincronizar metadatos ni marcar como completada una evidencia
+        // mientras su archivo fotográfico siga sin URL confirmada en Storage.
+        if (evidenceRequiresPhoto && !evidenceForCloud.photoUrl) {
+          evidence.syncStatus = 'pending';
+          evidence.retryCount = (evidence.retryCount ?? 0) + 1;
+          evidence.syncError = evidenceForCloud.syncError ||
+            'Fotografía pendiente: falta confirmar su subida a Firebase Storage.';
+          if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
+          continue;
+        }
+
         const success = await firebaseService.syncEvidenceToCloud(evidenceForCloud);
         if (success) {
           evidence.syncStatus = 'synced';
