@@ -181,13 +181,12 @@ public class MainActivity extends BridgeActivity {
       settings.setMediaPlaybackRequiresUserGesture(false);
       settings.setDomStorageEnabled(true);
       settings.setJavaScriptEnabled(true);
-      // Keep the WebView stack transparent for the native camera preview.
-      // Do not paint the Activity decor/root black here: @capgo/camera-preview
-      // manages the toBack compositor on start/resume, and an opaque root
-      // background competes with that policy while CameraX is binding.
+      // Match the known-good camera composition: transparent WebView over a
+      // black native root, preventing uncovered preview pixels from appearing gray.
       webView.setBackgroundColor(Color.TRANSPARENT);
-      if (webView.getParent() instanceof android.view.View) {
-        ((android.view.View) webView.getParent()).setBackgroundColor(Color.TRANSPARENT);
+      webView.getRootView().setBackgroundColor(Color.BLACK);
+      if (getWindow() != null && getWindow().getDecorView() != null) {
+        getWindow().getDecorView().setBackgroundColor(Color.BLACK);
       }
       webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
       try {
