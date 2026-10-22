@@ -1071,6 +1071,33 @@ export default function App() {
     }
   }, [selectedProject?.id, projectRefreshLoading, viewingEvidence, refreshSyncSummary]);
 
+  // Mantener la vista del proyecto al día cuando la subida en segundo plano
+  // termina; no obligar a salir y volver a entrar para actualizar photoUrl.
+  useEffect(() => {
+    if (currentStep !== 'history' || !selectedProject?.id) return;
+    let active = true;
+    const refreshLocalEvidenceState = async () => {
+      try {
+        const fresh = await storageService.getEvidencesByProject(selectedProject.id!);
+        if (!active) return;
+        setEvidences(previous => {
+          const prevSignature = previous.map(item => [item.uuid, item.photoUrl, item.syncStatus].join(':')).join('|');
+          const nextSignature = fresh.map(item => [item.uuid, item.photoUrl, item.syncStatus].join(':')).join('|');
+          return prevSignature === nextSignature ? previous : fresh;
+        });
+        setViewingEvidence(previous => {
+          if (!previous) return previous;
+          return fresh.find(item => item.id === previous.id || item.uuid === previous.uuid) || previous;
+        });
+      } catch (error) {
+        console.warn('[ProjectRefresh] No se pudo actualizar la vista local:', error);
+      }
+    };
+    void refreshLocalEvidenceState();
+    const interval = window.setInterval(() => { void refreshLocalEvidenceState(); }, 2500);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [currentStep, selectedProject?.id]);
+
   const retrySyncEvidence = useCallback(async (id: number) => {
     if (retryingEvidenceId != null) return;
     setRetryingEvidenceId(id);
@@ -4528,6 +4555,10 @@ export default function App() {
                     <CameraIcon className="w-6 h-6" />
                   </button>
                 </div>
+
+                {projectRefreshMessage && (
+                  <p className="px-1 text-[9px] font-bold text-gray-500" role="status">{projectRefreshMessage}</p>
+                )}
 
                 {/* EVIDENCE CHECKLIST - PROJECT LEVEL */}
                 <section className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-4 space-y-4">
