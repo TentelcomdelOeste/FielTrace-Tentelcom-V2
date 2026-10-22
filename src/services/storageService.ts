@@ -311,11 +311,35 @@ export const storageService = {
     let photoBlob: Blob | undefined;
     if (imageBase64) {
       try {
-        photoBlob = await (await fetch(imageBase64)).blob();
+        // En Android WebView, fetch(data:image/...) puede fallar para capturas grandes.
+        // Decodificamos explícitamente los data URL para asegurar que IndexedDB reciba el Blob.
+        if (imageBase64.startsWith('data:')) {
+          const comma = imageBase64.indexOf(',');
+          if (comma < 0) throw new Error('Data URL sin separador de contenido.');
+          const header = imageBase64.slice(0, comma);
+          const payload = imageBase64.slice(comma + 1);
+          const mime = header.match(/^data:([^;]+)/i)?.[1] || 'image/jpeg';
+          if (/;base64/i.test(header)) {
+            const binary = atob(payload);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            photoBlob = new Blob([bytes], { type: mime });
+          } else {
+            photoBlob = new Blob([decodeURIComponent(payload)], { type: mime });
+          }
+        } else {
+          photoBlob = await (await fetch(imageBase64)).blob();
+        }
+        if (!photoBlob || photoBlob.size <= 0) throw new Error('La fotografía convertida está vacía.');
       } catch (error) {
         console.error('[StorageService] No se pudo preparar la copia local de la fotografía:', error);
         throw new Error('No se pudo preparar la fotografía para guardarla de forma segura.');
       }
+    }
+
+    // Si el registro tiene referencia a una foto, no permitir guardarlo sin su Blob local.
+    if (evidenceToSave.photoPath && !photoBlob) {
+      throw new Error('La fotografía no contiene datos locales para guardarse. Vuelve a tomarla.');
     }
 
     const evidenceId = await manager.addEvidenceAtomically(evidenceToSave, photoBlob);

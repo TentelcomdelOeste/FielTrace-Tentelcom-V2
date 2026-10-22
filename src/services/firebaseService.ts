@@ -446,15 +446,22 @@ export const firebaseService = {
 
       await setDoc(docRef, projectPayload, { merge: true });
 
-      // Confirmación de lectura para que el estado local "synced" solo se
-      // establezca después de comprobar que el proyecto existe en Firestore.
+      // Confirmar que el documento remoto contiene los datos esenciales que
+      // otra sesión consulta en "Proyectos compartidos", no solo que existe.
       const confirmation = await getDoc(docRef);
       if (!confirmation.exists()) {
         console.error(`[Firebase] ✗ Firestore no confirmó el proyecto ${projectUuid}.`);
         return false;
       }
+      const confirmedData = confirmation.data();
+      if (String(confirmedData.uuid || confirmation.id) !== String(projectUuid) ||
+          String(confirmedData.name || '') !== String(projectPayload.name) ||
+          String(confirmedData.client || '') !== String(projectPayload.client)) {
+        console.error(`[Firebase] ✗ El documento ${projectUuid} no contiene los metadatos recién sincronizados.`);
+        return false;
+      }
 
-      console.log(`[Firebase] ✓ Proyecto ${projectUuid} confirmado en Firestore.`);
+      console.log(`[Firebase] ✓ Proyecto ${projectUuid} confirmado en Firestore para consulta compartida.`);
       return true;
     } catch (e) {
       console.error('[Firebase] Error sincronizando proyecto:', e);
