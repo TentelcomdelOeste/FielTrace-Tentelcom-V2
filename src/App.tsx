@@ -249,9 +249,27 @@ const EvidencePhoto = memo(({
   const [retried, setRetried] = useState(false);
 
   useEffect(() => {
-    setImageSrc(getInitialSrc());
+    let active = true;
+    const initialSrc = getInitialSrc();
+    setImageSrc(initialSrc);
     setRetried(false);
-  }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+
+    // En APK puede existir una copia local aunque photoUrl esté vacía o Firebase
+    // no esté disponible. Cargarla desde IndexedDB sin esperar a un evento onError.
+    if (!initialSrc && evidence?.photoPath) {
+      void storageService.getPhotoBlob(String(evidence.photoPath)).then(localUrl => {
+        if (!active) {
+          if (localUrl?.startsWith('blob:')) URL.revokeObjectURL(localUrl);
+          return;
+        }
+        if (localUrl) setImageSrc(localUrl);
+      }).catch(error => {
+        console.warn('[EvidencePhoto] No se pudo cargar el respaldo local:', error);
+      });
+    }
+
+    return () => { active = false; };
+  }, [src, evidence?.photoPath, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
@@ -1212,10 +1230,16 @@ export default function App() {
     }
     
     const savedProject = await storageService.getProject(id);
-    setSelectedProject(savedProject);
-    loadData();
-    // After saving, go directly to camera
-    setCurrentStep('camera');
+    // Reintentar y confirmar explícitamente la publicación en Firebase.
+    const cloudConfirmed = await storageService.syncProjectNow(id);
+    const finalProject = await storageService.getProject(id);
+    setSelectedProject(finalProject || savedProject);
+    await loadData();
+    if (!cloudConfirmed) {
+      alert('El proyecto se guardó en este dispositivo, pero Firebase no confirmó la sincronización. Revisa la conexión y el estado de facturación antes de buscarlo desde otra cuenta.');
+    }
+    // Guardar lleva a las secciones; la cámara se abre al elegir una sección.
+    setCurrentStep('history');
   };
 
   const handleSelectProject = async (p: Project) => {
@@ -4656,15 +4680,26 @@ export default function App() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Resp.</label>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico responsable</label>
+                        <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editingProject.showTech !== false}
+                            onChange={(e) => setEditingProject({...editingProject, showTech: e.target.checked})}
+                            className="w-4 h-4 accent-blue-600"
+                          />
+                          Mostrar en overlay
+                        </label>
+                      </div>
                       <input 
                         type="text" 
                         value={editingProject.techName || ''}
                         onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
-                        className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold" 
-                        placeholder="Nombre completo"
+                        className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold min-h-14" 
+                        placeholder="Nombre completo del técnico"
                       />
                     </div>
                   </div>

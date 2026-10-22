@@ -249,6 +249,13 @@ export const storageService = {
     return id;
   },
 
+  /** Reintenta la sincronización de un proyecto y actualiza el estado local solo tras confirmación remota. */
+  async syncProjectNow(id: number): Promise<boolean> {
+    const project = await this.getProject(id);
+    if (!project) return false;
+    return syncProjectImmediately(project);
+  },
+
   async getAllProjects(): Promise<Project[]> {
     const projects = await manager.getAll<Project>(STORE_PROJECTS);
     // La lista principal es local por usuario/dispositivo. Un proyecto oculto
@@ -354,10 +361,9 @@ export const storageService = {
             await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
           }
 
-          // La copia local solo se elimina después de confirmar Firestore.
-          if (evidenceToSave.photoUrl && evidenceToSave.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidenceToSave.photoPath);
-          }
+          // Conservamos la copia local aun después de sincronizar: permite ver
+          // las fotos dentro del APK si Storage/URL falla temporalmente.
+          // La galería del teléfono no sustituye este respaldo de la aplicación.
         } else {
           evidenceToSave.syncStatus = 'pending';
           evidenceToSave.syncError = 'La fotografía o sus metadatos todavía no se han confirmado en Firebase.';
@@ -525,9 +531,8 @@ export const storageService = {
           evidence.retryCount = 0;
           evidence.syncSchemaVersion = CURRENT_SYNC_SCHEMA_VERSION;
           if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
-          if (evidence.photoUrl && evidence.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidence.photoPath);
-          }
+          // No borrar STORE_PHOTOS tras sincronizar; la copia local es respaldo
+          // de visualización y de reintento en dispositivos móviles.
           evidencesSynced++;
         } else {
           evidence.syncStatus = 'failed';
