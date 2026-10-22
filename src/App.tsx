@@ -229,6 +229,60 @@ import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageService } from './services/storageService';
 import { firebaseService, auth, db } from './services/firebaseService';
+
+/**
+ * Recupera imágenes de evidencias cuando la URL guardada dejó de funcionar.
+ * Primero renueva la URL usando el path de Storage y luego intenta la copia local.
+ * No vuelve a subir ni elimina fotografías.
+ */
+const EvidencePhoto = memo(({
+  evidence, src, alt, className, loading = 'lazy'
+}: {
+  evidence: any;
+  src?: string | null;
+  alt: string;
+  className?: string;
+  loading?: 'eager' | 'lazy';
+}) => {
+  const getInitialSrc = () => String(src || evidence?.photoUrl || evidence?.photo?.uri || evidence?.photo?.url || '').trim();
+  const [imageSrc, setImageSrc] = useState<string>(getInitialSrc);
+  const [retried, setRetried] = useState(false);
+
+  useEffect(() => {
+    setImageSrc(getInitialSrc());
+    setRetried(false);
+  }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+
+  const recoverImage = async () => {
+    if (retried) return;
+    setRetried(true);
+    const storagePath = String(evidence?.photoStoragePath || '').trim();
+    if (storagePath) {
+      try {
+        const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+        if (freshUrl) {
+          setImageSrc(freshUrl);
+          return;
+        }
+      } catch (error) {
+        console.warn('[EvidencePhoto] No se pudo renovar la URL de Storage:', error);
+      }
+    }
+    const photoPath = String(evidence?.photoPath || '').trim();
+    if (photoPath) {
+      try {
+        const localUrl = await storageService.getPhotoBlob(photoPath);
+        if (localUrl) setImageSrc(localUrl);
+      } catch (error) {
+        console.warn('[EvidencePhoto] No se pudo recuperar la copia local:', error);
+      }
+    }
+  };
+
+  if (!imageSrc) return <div className={className} role="img" aria-label={alt} />;
+  return <img src={imageSrc} alt={alt} className={className} loading={loading} onError={() => { void recoverImage(); }} />;
+});
+
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import AdminDashboard, { type AreaPermissions } from './components/AdminDashboard';
@@ -4089,7 +4143,7 @@ export default function App() {
                                             className="group relative aspect-square overflow-hidden rounded-2xl bg-[#263449] text-left"
                                           >
                                             {imageUrl ? (
-                                              <img src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
+                                              <EvidencePhoto evidence={ev} src={imageUrl} alt={category.label + ' foto ' + (photoIndex + 1)} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />
                                             ) : (
                                               <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-black text-slate-300 uppercase p-2 text-center">
                                                 <CameraIcon className="w-5 h-5 mb-1 text-slate-300" />
@@ -4178,8 +4232,9 @@ export default function App() {
                       <X className="w-6 h-6" />
                     </button>
                     <div className="max-w-6xl max-h-[90vh] w-full flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                      <img
-                        src={memorySelectedPhoto.photoUrl || memorySelectedPhoto.photo?.uri}
+                      <EvidencePhoto
+                        evidence={memorySelectedPhoto}
+                        src={memorySelectedPhoto.photoUrl || memorySelectedPhoto.photo?.uri || memorySelectedPhoto.photo?.url}
                         alt="Evidencia"
                         className="max-h-[78vh] max-w-full object-contain rounded-2xl"
                       />
@@ -7581,7 +7636,7 @@ export default function App() {
                                 className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                               >
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <img src={ev.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt={ev.categoryLabel || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7680,7 +7735,7 @@ export default function App() {
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <img src={ev.photoUrl} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Acero" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7763,7 +7818,7 @@ export default function App() {
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <img src={ev.photoUrl} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Desecho" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7861,7 +7916,7 @@ export default function App() {
                             {group.map((ev: any, index: number) => (
                               <button key={ev.id || ev.uuid || index} type="button" onClick={() => setViewingEvidence(ev)} className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform">
                                 <div className="aspect-[4/5] bg-black overflow-hidden">
-                                  <img src={ev.photoUrl} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
+                                  <EvidencePhoto evidence={ev} src={ev.photoUrl || ev.photo?.uri || ev.photo?.url} alt="Mejora" className="w-full h-full object-cover" loading="lazy" />
                                 </div>
                                 <div className="p-2.5 lg:p-2">
                                   <p className="text-[9px] font-black uppercase text-gray-900 lg:text-[10px] lg:leading-tight">
@@ -7945,8 +8000,9 @@ export default function App() {
                               className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 shadow-sm text-left active:scale-[0.98] transition-transform"
                             >
                               <div className="aspect-[4/5] bg-black overflow-hidden">
-                                <img
-                                  src={ev.photoUrl}
+                                <EvidencePhoto
+                                  evidence={ev}
+                                  src={ev.photoUrl || ev.photo?.uri || ev.photo?.url}
                                   alt={side === 'initial' ? 'Punta inicial' : 'Punta final'}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
