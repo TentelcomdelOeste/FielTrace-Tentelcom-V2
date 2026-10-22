@@ -287,19 +287,8 @@ const EvidencePhoto = memo(({
   const recoverImage = async () => {
     if (retried) return;
     setRetried(true);
-    const storagePath = String(evidence?.photoStoragePath || '').trim();
-    if (storagePath) {
-      try {
-        const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
-        if (freshUrl && freshUrl !== imageSrc) {
-          setImageSrc(freshUrl);
-          setImageFailed(false);
-          return;
-        }
-      } catch (error) {
-        console.warn('[EvidencePhoto] No se pudo renovar la URL de Storage:', error);
-      }
-    }
+    // Prioridad 1: copia local persistida. Una URL file:// antigua o una URL
+    // de Storage todavía no disponible no debe ocultar la fotografía capturada.
     const photoPath = String(evidence?.photoPath || '').trim();
     if (photoPath) {
       try {
@@ -311,6 +300,20 @@ const EvidencePhoto = memo(({
         }
       } catch (error) {
         console.warn('[EvidencePhoto] No se pudo recuperar la copia local:', error);
+      }
+    }
+    // Prioridad 2: renovar URL remota solo si no existe una copia local disponible.
+    const storagePath = String(evidence?.photoStoragePath || '').trim();
+    if (storagePath) {
+      try {
+        const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+        if (freshUrl) {
+          setImageSrc(freshUrl);
+          setImageFailed(false);
+          return;
+        }
+      } catch (error) {
+        console.warn('[EvidencePhoto] No se pudo renovar la URL de Storage:', error);
       }
     }
     setImageFailed(true);
@@ -8523,17 +8526,10 @@ export default function App() {
                 )}
               </div>
               <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
-                {viewingEvidence.photoUrl ? (
-                  <EvidencePhoto evidence={viewingEvidence} src={viewingEvidence.photoUrl || viewingEvidence.photo?.uri || viewingEvidence.photo?.url} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" loading="eager" />
-                ) : (
-                  <div className="p-8 text-center text-white/60">
-                    <CameraIcon className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                    <p className="text-[10px] font-black uppercase tracking-widest">Fotografía todavía no disponible en Storage</p>
-                  </div>
-                )}
+                <EvidencePhoto evidence={viewingEvidence} src={viewingEvidence.photoUrl || viewingEvidence.photo?.uri || viewingEvidence.photo?.url} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" loading="eager" />
               </div>
               <p className="text-center text-[10px] text-gray-400 pt-2">
-                {viewingEvidence.photoUrl ? 'Esta es la fotografía que utilizará la memoria de Excel.' : 'La fotografía aún está pendiente de subir a Firebase Storage.'}
+                {viewingEvidence.photoUrl ? 'Fotografía disponible en Firebase Storage.' : 'Mostrando la copia local si existe. La sincronización con Firebase puede seguir pendiente.'}
               </p>
             </div>
           </motion.div>
