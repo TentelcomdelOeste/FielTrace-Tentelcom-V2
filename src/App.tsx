@@ -1401,6 +1401,93 @@ export default function App() {
     }
   };
 
+  const startProjectPhotoUpload = (slot: any) => {
+    setPendingProjectPhotoUpload(slot);
+    if (projectPhotoUploadInputRef.current) {
+      projectPhotoUploadInputRef.current.value = '';
+      projectPhotoUploadInputRef.current.click();
+    }
+  };
+
+  const handleProjectPhotoUploadFile = async (file: File | undefined) => {
+    const slot = pendingProjectPhotoUpload;
+    if (!file || !slot || !file.type.startsWith('image/')) {
+      if (file) alert('Selecciona un archivo de imagen válido.');
+      return;
+    }
+    if (!selectedProject?.id || !selectedProject?.uuid) {
+      alert('No se encontró el proyecto activo para asociar la fotografía.');
+      return;
+    }
+    setProjectPhotoUploadLoading(true);
+    try {
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      const now = new Date();
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const photoPath = 'FT_UPLOAD_' + uuid + '.' + extension;
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('No se pudo leer la imagen seleccionada.'));
+        reader.onerror = () => reject(new Error('No se pudo leer la imagen seleccionada.'));
+        reader.readAsDataURL(file);
+      });
+      const category = String(slot.category || evidenceCategory || 'OTROS');
+      const labels: Record<string,string> = {
+        NAPS:'NAPS', MUFA:'MUFA', PUNTAS_FIBRA:'PUNTAS DE FIBRA', PUNTAS_FIBRA_INICIAL:'PUNTAS DE FIBRA',
+        PUNTAS_FIBRA_FINAL:'PUNTAS DE FIBRA', RESERVA:'RESERVAS', ACEROS:'ACEROS', DESECHOS:'DESECHOS',
+        ALTAS:'ALTAS', MEJORAS:'MEJORAS'
+      };
+      const evidence: any = {
+        uuid, projectId: selectedProject.id, projectUuid: selectedProject.uuid, projectName: selectedProject.name || '',
+        photoPath, category, categoryLabel: labels[category] || category,
+        capturedAt: now.toISOString(), fecha: now.toLocaleDateString('es-ES'),
+        hora: now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}),
+        timestamp: now.getTime(), latitude: null, longitude: null, gpsAccuracy: null, ubicacion: '',
+        baseFields: { tecnico: selectedProject.techName || 'TECNICO', observaciones: 'Fotografía subida desde el proyecto.' },
+        customFields: [], sharedWhatsApp: false, locked: true, createdAt: now, updatedAt: now,
+        syncStatus: 'pending', retryCount: 0
+      };
+      const group = slot.groupItem || {};
+      const n = Number(slot.photoNumber || 1);
+      const groupId = String(slot.groupId || group.napId || group.mufaId || group.fiberPairId || group.reserveId || group.aceroId || group.desechoId || group.altaId || group.mejoraId || '');
+      const groupNumber = Number(slot.groupNumber || group.napNumber || group.mufaNumber || group.fiberPairNumber || group.reserveNumber || group.aceroNumber || group.desechoNumber || group.altaNumber || group.mejoraNumber || 1);
+      const groupName = String(slot.groupName || group.napName || group.altaType || group.mejoraType || '');
+      if (category === 'NAPS') Object.assign(evidence,{napId:groupId,napNumber:groupNumber,napName:groupName,napPhotoNumber:n});
+      if (category === 'MUFA') Object.assign(evidence,{mufaId:groupId,mufaNumber:groupNumber,mufaName:groupName,mufaPhotoNumber:n,photoNumber:n});
+      if (category === 'ACEROS') Object.assign(evidence,{aceroId:groupId,aceroNumber:groupNumber,aceroSide:n===1?'photo1':'photo2',aceroPhotoType:n===1?'panoramic':'meterage',aceroMeterage:group.aceroMeterage});
+      if (category === 'DESECHOS') Object.assign(evidence,{desechoId:groupId,desechoNumber:groupNumber,desechoSide:n===1?'photo1':'photo2',desechoPhotoType:n===1?'panoramic':'meterage'});
+      if (category === 'ALTAS') Object.assign(evidence,{altaId:groupId,altaNumber:groupNumber,altaType:groupName||'ALTAS EN ACERO',altaSide:n===1?'panoramic':'meterage'});
+      if (category === 'MEJORAS') Object.assign(evidence,{mejoraId:groupId,mejoraNumber:groupNumber,mejoraType:groupName||'PODAS',mejoraSide:n===1?'before':'after'});
+      if (category === 'PUNTAS_FIBRA' || category === 'PUNTAS_FIBRA_INICIAL' || category === 'PUNTAS_FIBRA_FINAL') Object.assign(evidence,{
+        category: n===1?'PUNTAS_FIBRA_INICIAL':'PUNTAS_FIBRA_FINAL',
+        fiberPairId:groupId,fiberPairNumber:groupNumber,fiberSide:n===1?'initial':'final',
+        metraje:group.metraje,reelNumber:group.reelNumber,fiberCount:group.fiberCount
+      });
+      if (category === 'RESERVA') Object.assign(evidence,{reserveId:groupId,reserveNumber:groupNumber,reserveSide:n===1?'initial':n===2?'final':'roll',metraje:group.metraje,reelNumber:group.reelNumber,fiberCount:group.fiberCount});
+      const projectId = selectedProject.id;
+      await storageService.addEvidence(evidence, dataUrl);
+      const refreshed = await storageService.getEvidencesByProject(projectId);
+      setEvidences(refreshed);
+      setPendingProjectPhotoUpload(null);
+      if (projectPhotoUploadInputRef.current) projectPhotoUploadInputRef.current.value = '';
+      alert('Fotografía guardada en el proyecto. La sincronización con Firebase continuará en segundo plano.');
+    } catch (error: any) {
+      console.error('[Project Photo Upload] Error:', error);
+      alert(error?.message || 'No se pudo guardar la fotografía.');
+    } finally {
+      setProjectPhotoUploadLoading(false);
+    }
+  };
+
+  const renderProjectUploadButton = (slot: any, label: string) => (
+    <button type="button" disabled={projectPhotoUploadLoading}
+      onClick={(event) => { event.stopPropagation(); startProjectPhotoUpload(slot); }}
+      className="w-full mt-1 px-2 py-2 rounded-xl border border-blue-200 bg-white text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50">
+      {projectPhotoUploadLoading ? 'GUARDANDO...' : 'SUBIR FOTO · ' + label}
+    </button>
+  );
+
+
   const loadMemoryDashboard = async () => {
     if (!userPermissions.memory) { setCurrentStep('home'); return; }
     setCurrentStep('memory');
