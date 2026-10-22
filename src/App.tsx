@@ -4017,7 +4017,7 @@ export default function App() {
                     <h2 className="text-xl font-black tracking-tighter uppercase text-gray-950 xl:text-white">Memoria Fotográfica</h2>
                     <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest xl:text-blue-200/70">Proyectos almacenados en Firebase</p>
                   </div>
-                  <button type="button" onClick={() => { void loadMemoryDashboard(); }} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center xl:bg-blue-900/40 xl:text-blue-200">
+                  <button type="button" onClick={() => { void refreshMemorySelectedProject(); }} disabled={memoryLoading} className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center disabled:opacity-50 xl:bg-blue-900/40 xl:text-blue-200">
                     <RefreshCcw className={"w-4 h-4 " + (memoryLoading ? 'animate-spin' : '')} />
                   </button>
                 </div>
