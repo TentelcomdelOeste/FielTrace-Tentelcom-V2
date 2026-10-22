@@ -3875,6 +3875,7 @@ export default function App() {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto px-5 py-7 sm:px-6 sm:py-8 xl:px-8 xl:pt-8 xl:pb-8 no-scrollbar">
           <input ref={memoryUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleMemoryUploadFile(e.target.files?.[0])} />
+          <input ref={projectPhotoUploadInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleProjectPhotoUploadFile(e.target.files?.[0])} />
 
           <AnimatePresence mode="wait">
             {/* HOME VIEW */}
@@ -7676,7 +7677,7 @@ export default function App() {
                 }>
                   {storageEvidenceCategory === 'NAPS' ? (() => {
                     const napPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'NAPS' && ev.napId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'NAPS' && ev.napId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.napNumber || 0) - Number(b.napNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7789,7 +7790,7 @@ export default function App() {
                       );
                     });
                   })() : storageEvidenceCategory === 'ALTAS' ? (() => {
-                    const altaPhotos = evidences                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ALTAS' && ev.altaId)
+                    const altaPhotos = evidences                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'ALTAS' && ev.altaId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.altaNumber || 0) - Number(b.altaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7893,7 +7894,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'ACEROS' ? (() => {
                     const aceroPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'ACEROS' && ev.aceroId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'ACEROS' && ev.aceroId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.aceroNumber || 0) - Number(b.aceroNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -7977,7 +7978,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'DESECHOS' ? (() => {
                     const desechoPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'DESECHOS' && ev.desechoId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'DESECHOS' && ev.desechoId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.desechoNumber || 0) - Number(b.desechoNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -8067,7 +8068,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'MEJORAS' ? (() => {
                     const mejoraPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MEJORAS' && ev.mejoraId)
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'MEJORAS' && ev.mejoraId)
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.mejoraNumber || 0) - Number(b.mejoraNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
@@ -8278,7 +8279,7 @@ export default function App() {
                     });
                   })() : storageEvidenceCategory === 'MUFA' ? (() => {
                     const mufaPhotos = evidences
-                      .filter((ev: any) => !!ev.photoUrl && ev.category === 'MUFA')
+                      .filter((ev: any) => Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url) && ev.category === 'MUFA')
                       .sort((a: any, b: any) => {
                         const numberDiff = Number(a.mufaNumber || 0) - Number(b.mufaNumber || 0);
                         if (numberDiff !== 0) return numberDiff;
