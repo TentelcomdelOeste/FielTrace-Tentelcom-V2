@@ -99,7 +99,7 @@ html.native-camera-active, html.native-camera-active body, html.native-camera-ac
  * La cámara nativa conserva su transparencia mediante la regla anterior
  * para html.native-camera-active. */
 body {
-  background-color: #FFFFFF;
+  background-color: #000000;
 }
 
 /*
