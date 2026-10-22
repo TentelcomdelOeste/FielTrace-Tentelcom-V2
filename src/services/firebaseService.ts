@@ -7,7 +7,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL, getBytes, deleteObject } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
@@ -372,6 +372,20 @@ export const firebaseService = {
         const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
         return bTime - aTime;
       });
+  },
+
+  /** Suscripción en tiempo real: cambios, sustituciones y eliminaciones se propagan a los dispositivos conectados. */
+  subscribeCloudProjectEvidences(projectUuid: string, onChange: (evidences: any[]) => void, onError?: (error: Error) => void): () => void {
+    const projectId = String(projectUuid || '').trim();
+    if (!projectId) return () => {};
+    return onSnapshot(
+      collection(db, 'projects', projectId, 'evidences'),
+      snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }))),
+      error => {
+        console.error('[Firebase] Suscripción de evidencias interrumpida:', error);
+        onError?.(error);
+      }
+    );
   },
 
   /** Obtiene todas las evidencias de un proyecto compartido desde Firestore. */
