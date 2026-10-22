@@ -429,6 +429,12 @@ export default function App() {
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   // Categoría seleccionada por el técnico antes de capturar la evidencia.
   const [evidenceCategory, setEvidenceCategory] = useState<EvidenceCategory | null>(null);
+  const [isExtraPhotoMode, setIsExtraPhotoMode] = useState(false);
+  useEffect(() => {
+    if (evidenceCategory !== 'EXTRAS') setIsExtraPhotoMode(false);
+  }, [evidenceCategory]);
+  const [projectRefreshLoading, setProjectRefreshLoading] = useState(false);
+  const [projectRefreshMessage, setProjectRefreshMessage] = useState('');
   const [fiberCaptureDraft, setFiberCaptureDraft] = useState<{
     side: 'initial' | 'final';
     pairId: string;
@@ -1041,6 +1047,29 @@ export default function App() {
       setSyncRunning(false);
     }
   }, [refreshSyncSummary, syncRunning]);
+
+  const refreshCurrentProjectEvidence = useCallback(async () => {
+    if (!selectedProject?.id || projectRefreshLoading) return;
+    setProjectRefreshLoading(true);
+    setProjectRefreshMessage('Actualizando fotografías y sincronización...');
+    try {
+      await storageService.syncAllLocalData();
+      const fresh = await storageService.getEvidencesByProject(selectedProject.id);
+      setEvidences(fresh);
+      if (viewingEvidence?.id != null) {
+        const refreshedDetail = fresh.find(item => item.id === viewingEvidence.id || item.uuid === viewingEvidence.uuid);
+        if (refreshedDetail) setViewingEvidence(refreshedDetail);
+      }
+      await refreshSyncSummary();
+      const pending = fresh.filter(item => item.syncStatus !== 'synced' || ((item.photoPath || item.photoStoragePath) && !item.photoUrl)).length;
+      setProjectRefreshMessage(pending ? 'Actualizado. ' + pending + ' elemento(s) siguen pendientes; se reintentará la sincronización.' : 'Actualizado. Las fotografías y los datos están sincronizados.');
+    } catch (error) {
+      console.error('[ProjectRefresh] Error al actualizar evidencias:', error);
+      setProjectRefreshMessage('No se pudo completar la actualización. Las fotos locales se conservan.');
+    } finally {
+      setProjectRefreshLoading(false);
+    }
+  }, [selectedProject?.id, projectRefreshLoading, viewingEvidence, refreshSyncSummary]);
 
   const retrySyncEvidence = useCallback(async (id: number) => {
     if (retryingEvidenceId != null) return;
@@ -3063,7 +3092,8 @@ export default function App() {
       const hora = capturedAt.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
       const customFieldsSnapshot = selectedProject.customFields.map(f => ({ ...f }));
-      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory);
+      const selectedEvidenceCategory = EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)
+        || (isExtraPhotoMode ? { id: 'EXTRAS' as EvidenceCategory, label: 'Fotos extras del proyecto' } : undefined);
       if (!selectedEvidenceCategory) throw new Error('Seleccione el tipo de evidencia antes de tomar la fotografía.');
 
       if (selectedEvidenceCategory.id === 'RESERVA' && reserveCaptureDraft?.reserveId && reserveCaptureDraft.reelNumber?.trim()) {
@@ -3588,7 +3618,7 @@ export default function App() {
         .map(ev => ev.fiberPairId as string)
     )
   ).map(pairId => {
-    const pairEvidences = evidences.filter(ev => ev.fiberPairId === pairId && !!ev.photoUrl);
+    const pairEvidences = evidences.filter(ev => ev.fiberPairId === pairId && Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url));
     const initial = pairEvidences.find(ev => ev.category === 'PUNTAS_FIBRA_INICIAL');
     const final = pairEvidences.find(ev => ev.category === 'PUNTAS_FIBRA_FINAL');
     return {
@@ -3606,7 +3636,7 @@ export default function App() {
   );
 
   const evidenceCategoryProgress = EVIDENCE_CATEGORIES.map(category => {
-    const categoryEvidences = evidences.filter(ev => ev.category === category.id && !!ev.photoUrl);
+    const categoryEvidences = evidences.filter(ev => ev.category === category.id && Boolean(ev.photoUrl || ev.photoPath || ev.photoStoragePath || ev.photo?.uri || ev.photo?.url));
     if (category.id === 'RESERVA') {
       const reserveIds = Array.from(new Set(categoryEvidences.map(ev => ev.reserveId).filter(Boolean)));
       const completedReserves = reserveIds.filter(id =>
@@ -4478,9 +4508,21 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setCurrentStep('camera')}
+                  <button
+                    type="button"
+                    onClick={() => { void refreshCurrentProjectEvidence(); }}
+                    disabled={projectRefreshLoading || isProcessing}
+                    title="Actualizar información y reintentar sincronización"
+                    aria-label="Actualizar fotos y sincronización"
+                    className="w-10 h-10 bg-white border border-gray-100 text-blue-600 shadow-sm rounded-xl flex items-center justify-center shrink-0 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    <RefreshCcw className={"w-4 h-4 " + (projectRefreshLoading ? 'animate-spin' : '')} />
+                  </button>
+                  <button
+                    onClick={() => { setIsExtraPhotoMode(true); setEvidenceCategory('EXTRAS'); setProjectRefreshMessage(''); setCurrentStep('camera'); }}
                     disabled={isProcessing}
+                    title="Tomar fotos extras del proyecto (no se incluyen en secciones ni memoria fotográfica)"
+                    aria-label="Tomar foto extra del proyecto"
                     className="w-12 h-12 bg-blue-600 text-white shadow-[0_8px_20px_-4px_rgba(37,99,235,0.5)] rounded-2xl flex items-center justify-center shrink-0 active:scale-95 transition-all disabled:opacity-50"
                   >
                     <CameraIcon className="w-6 h-6" />
@@ -5363,7 +5405,7 @@ export default function App() {
           <div className="absolute top-1 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
             <div className="bg-black/25 backdrop-blur-md border border-white/10 rounded-lg px-2.5 py-1 shadow-sm">
               <p className="text-[8px] font-semibold text-white/75 whitespace-nowrap">
-                Evidencia: {EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
+                Evidencia: {isExtraPhotoMode ? 'Fotos extras del proyecto' : EVIDENCE_CATEGORIES.find(c => c.id === evidenceCategory)?.label || 'Sin categoría'}
               </p>
               {evidenceCategory === 'NAPS' && napCaptureDraft && (
                 <p className="text-[9px] font-black text-white whitespace-nowrap mt-0.5">
