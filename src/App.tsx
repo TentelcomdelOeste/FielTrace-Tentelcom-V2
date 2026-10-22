@@ -250,9 +250,29 @@ const EvidencePhoto = memo(({
   const [retried, setRetried] = useState(false);
 
   useEffect(() => {
-    setImageSrc(getInitialSrc());
+    let cancelled = false;
+    let localObjectUrl: string | null = null;
+    const initial = getInitialSrc();
+    setImageSrc(initial);
     setRetried(false);
-  }, [src, useThumbnail, evidence?.thumbnailUrl, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+
+    // If upload to Firebase failed, the photo may still be safely stored in IndexedDB.
+    // Load that copy proactively instead of rendering an empty tile until onError fires.
+    if (!initial && evidence?.photoPath) {
+      storageService.getPhotoBlob(String(evidence.photoPath)).then(localUrl => {
+        if (cancelled || !localUrl) return;
+        localObjectUrl = localUrl.startsWith('blob:') ? localUrl : null;
+        setImageSrc(localUrl);
+      }).catch(error => {
+        console.warn('[EvidencePhoto] No se pudo recuperar la copia local inicial:', error);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (localObjectUrl) URL.revokeObjectURL(localObjectUrl);
+    };
+  }, [src, useThumbnail, evidence?.thumbnailUrl, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photoPath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
@@ -1214,9 +1234,12 @@ export default function App() {
     
     const savedProject = await storageService.getProject(id);
     setSelectedProject(savedProject);
-    loadData();
-    // After saving, go directly to camera
-    setCurrentStep('camera');
+    await loadData();
+    // Save the configuration and open the project's sections; camera is opened only by the user.
+    setCurrentStep('history');
+    if (navigator.onLine && savedProject?.syncStatus !== 'synced') {
+      alert('El proyecto quedó guardado en este dispositivo, pero Firebase todavía no confirmó la sincronización. Revisa la cuenta autorizada y vuelve a sincronizar.');
+    }
   };
 
   const handleSelectProject = async (p: Project) => {
@@ -1255,9 +1278,16 @@ export default function App() {
     try {
       const remoteProjects = await firebaseService.getCloudProjects();
       setCloudProjects(remoteProjects);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Cloud Projects] Error:', error);
-      alert('No se pudieron cargar los proyectos compartidos desde Firebase.');
+      const code = String(error?.code || '');
+      if (code.includes('permission-denied') || code.includes('unauthorized')) {
+        alert('La cuenta actual no tiene acceso activo a los proyectos compartidos. Inicia sesión con una cuenta autorizada de FieldTrace o solicita al administrador que active tu perfil. No se modificaron las reglas de seguridad.');
+      } else if (!navigator.onLine) {
+        alert('No hay conexión a Internet. Los proyectos compartidos requieren conexión; tus proyectos locales se conservan.');
+      } else {
+        alert('No se pudieron cargar los proyectos compartidos desde Firebase. Revisa la sesión de la cuenta y vuelve a intentarlo.');
+      }
     } finally {
       setCloudProjectsLoading(false);
     }
@@ -4657,17 +4687,24 @@ export default function App() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Resp.</label>
-                      <input 
-                        type="text" 
-                        value={editingProject.techName || ''}
-                        onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
-                        className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold" 
-                        placeholder="Nombre completo"
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Responsable</label>
+                    <input
+                      type="text"
+                      value={editingProject.techName || ''}
+                      onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:border-blue-500 focus:ring-0 outline-none"
+                      placeholder="Nombre completo del técnico"
+                    />
+                    <label className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingProject.showTech !== false}
+                        onChange={(e) => setEditingProject({...editingProject, showTech: e.target.checked})}
+                        className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
-                    </div>
+                      <span className="text-xs font-bold text-blue-900">Mostrar técnico en el overlay de la fotografía</span>
+                    </label>
                   </div>
 
                   <div className="bg-blue-50 p-5 rounded-[2rem] border border-blue-100">
@@ -4677,7 +4714,6 @@ export default function App() {
                         { key: 'showDateTime', label: 'Fecha y Hora' },
                         { key: 'showGps', label: 'GPS' },
                         { key: 'showLocation', label: 'Ubicación' },
-                        { key: 'showTech', label: 'Técnico' },
                       ].map((field) => (
                         <label key={field.key} className="flex items-center gap-2 cursor-pointer group">
                           <input 
@@ -4982,7 +5018,7 @@ export default function App() {
                   onClick={handleSaveProject}
                   className="w-full py-5 bg-blue-600 text-white rounded-[2rem] text-[13px] font-black uppercase tracking-widest shadow-2xl shadow-blue-600/20 active:scale-95 transition-all"
                 >
-                  Guardar y Abrir Cámara
+                  Guardar Proyecto
                 </button>
               </motion.div>
             )}
