@@ -4486,6 +4486,20 @@ export default function App() {
                   </div>
                 )}
 
+                {memoryDeleteTarget && (
+                  <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm" onClick={() => { if (!memoryDeleteLoading) setMemoryDeleteTarget(null); }}>
+                    <div className="w-full max-w-sm space-y-4 rounded-3xl bg-white p-6 text-center shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600"><Trash2 className="h-7 w-7" /></div>
+                      <h3 className="text-base font-black uppercase tracking-tight text-gray-950">¿Eliminar fotografía?</h3>
+                      <p className="text-sm text-gray-600">Se eliminará esta fotografía de Firebase Storage y su registro del proyecto. Esta acción no se puede deshacer.</p>
+                      <div className="flex gap-3 pt-1">
+                        <button type="button" disabled={memoryDeleteLoading} onClick={() => setMemoryDeleteTarget(null)} className="flex-1 rounded-xl bg-gray-100 py-3 text-[10px] font-black uppercase text-gray-700 disabled:opacity-50">Cancelar</button>
+                        <button type="button" disabled={memoryDeleteLoading} onClick={() => void deleteMemoryPhoto()} className="flex-1 rounded-xl bg-red-600 py-3 text-[10px] font-black uppercase text-white disabled:opacity-50">{memoryDeleteLoading ? 'Eliminando...' : 'Sí, eliminar'}</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {memorySelectedPhoto && (
                   <div className="fixed inset-0 z-[100] bg-black/90 p-4 md:p-8 flex items-center justify-center" onClick={() => setMemorySelectedPhoto(null)}>
                     <button type="button" onClick={() => setMemorySelectedPhoto(null)} className="absolute top-5 right-5 w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center">
@@ -4506,6 +4520,13 @@ export default function App() {
                            (memorySelectedPhoto.mufaNumber ? 'MUFA ' + memorySelectedPhoto.mufaNumber : '') || 'FOTOGRAFÍA'}
                         </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); setMemoryDeleteTarget(memorySelectedPhoto); }}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-[10px] font-black uppercase tracking-wide text-white shadow-lg"
+                      >
+                        <Trash2 className="w-4 h-4" /> Eliminar fotografía
+                      </button>
                     </div>
                   </div>
                 )}
