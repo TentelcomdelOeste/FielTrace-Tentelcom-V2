@@ -556,9 +556,11 @@ export default function App() {
   const [showEvidenceList, setShowEvidenceList] = useState(false);
   const [showStorageEvidenceViewer, setShowStorageEvidenceViewer] = useState(false);
   const [storageEvidenceCategory, setStorageEvidenceCategory] = useState<EvidenceCategory | null>(null);
-  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<{ category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number } | null>(null);
+  const [pendingMemoryUpload, setPendingMemoryUpload] = useState<any | null>(null);
   const memoryUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [memoryUploadLoading, setMemoryUploadLoading] = useState(false);
+  const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<any | null>(null);
+  const [memoryDeleteLoading, setMemoryDeleteLoading] = useState(false);
   const [pendingProjectPhotoUpload, setPendingProjectPhotoUpload] = useState<any>(null);
   const projectPhotoUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [projectPhotoUploadLoading, setProjectPhotoUploadLoading] = useState(false);
@@ -1403,15 +1405,19 @@ export default function App() {
     }
   };
 
-  const uploadMissingMemoryPhoto = (slot: { category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number }) => {
+  const uploadMissingMemoryPhoto = (slot: any) => {
     setPendingMemoryUpload(slot);
-    memoryUploadInputRef.current?.click();
+    if (memoryUploadInputRef.current) {
+      memoryUploadInputRef.current.value = '';
+      memoryUploadInputRef.current.click();
+    }
   };
 
   const handleMemoryUploadFile = async (file: File | undefined) => {
     const slot = pendingMemoryUpload;
     if (!file || !slot || !file.type.startsWith('image/')) {
       if (file) alert('Selecciona una fotografía válida.');
+      setPendingMemoryUpload(null);
       return;
     }
     setMemoryUploadLoading(true);
@@ -1419,44 +1425,122 @@ export default function App() {
       const project = memorySelectedProject;
       const projectUuid = String(project?.uuid || project?.id || '');
       if (!projectUuid) throw new Error('No se encontró el identificador del proyecto.');
-
-      const uuid = crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+      const category = String(slot.category || '').toUpperCase();
+      const existing = slot.existingEvidence || null;
+      const siblings: any[] = Array.isArray(slot.groupItems) ? slot.groupItems : (slot.groupItem ? [slot.groupItem] : []);
+      const seed: any = existing || slot.groupItem || siblings[0] || {};
       const now = new Date();
-      const remote = await firebaseService.uploadEvidencePhoto(file, projectUuid, uuid, file.name);
-
-      const evidence = {
-        id: null, uuid, projectId: project?.id ?? null, projectUuid, projectName: project?.name || '',
-        photoPath: file.name, photoStoragePath: remote.storagePath, photoUrl: remote.downloadUrl,
-        category: slot.category, categoryLabel: 'NAPS',
-        capturedAt: now.toISOString(), fecha: now.toLocaleDateString('es-ES'),
-        hora: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now(), latitude: 0, longitude: 0, gpsAccuracy: null, ubicacion: '',
-        baseFields: { posteId: '', tecnico: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '' },
-        tecnico: '', posteId: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '',
-        customFields: [], sharedWhatsApp: false, locked: false,
-        napId: slot.napId, napNumber: slot.napNumber, napName: slot.napName, napPhotoNumber: slot.photoNumber,
-        createdAt: now.toISOString(), updatedAt: now.toISOString(), syncStatus: 'synced', retryCount: 0, schemaVersion: 3
+      const uuid = String(existing?.uuid || (crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8))));
+      const numberFields: Record<string, string> = {
+        NAPS: 'napNumber', MUFA: 'mufaNumber', PUNTAS_FIBRA: 'fiberPairNumber', PUNTAS_FIBRA_INICIAL: 'fiberPairNumber',
+        PUNTAS_FIBRA_FINAL: 'fiberPairNumber', RESERVA: 'reserveNumber', ACEROS: 'aceroNumber', DESECHOS: 'desechoNumber',
+        ALTAS: 'altaNumber', MEJORAS: 'mejoraNumber'
       };
+      const idFields: Record<string, string> = {
+        NAPS: 'napId', MUFA: 'mufaId', PUNTAS_FIBRA: 'fiberPairId', PUNTAS_FIBRA_INICIAL: 'fiberPairId',
+        PUNTAS_FIBRA_FINAL: 'fiberPairId', RESERVA: 'reserveId', ACEROS: 'aceroId', DESECHOS: 'desechoId',
+        ALTAS: 'altaId', MEJORAS: 'mejoraId'
+      };
+      const numberField = numberFields[category];
+      const idField = idFields[category];
+      const groupNumber = Number(slot.groupNumber ?? seed[numberField] ?? 0);
+      const groupName = String(slot.groupName ?? seed.napName ?? seed.mufaName ?? seed.altaType ?? seed.mejoraType ?? seed.categoryLabel ?? '').trim();
+      const actualGroupId = String(seed[idField] || existing?.[idField] || '').trim();
+      const stableGroupId = actualGroupId || (category === 'MUFA' ? '' :
+        'memory_' + category.toLowerCase() + '_' + projectUuid + '_' +
+        String(seed.uuid || slot.groupId || groupNumber || 'set').replace(/[^a-zA-Z0-9_-]/g, '_'));
 
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      const photoPath = 'FT_MEMORY_' + uuid + '.' + extension;
+      const remote = await firebaseService.uploadEvidencePhoto(file, projectUuid, uuid, photoPath);
+      const labels: Record<string, string> = {
+        NAPS: 'NAPS', MUFA: 'MUFA', PUNTAS_FIBRA: 'PUNTAS DE FIBRA', PUNTAS_FIBRA_INICIAL: 'PUNTAS DE FIBRA',
+        PUNTAS_FIBRA_FINAL: 'PUNTAS DE FIBRA', RESERVA: 'RESERVAS', ACEROS: 'ACEROS',
+        DESECHOS: 'DESECHOS', ALTAS: 'ALTAS', MEJORAS: 'MEJORAS'
+      };
+      const evidence: any = {
+        ...(existing || {}), uuid, projectId: project?.id ?? existing?.projectId ?? null, projectUuid,
+        projectName: project?.name || existing?.projectName || '', photoPath,
+        photoStoragePath: remote.storagePath, photoUrl: remote.downloadUrl,
+        category, categoryLabel: labels[category] || existing?.categoryLabel || category,
+        capturedAt: existing?.capturedAt || now.toISOString(),
+        fecha: existing?.fecha || now.toLocaleDateString('es-ES'),
+        hora: existing?.hora || now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: existing?.timestamp || Date.now(), latitude: existing?.latitude ?? 0, longitude: existing?.longitude ?? 0,
+        gpsAccuracy: existing?.gpsAccuracy ?? null, ubicacion: existing?.ubicacion || '',
+        baseFields: existing?.baseFields || { posteId: '', tecnico: '', observaciones: 'Fotografía subida desde Memoria Fotográfica.', materiales: '' },
+        tecnico: existing?.tecnico || '', posteId: existing?.posteId || '',
+        observaciones: existing?.observaciones || 'Fotografía subida desde Memoria Fotográfica.',
+        materiales: existing?.materiales || '', customFields: existing?.customFields || [],
+        sharedWhatsApp: existing?.sharedWhatsApp || false, locked: existing?.locked ?? true,
+        createdAt: existing?.createdAt || now.toISOString(), updatedAt: now.toISOString(),
+        syncStatus: 'synced', retryCount: 0, schemaVersion: 3
+      };
+      if (idField && stableGroupId) evidence[idField] = stableGroupId;
+      if (numberField && Number.isFinite(groupNumber)) evidence[numberField] = groupNumber;
+      const photoNumber = Number(slot.photoNumber || 1);
+      if (category === 'NAPS') Object.assign(evidence, { napName: groupName || seed.napName || '', napPhotoNumber: photoNumber });
+      if (category === 'MUFA') Object.assign(evidence, { mufaName: groupName || seed.mufaName || '', mufaPhotoNumber: photoNumber, photoNumber });
+      if (['PUNTAS_FIBRA', 'PUNTAS_FIBRA_INICIAL', 'PUNTAS_FIBRA_FINAL'].includes(category)) {
+        evidence.category = photoNumber === 1 ? 'PUNTAS_FIBRA_INICIAL' : 'PUNTAS_FIBRA_FINAL';
+        Object.assign(evidence, { fiberSide: photoNumber === 1 ? 'initial' : 'final', fiberMeterage: seed.fiberMeterage ?? seed.metraje, fiberReelNumber: seed.fiberReelNumber ?? seed.reelNumber, fiberCount: seed.fiberCount });
+      }
+      if (category === 'RESERVA') Object.assign(evidence, { reserveSide: photoNumber === 1 ? 'initial' : photoNumber === 2 ? 'final' : 'roll', reserveMeterage: seed.reserveMeterage ?? seed.metraje, reserveReelNumber: seed.reserveReelNumber ?? seed.reelNumber, reserveFiberCount: seed.reserveFiberCount ?? seed.fiberCount });
+      if (category === 'ACEROS') Object.assign(evidence, { aceroSide: photoNumber === 1 ? 'photo1' : 'photo2', aceroPhotoType: photoNumber === 1 ? 'panoramic' : 'meterage', aceroMeterage: seed.aceroMeterage });
+      if (category === 'DESECHOS') Object.assign(evidence, { desechoSide: photoNumber === 1 ? 'photo1' : 'photo2', desechoPhotoType: photoNumber === 1 ? 'panoramic' : 'meterage', desechoMeterage: seed.desechoMeterage });
+      if (category === 'ALTAS') Object.assign(evidence, { altaType: groupName || seed.altaType || 'ALTAS EN ACERO', altaSide: photoNumber === 1 ? 'panoramic' : 'meterage', altaMeterage: seed.altaMeterage, altaReelNumber: seed.altaReelNumber, altaFiberCount: seed.altaFiberCount });
+      if (category === 'MEJORAS') Object.assign(evidence, { mejoraType: groupName || seed.mejoraType || 'PODAS', mejoraSide: photoNumber === 1 ? 'before' : 'after' });
+
+      if (!actualGroupId && stableGroupId && category !== 'MUFA') {
+        for (const sibling of siblings) {
+          if (!sibling?.uuid || sibling.uuid === uuid || sibling[idField]) continue;
+          const ok = await firebaseService.syncEvidenceToCloud({ ...sibling, [idField]: stableGroupId, updatedAt: now.toISOString() });
+          if (!ok) throw new Error('No se pudo conservar el grupo original al reparar la posición faltante. Comprueba la conexión e inténtalo nuevamente.');
+        }
+      }
       if (!(await firebaseService.syncEvidenceToCloud(evidence))) {
         throw new Error('La fotografía se subió a Storage, pero no se pudo guardar su registro en Firestore.');
       }
-
       const append = (projectItem: any) => {
         if (!projectItem) return projectItem;
         const current = Array.isArray(projectItem._evidences) ? projectItem._evidences : [];
-        return { ...projectItem, _evidences: [...current.filter((ev: any) => ev.uuid !== uuid), evidence] };
+        const withRepairedSiblings = current.map((item: any) => {
+          if (!stableGroupId || item[idField] || !siblings.some(sibling => sibling.uuid === item.uuid)) return item;
+          return { ...item, [idField]: stableGroupId };
+        });
+        return { ...projectItem, _evidences: [...withRepairedSiblings.filter((ev: any) => ev.uuid !== uuid), evidence] };
       };
       setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? append(p) : p));
       setMemorySelectedProject((prev: any) => append(prev));
       setPendingMemoryUpload(null);
       if (memoryUploadInputRef.current) memoryUploadInputRef.current.value = '';
-      alert('Fotografía subida correctamente y asociada a la posición seleccionada.');
+      alert(existing ? 'Fotografía reemplazada en la misma posición.' : 'Fotografía subida y asociada a la posición seleccionada.');
     } catch (error: any) {
       console.error('[Memory Upload] Error:', error);
       alert(error?.message || 'No se pudo subir la fotografía.');
     } finally {
       setMemoryUploadLoading(false);
+    }
+  };
+
+  const deleteMemoryPhoto = async () => {
+    const target = memoryDeleteTarget;
+    const project = memorySelectedProject;
+    if (!target || !project) return;
+    setMemoryDeleteLoading(true);
+    try {
+      await firebaseService.deleteEvidenceFromCloud({ ...target, projectUuid: target.projectUuid || project.uuid || project.id });
+      const projectUuid = String(project.uuid || project.id);
+      const removeTarget = (item: any) => ({ ...item, _evidences: (item._evidences || []).filter((ev: any) => ev.uuid !== target.uuid) });
+      setMemorySelectedProject((prev: any) => prev ? removeTarget(prev) : prev);
+      setMemoryProjects(prev => prev.map(item => String(item.uuid || item.id) === projectUuid ? removeTarget(item) : item));
+      setMemorySelectedPhoto(null);
+      setMemoryDeleteTarget(null);
+    } catch (error: any) {
+      console.error('[Memory Delete] Error eliminando fotografía:', error);
+      alert(error?.message || 'No se pudo eliminar la fotografía.');
+    } finally {
+      setMemoryDeleteLoading(false);
     }
   };
 
@@ -4462,9 +4546,11 @@ export default function App() {
                                                 onClick={() => uploadMissingMemoryPhoto({
                                                   category: category.id as EvidenceCategory,
                                                   groupId: String(groupId || group.id || ''),
-                                                  groupNumber: Number(group.number || 1),
+                                                  groupNumber: Number(group.number ?? 0),
                                                   groupName: String(groupName || ''),
                                                   photoNumber,
+                                                  groupItem: seed,
+                                                  groupItems: group.items,
                                                   existingEvidence: ev || undefined
                                                 })}
                                                 className="w-full px-2.5 py-2 rounded-xl bg-white border border-blue-200 text-blue-700 text-[8px] font-black uppercase active:scale-95 disabled:opacity-50">
