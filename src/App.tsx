@@ -1234,9 +1234,10 @@ export default function App() {
     
     const savedProject = await storageService.getProject(id);
     setSelectedProject(savedProject);
-    loadData();
-    // After saving, go directly to camera
-    setCurrentStep('camera');
+    void loadData();
+    // Guardar el proyecto y regresar a sus secciones; la cámara se abre
+    // únicamente cuando el usuario selecciona una sección de captura.
+    setCurrentStep('history');
   };
 
   const handleSelectProject = async (p: Project) => {
@@ -4679,7 +4680,18 @@ export default function App() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Resp.</label>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Resp.</label>
+                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 cursor-pointer whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={!!editingProject.showTech}
+                            onChange={(e) => setEditingProject({...editingProject, showTech: e.target.checked})}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          Mostrar en overlay
+                        </label>
+                      </div>
                       <input 
                         type="text" 
                         value={editingProject.techName || ''}
@@ -4697,7 +4709,6 @@ export default function App() {
                         { key: 'showDateTime', label: 'Fecha y Hora' },
                         { key: 'showGps', label: 'GPS' },
                         { key: 'showLocation', label: 'Ubicación' },
-                        { key: 'showTech', label: 'Técnico' },
                       ].map((field) => (
                         <label key={field.key} className="flex items-center gap-2 cursor-pointer group">
                           <input 
@@ -4999,10 +5010,11 @@ export default function App() {
                 </div>
 
                 <button 
+                  type="button"
                   onClick={handleSaveProject}
                   className="w-full py-5 bg-blue-600 text-white rounded-[2rem] text-[13px] font-black uppercase tracking-widest shadow-2xl shadow-blue-600/20 active:scale-95 transition-all"
                 >
-                  Guardar y Abrir Cámara
+                  Guardar
                 </button>
               </motion.div>
             )}
