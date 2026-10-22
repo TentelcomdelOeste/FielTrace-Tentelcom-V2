@@ -903,6 +903,9 @@ export const storageService = {
 
   async getCloudProjectEvidences(projectUuid: string): Promise<Evidence[]> {
     const remoteEvidences = await firebaseService.getCloudProjectEvidences(projectUuid);
+    // Al abrir/actualizar Memoria Fotográfica también reconciliamos IndexedDB:
+    // evita que una eliminación remota permanezca como registro local obsoleto.
+    await this.reconcileCloudProjectEvidences(projectUuid, remoteEvidences);
     return remoteEvidences as Evidence[];
   },
 
