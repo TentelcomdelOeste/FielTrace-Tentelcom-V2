@@ -8261,7 +8261,7 @@ export default function App() {
               </div>
               <div className="bg-black rounded-2xl overflow-hidden border border-gray-200 min-h-[260px] flex items-center justify-center">
                 {viewingEvidence.photoUrl ? (
-                  <img src={viewingEvidence.photoUrl} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" />
+                  <EvidencePhoto evidence={viewingEvidence} src={viewingEvidence.photoUrl || viewingEvidence.photo?.uri || viewingEvidence.photo?.url} alt={viewingEvidence.categoryLabel || 'Evidencia'} className="w-full max-h-[62vh] object-contain" loading="eager" />
                 ) : (
                   <div className="p-8 text-center text-white/60">
                     <CameraIcon className="w-10 h-10 mx-auto mb-3 opacity-50" />
