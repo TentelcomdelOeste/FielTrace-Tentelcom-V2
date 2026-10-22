@@ -1213,9 +1213,9 @@ export default function App() {
     
     const savedProject = await storageService.getProject(id);
     setSelectedProject(savedProject);
-    loadData();
-    // After saving, go directly to camera
-    setCurrentStep('camera');
+    await loadData();
+    // Guardar el proyecto lleva a sus secciones; la cámara se abre solo al elegir una sección.
+    setCurrentStep('history');
   };
 
   const handleSelectProject = async (p: Project) => {
@@ -4656,17 +4656,26 @@ export default function App() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Resp.</label>
-                      <input 
-                        type="text" 
-                        value={editingProject.techName || ''}
-                        onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
-                        className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold" 
-                        placeholder="Nombre completo"
-                      />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Técnico Responsable</label>
+                      <label className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editingProject.showTech !== false}
+                          onChange={(e) => setEditingProject({...editingProject, showTech: e.target.checked})}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Mostrar en foto
+                      </label>
                     </div>
+                    <input
+                      type="text"
+                      value={editingProject.techName || ''}
+                      onChange={(e) => setEditingProject({...editingProject, techName: toTitleCase(e.target.value)})}
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:border-blue-500 focus:ring-0 outline-none"
+                      placeholder="Nombre completo del técnico"
+                    />
                   </div>
 
                   <div className="bg-blue-50 p-5 rounded-[2rem] border border-blue-100">
@@ -4676,7 +4685,6 @@ export default function App() {
                         { key: 'showDateTime', label: 'Fecha y Hora' },
                         { key: 'showGps', label: 'GPS' },
                         { key: 'showLocation', label: 'Ubicación' },
-                        { key: 'showTech', label: 'Técnico' },
                       ].map((field) => (
                         <label key={field.key} className="flex items-center gap-2 cursor-pointer group">
                           <input 
