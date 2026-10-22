@@ -967,6 +967,7 @@ export default function App() {
             try {
               const localEvidences = await storageService.reconcileCloudProjectEvidences(activeSharedProjectUuid, remoteEvidences);
               if (!active) return;
+              const visibleRemoteEvidences = remoteEvidences.filter((item: any) => item.isDeleted !== true);
               if (currentStep === 'history') {
                 setEvidences(localEvidences);
                 setViewingEvidence(previous => {
@@ -976,13 +977,13 @@ export default function App() {
                 });
               } else {
                 setMemorySelectedProject((previous: any) => previous && String(previous.uuid || previous.id) === activeSharedProjectUuid
-                  ? { ...previous, _evidences: remoteEvidences }
+                  ? { ...previous, _evidences: visibleRemoteEvidences }
                   : previous);
                 setMemorySelectedPhoto((previous: any) => previous
-                  ? remoteEvidences.find((item: any) => item.uuid === previous.uuid) || null
+                  ? visibleRemoteEvidences.find((item: any) => item.uuid === previous.uuid) || null
                   : previous);
                 setMemoryProjects(previous => previous.map(project => String(project.uuid || project.id) === activeSharedProjectUuid
-                  ? { ...project, _evidences: remoteEvidences }
+                  ? { ...project, _evidences: visibleRemoteEvidences }
                   : project));
               }
             } catch (error) {
