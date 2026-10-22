@@ -264,10 +264,25 @@ const EvidencePhoto = memo(({
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
-    setImageSrc(getInitialSrc());
+    let active = true;
+    let localObjectUrl: string | null = null;
+    const initial = getInitialSrc();
+    setImageSrc(initial);
     setRetried(false);
     setImageFailed(false);
-  }, [src, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
+    if (!initial && evidence?.photoPath) {
+      void storageService.getPhotoBlob(String(evidence.photoPath)).then(localUrl => {
+        if (!active || !localUrl) return;
+        localObjectUrl = localUrl.startsWith('blob:') ? localUrl : null;
+        setImageSrc(localUrl);
+        setImageFailed(false);
+      }).catch(error => console.warn('[EvidencePhoto] No se pudo cargar la copia local:', error));
+    }
+    return () => {
+      active = false;
+      if (localObjectUrl) URL.revokeObjectURL(localObjectUrl);
+    };
+  }, [src, evidence?.photoPath, evidence?.photoUrl, evidence?.photoStoragePath, evidence?.photo?.uri, evidence?.photo?.url]);
 
   const recoverImage = async () => {
     if (retried) return;
@@ -535,6 +550,9 @@ export default function App() {
   const [pendingMemoryUpload, setPendingMemoryUpload] = useState<{ category: EvidenceCategory; napId: string; napNumber: number; napName: string; photoNumber: number } | null>(null);
   const memoryUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [memoryUploadLoading, setMemoryUploadLoading] = useState(false);
+  const [pendingProjectPhotoUpload, setPendingProjectPhotoUpload] = useState<any>(null);
+  const projectPhotoUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [projectPhotoUploadLoading, setProjectPhotoUploadLoading] = useState(false);
   const [showQuickConfig, setShowQuickConfig] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'project' | 'field' | 'evidence', id?: number, index?: number } | null>(null);
   const [confirmClearAllStep, setConfirmClearAllStep] = useState<0 | 1 | 2>(0);
