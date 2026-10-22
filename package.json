@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@capgo/camera-preview": "^8.11.2",
+    "@capgo/camera-preview": "8.14.2",
     "@capacitor-community/media": "^9.1.0",
     "@capacitor/android": "^8.3.1",
     "@capacitor/camera": "^8.1.0",
