@@ -4243,8 +4243,8 @@ export default function App() {
                                                         napId: category.id === 'NAPS' ? String(group.id) : undefined,
                                                         napNumber: category.id === 'NAPS' ? Number(group.number) : undefined,
                                                         napName: category.id === 'NAPS' ? String(group.name || '') : undefined,
-                                                        mufaId: category.id === 'MUFA' ? String(group.id) : undefined,
-                                                        mufaNumber: category.id === 'MUFA' ? Number(group.number) : undefined,
+                                                        mufaId: category.id === 'MUFA' ? String(group.items?.[0]?.mufaId || '') : undefined,
+                                                        mufaNumber: category.id === 'MUFA' ? Number(group.number || groupIndex + 1) : undefined,
                                                         mufaName: category.id === 'MUFA' ? String(group.name || '') : undefined,
                                                         photoNumber
                                                       });
