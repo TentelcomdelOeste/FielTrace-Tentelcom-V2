@@ -244,8 +244,11 @@ export const storageService = {
     const id = await manager.add(STORE_PROJECTS, projectToSave);
     const savedProject = await manager.get<Project>(STORE_PROJECTS, id);
 
-    // Guardado local primero; con conexión disponible, sincronización inmediata.
-    await syncProjectImmediately(savedProject);
+    // El guardado local ya está confirmado. La sincronización remota no debe
+    // bloquear la navegación ni impedir que el usuario continúe trabajando offline.
+    void syncProjectImmediately(savedProject).catch(error => {
+      console.warn('[StorageService] Proyecto guardado localmente; sincronización pendiente:', error);
+    });
     return id;
   },
 
@@ -277,8 +280,11 @@ export const storageService = {
     };
     await manager.put(STORE_PROJECTS, updated);
 
-    // Los cambios de configuración también se sincronizan inmediatamente.
-    await syncProjectImmediately(updated);
+    // Persistir localmente es la operación crítica. La sincronización remota
+    // se ejecuta en segundo plano para evitar que editar/guardar quede bloqueado.
+    void syncProjectImmediately(updated).catch(error => {
+      console.warn('[StorageService] Cambios del proyecto guardados localmente; sincronización pendiente:', error);
+    });
   },
 
   /**
@@ -290,12 +296,9 @@ export const storageService = {
   async addEvidence(evidence: Evidence, imageBase64: string): Promise<number> {
     const project = await this.getProject(evidence.projectId);
 
-    // Garantiza que el proyecto padre exista/esté actualizado en Firestore
-    // antes de iniciar la sincronización de la evidencia.
-    if (navigator.onLine && project) {
-      await syncProjectImmediately(project);
-    }
-
+    // Nunca esperar a Firebase antes de guardar la evidencia localmente.
+    // La sincronización del proyecto padre se realizará en segundo plano después
+    // de confirmar el archivo y sus metadatos en IndexedDB.
     const evidenceToSave: Evidence = {
       ...evidence,
       projectUuid: evidence.projectUuid || project?.uuid,
@@ -344,54 +347,55 @@ export const storageService = {
 
     const evidenceId = await manager.addEvidenceAtomically(evidenceToSave, photoBlob);
 
-    // SEGUNDO: si hay conexión, intentamos Storage inmediatamente.
-    // Si falla, la evidencia permanece PENDING y la copia local queda intacta
-    // para que el sincronizador la reintente después.
-    if (navigator.onLine && evidenceToSave.projectUuid && photoBlob) {
-      try {
-        const remote = await firebaseService.uploadEvidencePhoto(
-          photoBlob,
-          evidenceToSave.projectUuid,
-          evidenceToSave.uuid,
-          evidenceToSave.photoPath
-        );
-
-        evidenceToSave.photoStoragePath = remote.storagePath;
-        evidenceToSave.photoUrl = remote.downloadUrl;
-        await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
-      } catch (uploadError) {
-        console.warn('[StorageService] Foto pendiente de subida a Firebase Storage:', uploadError);
-      }
-    }
-
-    // TERCERO: Firestore solo puede quedar "synced" cuando la fotografía,
-    // si existe, ya tiene una referencia válida de Storage.
+    // La evidencia y su Blob ya están persistidos localmente. Desde este punto
+    // toda operación remota es de fondo: un timeout/permisos/red no puede bloquear
+    // la cámara ni provocar la pérdida de la fotografía.
     if (navigator.onLine) {
-      try {
-        const success = await firebaseService.syncEvidenceToCloud(evidenceToSave);
-        if (success) {
-          evidenceToSave.syncStatus = 'synced';
-          evidenceToSave.lastSyncedAt = new Date();
-          evidenceToSave.syncError = undefined;
-          evidenceToSave.retryCount = 0;
-          if (evidenceId) {
+      void (async () => {
+        try {
+          if (project) await syncProjectImmediately(project);
+
+          if (evidenceToSave.projectUuid && photoBlob) {
+            const remote = await firebaseService.uploadEvidencePhoto(
+              photoBlob,
+              evidenceToSave.projectUuid,
+              evidenceToSave.uuid,
+              evidenceToSave.photoPath
+            );
+            evidenceToSave.photoStoragePath = remote.storagePath;
+            evidenceToSave.photoUrl = remote.downloadUrl;
             await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
           }
 
-          // La copia local solo se elimina después de confirmar Firestore.
-          if (evidenceToSave.photoUrl && evidenceToSave.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidenceToSave.photoPath);
+          // Solo se declara sincronizada si los metadatos se aceptan en Firestore
+          // y, cuando hay foto, existe URL confirmada de Storage.
+          const photoReady = !evidenceToSave.photoPath || Boolean(evidenceToSave.photoUrl);
+          if (photoReady) {
+            const success = await firebaseService.syncEvidenceToCloud(evidenceToSave);
+            if (success) {
+              evidenceToSave.syncStatus = 'synced';
+              evidenceToSave.lastSyncedAt = new Date();
+              evidenceToSave.syncError = undefined;
+              evidenceToSave.retryCount = 0;
+              await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
+              // Mantener el Blob local permite abrir la foto dentro de la app incluso
+              // si la URL remota falla o el dispositivo está sin conexión.
+            }
           }
-        } else {
-          evidenceToSave.syncStatus = 'pending';
-          evidenceToSave.syncError = 'La fotografía o sus metadatos todavía no se han confirmado en Firebase.';
-          if (evidenceId) {
-            await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
+        } catch (syncError) {
+          console.warn('[StorageService] Evidencia guardada localmente; sincronización pendiente:', syncError);
+          try {
+            const latest = await manager.get<Evidence>(STORE_EVIDENCES, evidenceId);
+            if (latest) {
+              latest.syncStatus = 'pending';
+              latest.syncError = String((syncError as any)?.message || syncError);
+              await manager.put(STORE_EVIDENCES, latest);
+            }
+          } catch (persistError) {
+            console.error('[StorageService] No se pudo actualizar el estado pendiente:', persistError);
           }
         }
-      } catch (syncError) {
-        console.error('[StorageService] Error en sincronización inicial de evidencia:', syncError);
-      }
+      })();
     }
 
     return evidenceId;
@@ -549,9 +553,8 @@ export const storageService = {
           evidence.retryCount = 0;
           evidence.syncSchemaVersion = CURRENT_SYNC_SCHEMA_VERSION;
           if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
-          if (evidence.photoUrl && evidence.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidence.photoPath);
-          }
+          // No borrar STORE_PHOTOS al sincronizar: es la copia persistente
+          // que permite visualizar evidencias desde Field Trace sin depender de la red.
           evidencesSynced++;
         } else {
           evidence.syncStatus = 'failed';
