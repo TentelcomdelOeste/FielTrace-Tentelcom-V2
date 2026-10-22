@@ -1332,21 +1332,74 @@ export default function App() {
     setMemoryLoading(true);
     setMemorySelectedProject(null);
     try {
-      const remoteProjects = await firebaseService.getCloudProjects();
-      const summaries = await Promise.all(remoteProjects.map(async (project: any) => {
+      // Cargar ambos orígenes: un proyecto recién capturado no debe desaparecer
+      // de Memoria Fotográfica solo porque su sincronización remota esté pendiente.
+      const [remoteProjectsResult, localProjects] = await Promise.all([
+        firebaseService.getCloudProjects().catch(error => {
+          console.warn('[Memory Dashboard] Firebase no disponible; se mostrarán proyectos locales:', error);
+          return [] as any[];
+        }),
+        storageService.getAllProjects().catch(error => {
+          console.warn('[Memory Dashboard] No se pudieron leer proyectos locales:', error);
+          return [] as any[];
+        })
+      ]);
+      const projectMap = new Map<string, any>();
+      for (const project of remoteProjectsResult) {
+        const key = String(project.uuid || project.id || '');
+        if (key) projectMap.set(key, { ...project, _remote: true });
+      }
+      for (const project of localProjects) {
+        const key = String(project.uuid || project.id || '');
+        if (!key) continue;
+        const existing = projectMap.get(key);
+        projectMap.set(key, { ...project, ...existing, uuid: project.uuid || existing?.uuid, _local: project });
+      }
+
+      const summaries = await Promise.all(Array.from(projectMap.values()).map(async (project: any) => {
         const uuid = String(project.uuid || project.id);
-        try {
-          const remoteEvidences = await firebaseService.getCloudProjectEvidences(uuid);
-          return { ...project, _evidences: remoteEvidences };
-        } catch (error) {
-          console.error('[Memory Dashboard] Error cargando evidencias:', uuid, error);
-          return { ...project, _evidences: [] };
+        let remoteEvidences: any[] = [];
+        if (project._remote && navigator.onLine) {
+          try {
+            remoteEvidences = await firebaseService.getCloudProjectEvidences(uuid);
+          } catch (error) {
+            console.warn('[Memory Dashboard] Error cargando evidencias remotas:', uuid, error);
+          }
         }
+
+        const localProjectId = project._local?.id ?? project.id;
+        let localEvidences: any[] = [];
+        if (localProjectId != null) {
+          try {
+            localEvidences = await storageService.getEvidencesByProject(Number(localProjectId));
+          } catch (error) {
+            console.warn('[Memory Dashboard] Error cargando evidencias locales:', uuid, error);
+          }
+        }
+
+        const byUuid = new Map<string, any>();
+        for (const ev of remoteEvidences) byUuid.set(String(ev.uuid || ev.id), ev);
+        for (const ev of localEvidences) {
+          const key = String(ev.uuid || ev.id);
+          const remote = byUuid.get(key);
+          let localPhotoUrl = ev.photoUrl || '';
+          if (!localPhotoUrl && ev.photoPath) {
+            try {
+              localPhotoUrl = await storageService.getPhotoBlob(ev.photoPath) || '';
+            } catch (error) {
+              console.warn('[Memory Dashboard] No se pudo abrir la copia local de la foto:', ev.photoPath, error);
+            }
+          }
+          byUuid.set(key, { ...ev, ...remote, photoUrl: remote?.photoUrl || localPhotoUrl || ev.photoUrl || '', _localPending: ev.syncStatus !== 'synced' });
+        }
+        return { ...project, _evidences: Array.from(byUuid.values()) };
       }));
-      setMemoryProjects(summaries);
+      setMemoryProjects(summaries.sort((a, b) =>
+        new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
+      ));
     } catch (error) {
       console.error('[Memory Dashboard] Error:', error);
-      alert('No se pudieron cargar los proyectos de Firebase.');
+      alert('No se pudieron cargar los proyectos locales ni los de Firebase.');
       setCurrentStep('home');
     } finally {
       setMemoryLoading(false);
