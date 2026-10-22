@@ -235,6 +235,20 @@ import { firebaseService, auth, db } from './services/firebaseService';
  * Primero renueva la URL usando el path de Storage y luego intenta la copia local.
  * No vuelve a subir ni elimina fotografías.
  */
+const getMemoryPhotoSlotNumber = (ev: any, category: string): number => {
+  switch (category) {
+    case 'NAPS': return Number(ev?.napPhotoNumber ?? ev?.photoNumber ?? 0);
+    case 'MUFA': return Number(ev?.mufaPhotoNumber ?? ev?.photoNumber ?? 0);
+    case 'PUNTAS_FIBRA': return ev?.fiberSide === 'initial' || ev?.category === 'PUNTAS_FIBRA_INICIAL' ? 1 : ev?.fiberSide === 'final' || ev?.category === 'PUNTAS_FIBRA_FINAL' ? 2 : 0;
+    case 'RESERVA': return ev?.reserveSide === 'initial' ? 1 : ev?.reserveSide === 'final' ? 2 : ev?.reserveSide === 'roll' ? 3 : 0;
+    case 'ACEROS': return ev?.aceroSide === 'photo1' ? 1 : ev?.aceroSide === 'photo2' ? 2 : 0;
+    case 'DESECHOS': return ev?.desechoSide === 'photo1' ? 1 : ev?.desechoSide === 'photo2' ? 2 : 0;
+    case 'ALTAS': return ev?.altaSide === 'panoramic' ? 1 : ev?.altaSide === 'meterage' ? 2 : 0;
+    case 'MEJORAS': return ev?.mejoraSide === 'before' ? 1 : ev?.mejoraSide === 'after' ? 2 : 0;
+    default: return 0;
+  }
+};
+
 const EvidencePhoto = memo(({
   evidence, src, alt, className, loading = 'lazy'
 }: {
@@ -292,11 +306,23 @@ const EvidencePhoto = memo(({
       <div className={className + ' bg-black/70 flex flex-col items-center justify-center gap-1 text-center text-white/80 p-2'} role="img" aria-label={alt}>
         <CameraIcon className="w-5 h-5 opacity-60" />
         <span className="text-[8px] font-bold uppercase">{imageFailed ? 'FOTO NO DISPONIBLE' : 'CARGANDO FOTO'}</span>
-        {imageFailed && <button type="button" className="text-[8px] underline font-black" onClick={(event) => {
+        {imageFailed && <button type="button" className="text-[8px] underline font-black" onClick={async (event) => {
           event.stopPropagation();
-          setRetried(false);
+          setRetried(true);
           setImageFailed(false);
-          void recoverImage();
+          try {
+            const storagePath = String(evidence?.photoStoragePath || '').trim();
+            if (storagePath) {
+              const freshUrl = await firebaseService.getEvidencePhotoUrl(storagePath);
+              if (freshUrl) { setImageSrc(freshUrl); return; }
+            }
+            const photoPath = String(evidence?.photoPath || '').trim();
+            if (photoPath) {
+              const localUrl = await storageService.getPhotoBlob(photoPath);
+              if (localUrl) { setImageSrc(localUrl); return; }
+            }
+          } catch (error) { console.warn('[EvidencePhoto] Reintento manual fallido:', error); }
+          setImageFailed(true);
         }}>REINTENTAR</button>}
       </div>
     );
@@ -1382,6 +1408,22 @@ export default function App() {
     } finally {
       setMemoryLoading(false);
     }
+  };
+
+  const refreshMemorySelectedProject = async () => {
+    const selected = memorySelectedProject;
+    const projectUuid = String(selected?.uuid || selected?.id || '');
+    if (!projectUuid || !navigator.onLine) { alert('No hay conexión para actualizar las fotografías desde Firebase.'); return; }
+    setMemoryLoading(true);
+    try {
+      await storageService.syncAllLocalData().catch(error => console.warn('[Memory] Sincronización pendiente:', error));
+      const _evidences = await firebaseService.getCloudProjectEvidences(projectUuid);
+      setMemorySelectedProject({ ...selected, _evidences });
+      setMemoryProjects(prev => prev.map(p => String(p.uuid || p.id) === projectUuid ? { ...p, _evidences } : p));
+    } catch (error) {
+      console.error('[Memory] No se pudieron actualizar las fotografías:', error);
+      alert('No se pudieron actualizar las fotografías. Comprueba la conexión e inténtalo de nuevo.');
+    } finally { setMemoryLoading(false); }
   };
 
   const memoryCategorySummary = (project: any, category: string) => {
