@@ -782,22 +782,21 @@ export default function App() {
 
         if (!active) return;
 
+        if (!active) return;
+
+        console.log('[Camera] native preview started:', started);
+        // La vista previa ya se inició: no esperar la geometría, zoom ni flash para
+        // mostrar la cámara. Aplicar estos ajustes secundarios en segundo plano.
         const previewWidth = Math.max(1, Math.round(window.innerWidth));
         const previewHeight = Math.max(1, Math.round(window.innerHeight));
-        await withCameraTimeout(CameraPreview.setPreviewSize({
+        void CameraPreview.setPreviewSize({
           x: 0,
           y: 0,
           width: previewWidth,
           height: previewHeight
-        }), 2500, 'CAMERA_PREVIEW_SIZE').catch(error => {
-          // Si el tamaño no se puede aplicar, conservar el preview nativo por defecto.
+        }).catch(error => {
           console.warn('[Camera] preview size deferred:', error);
         });
-
-        if (!active) return;
-
-        console.log('[Camera] native preview started:', started);
-        // Zoom y flash no deben retrasar la aparición de la imagen.
         void CameraPreview.setZoom({ level: cameraZoom }).catch(error => {
           console.warn('[Camera] initial zoom:', error);
         });
@@ -805,8 +804,8 @@ export default function App() {
           console.warn('[Camera] initial flash:', error);
         });
 
-        // Sin pausa artificial de 800 ms: liberar la cortina tras iniciar el preview
-        // y configurar su geometría. Los errores de apertura tienen salida controlada.
+        // Sin pausa artificial: liberar la cortina en cuanto start() confirma
+        // que el complemento inició la vista previa.
         setNativeCameraPreviewReady(true);
         setNativeCameraError(null);
       } catch (error: any) {
