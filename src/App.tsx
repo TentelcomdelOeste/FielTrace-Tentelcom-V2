@@ -881,6 +881,36 @@ export default function App() {
     };
   }, []);
 
+  // Mantiene la memoria fotográfica del proyecto abierta sincronizada con los
+  // cambios confirmados en Firestore, incluidos reemplazos y eliminaciones.
+  useEffect(() => {
+    const projectId = selectedProject?.id;
+    const projectUuid = selectedProject?.uuid;
+    if (projectId == null || !projectUuid) return;
+
+    let active = true;
+    const unsubscribe = firebaseService.subscribeToCloudProjectEvidences(
+      String(projectUuid),
+      remoteEvidences => {
+        void storageService.reconcileCloudProjectEvidences(
+          projectId,
+          String(projectUuid),
+          remoteEvidences
+        ).then(localEvidences => {
+          if (active && selectedProject?.id === projectId) setEvidences(localEvidences);
+        }).catch(error => {
+          console.warn('[MemorySync] No se pudo aplicar la memoria fotográfica compartida:', error);
+        });
+      },
+      error => console.warn('[MemorySync] Escucha de Firestore interrumpida:', error)
+    );
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [selectedProject?.id, selectedProject?.uuid]);
+
   const refreshSyncSummary = useCallback(async () => {
     try {
       const [allEvidences, allProjects] = await Promise.all([
