@@ -971,11 +971,15 @@ export default function App() {
                 setEvidences(localEvidences);
                 setViewingEvidence(previous => {
                   if (!previous) return previous;
-                  return localEvidences.find(item => item.uuid === previous.uuid) || previous;
+                  // Si otro dispositivo eliminó esta evidencia, cerrar su detalle.
+                  return localEvidences.find(item => item.uuid === previous.uuid) || null;
                 });
               } else {
                 setMemorySelectedProject((previous: any) => previous && String(previous.uuid || previous.id) === activeSharedProjectUuid
                   ? { ...previous, _evidences: remoteEvidences }
+                  : previous);
+                setMemorySelectedPhoto((previous: any) => previous
+                  ? remoteEvidences.find((item: any) => item.uuid === previous.uuid) || null
                   : previous);
                 setMemoryProjects(previous => previous.map(project => String(project.uuid || project.id) === activeSharedProjectUuid
                   ? { ...project, _evidences: remoteEvidences }
