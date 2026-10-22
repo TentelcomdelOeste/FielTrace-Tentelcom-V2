@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { deliverGeneratedFile } from './fileDownloadService';
 
 type MemoryEvidence = Record<string, any>;
@@ -212,25 +213,66 @@ const recordExcelImageMetrics = (downloadMs: number, processingMs: number, bytes
 async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   const downloadStart = metricNow();
   const fetchImage = async (target: string, proxy = false): Promise<Response> => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
-    let response: Response;
     let blob: Blob;
-    try {
-      response = await fetch(target, proxy
-        ? { cache: 'force-cache', signal: controller.signal }
-        : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      // Mantener activo el timeout hasta leer el cuerpo completo; en móviles
-      // algunas respuestas entregan cabeceras y luego se quedan sin terminar.
-      blob = await response.blob();
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
-        throw new Error(`Tiempo de espera agotado al descargar una fotografía (${EXCEL_IMAGE_FETCH_TIMEOUT_MS / 1000} s).`);
+
+    // En el APK no existe la función Netlify local y el WebView puede bloquear
+    // Firebase Storage por CORS. CapacitorHttp descarga por la capa nativa y
+    // devuelve los bytes en base64, evitando ambos problemas.
+    if (Capacitor.isNativePlatform() && !proxy) {
+      const parsedTarget = new URL(target);
+      if (parsedTarget.protocol !== 'https:' ||
+          !['firebasestorage.googleapis.com', 'storage.googleapis.com'].includes(parsedTarget.hostname)) {
+        throw new Error('La fotografía no tiene una URL HTTPS válida de Firebase Storage.');
       }
-      throw error;
-    } finally {
-      window.clearTimeout(timeout);
+
+      const nativeResponse = await CapacitorHttp.get({
+        url: target,
+        responseType: 'arraybuffer',
+        connectTimeout: 15000,
+        readTimeout: EXCEL_IMAGE_FETCH_TIMEOUT_MS,
+      });
+      if (nativeResponse.status < 200 || nativeResponse.status >= 300) {
+        throw new Error(`HTTP ${nativeResponse.status} al descargar la fotografía.`);
+      }
+
+      const data = nativeResponse.data;
+      if (data instanceof ArrayBuffer) {
+        blob = new Blob([data]);
+      } else if (ArrayBuffer.isView(data)) {
+        blob = new Blob([new Uint8Array(data.buffer, data.byteOffset, data.byteLength)]);
+      } else if (typeof data === 'string') {
+        // CapacitorHttp entrega arraybuffer/blob como base64 en Android/iOS.
+        const binary = atob(data);
+        const bytes = new Uint8Array(binary.length);
+        for (let offset = 0; offset < binary.length; offset += 1) {
+          bytes[offset] = binary.charCodeAt(offset);
+        }
+        const contentType = Object.entries(nativeResponse.headers || {})
+          .find(([key]) => key.toLowerCase() === 'content-type')?.[1] || 'image/jpeg';
+        blob = new Blob([bytes], { type: String(contentType) });
+      } else {
+        throw new Error('La descarga nativa no devolvió datos de imagen válidos.');
+      }
+    } else {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), EXCEL_IMAGE_FETCH_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(target, proxy
+          ? { cache: 'force-cache', signal: controller.signal }
+          : { mode: 'cors', cache: 'force-cache', signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        // Mantener activo el timeout hasta leer el cuerpo completo; en móviles
+        // algunas respuestas entregan cabeceras y luego se quedan sin terminar.
+        blob = await response.blob();
+      } catch (error: any) {
+        if (error?.name === 'AbortError') {
+          throw new Error(`Tiempo de espera agotado al descargar una fotografía (${EXCEL_IMAGE_FETCH_TIMEOUT_MS / 1000} s).`);
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
     }
 
     if (!blob.size) throw new Error('La respuesta de la fotografía está vacía.');
@@ -253,18 +295,21 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     : url;
 
   let response: Response;
-  // En APK, las solicitudes directas a Firebase Storage suelen fallar por
-  // CORS (origin https://localhost). Ir primero al proxy evita una petición
-  // fallida por cada foto y el tiempo extra antes del reintento.
-  const useProxyFirst = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  try {
-    response = useProxyFirst && proxyUrl !== url
-      ? await fetchImage(proxyUrl, true)
-      : await fetchImage(url);
-  } catch (firstError) {
-    if (proxyUrl === url) throw firstError;
-    response = await fetchImage(useProxyFirst ? url : proxyUrl, useProxyFirst ? false : true);
+  if (Capacitor.isNativePlatform()) {
+    // En Android descargar directamente por HTTP nativo. No intentar una ruta
+    // /.netlify/functions local: dentro del APK esa función no existe.
+    response = await fetchImage(url);
+  } else {
+    const useProxyFirst = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    try {
+      response = useProxyFirst && proxyUrl !== url
+        ? await fetchImage(proxyUrl, true)
+        : await fetchImage(url);
+    } catch (firstError) {
+      if (proxyUrl === url) throw firstError;
+      response = await fetchImage(useProxyFirst ? url : proxyUrl, useProxyFirst ? false : true);
+    }
   }
 
   const downloadMs = metricNow() - downloadStart;
