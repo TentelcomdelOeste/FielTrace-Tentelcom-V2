@@ -1428,7 +1428,7 @@ export default function App() {
       const category = String(slot.category || '').toUpperCase();
       const existing = slot.existingEvidence || null;
       const siblings: any[] = Array.isArray(slot.groupItems) ? slot.groupItems : (slot.groupItem ? [slot.groupItem] : []);
-      const seed: any = existing || slot.groupItem || siblings[0] || {};
+      const seed: any = slot.groupItem || siblings[0] || existing || {};
       const now = new Date();
       const uuid = String(existing?.uuid || (crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8))));
       const numberFields: Record<string, string> = {
