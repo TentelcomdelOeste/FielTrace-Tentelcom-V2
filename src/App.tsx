@@ -954,38 +954,51 @@ export default function App() {
     currentStep === 'memory' ? (memorySelectedProject?.uuid || '') : ''
   ).trim();
   useEffect(() => {
-    if (!activeSharedProjectUuid || !navigator.onLine || (currentStep !== 'history' && currentStep !== 'memory')) return;
+    if (!activeSharedProjectUuid || (currentStep !== 'history' && currentStep !== 'memory')) return;
     let active = true;
-    const unsubscribe = firebaseService.subscribeCloudProjectEvidences(
-      activeSharedProjectUuid,
-      (remoteEvidences, fromCache) => {
-        if (!active || fromCache) return;
-        void (async () => {
-          try {
-            const localEvidences = await storageService.reconcileCloudProjectEvidences(activeSharedProjectUuid, remoteEvidences);
-            if (!active) return;
-            if (currentStep === 'history') {
-              setEvidences(localEvidences);
-              setViewingEvidence(previous => {
-                if (!previous) return previous;
-                return localEvidences.find(item => item.uuid === previous.uuid) || previous;
-              });
-            } else {
-              setMemorySelectedProject((previous: any) => previous && String(previous.uuid || previous.id) === activeSharedProjectUuid
-                ? { ...previous, _evidences: remoteEvidences }
-                : previous);
-              setMemoryProjects(previous => previous.map(project => String(project.uuid || project.id) === activeSharedProjectUuid
-                ? { ...project, _evidences: remoteEvidences }
-                : project));
+    let unsubscribe: (() => void) | null = null;
+    const connect = () => {
+      if (!active || !navigator.onLine || unsubscribe) return;
+      unsubscribe = firebaseService.subscribeCloudProjectEvidences(
+        activeSharedProjectUuid,
+        (remoteEvidences, fromCache) => {
+          if (!active || fromCache) return;
+          void (async () => {
+            try {
+              const localEvidences = await storageService.reconcileCloudProjectEvidences(activeSharedProjectUuid, remoteEvidences);
+              if (!active) return;
+              if (currentStep === 'history') {
+                setEvidences(localEvidences);
+                setViewingEvidence(previous => {
+                  if (!previous) return previous;
+                  return localEvidences.find(item => item.uuid === previous.uuid) || previous;
+                });
+              } else {
+                setMemorySelectedProject((previous: any) => previous && String(previous.uuid || previous.id) === activeSharedProjectUuid
+                  ? { ...previous, _evidences: remoteEvidences }
+                  : previous);
+                setMemoryProjects(previous => previous.map(project => String(project.uuid || project.id) === activeSharedProjectUuid
+                  ? { ...project, _evidences: remoteEvidences }
+                  : project));
+              }
+            } catch (error) {
+              console.warn('[SharedEvidenceSync] No se pudieron aplicar los cambios remotos:', error);
             }
-          } catch (error) {
-            console.warn('[SharedEvidenceSync] No se pudieron aplicar los cambios remotos:', error);
-          }
-        })();
-      },
-      error => console.warn('[SharedEvidenceSync] La suscripción requiere reconexión:', error)
-    );
-    return () => { active = false; unsubscribe(); };
+          })();
+        },
+        error => console.warn('[SharedEvidenceSync] La suscripción requiere reconexión:', error)
+      );
+    };
+    const disconnect = () => { unsubscribe?.(); unsubscribe = null; };
+    connect();
+    window.addEventListener('online', connect);
+    window.addEventListener('offline', disconnect);
+    return () => {
+      active = false;
+      disconnect();
+      window.removeEventListener('online', connect);
+      window.removeEventListener('offline', disconnect);
+    };
   }, [currentStep, activeSharedProjectUuid]);
 
   // Load last Field Trace album thumbnail when entering camera (survives app restart)
