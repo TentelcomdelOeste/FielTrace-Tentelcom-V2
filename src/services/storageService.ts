@@ -356,10 +356,9 @@ export const storageService = {
             await manager.put(STORE_EVIDENCES, { ...evidenceToSave, id: evidenceId });
           }
 
-          // La copia local solo se elimina después de confirmar Firestore.
-          if (evidenceToSave.photoUrl && evidenceToSave.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidenceToSave.photoPath);
-          }
+          // Conservamos la copia local como respaldo de lectura y reintento.
+          // Una URL puede existir aunque Storage devuelva 402 por facturación; no
+          // borrar el único respaldo hasta que la foto se pueda abrir de verdad.
         } else {
           evidenceToSave.syncStatus = 'pending';
           evidenceToSave.syncError = 'La fotografía o sus metadatos todavía no se han confirmado en Firebase.';
@@ -533,9 +532,8 @@ export const storageService = {
           evidence.retryCount = 0;
           evidence.syncSchemaVersion = CURRENT_SYNC_SCHEMA_VERSION;
           if (evidence.id != null) await manager.put(STORE_EVIDENCES, evidence);
-          if (evidence.photoUrl && evidence.photoPath) {
-            await manager.delete(STORE_PHOTOS, evidence.photoPath);
-          }
+          // Mantener STORE_PHOTOS permite abrir la evidencia sin depender de
+          // Storage cuando la facturación o la conexión impiden descargarla.
           evidencesSynced++;
         } else {
           evidence.syncStatus = 'failed';
