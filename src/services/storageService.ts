@@ -230,7 +230,9 @@ async function syncProjectImmediately(project: Project): Promise<boolean> {
 
 export const storageService = {
   async addEvidenceAtomically(evidence: any, photoBlob?: Blob): Promise<number> {
-    return manager.addEvidenceAtomically(evidence, photoBlob);
+    // IndexedDB autoIncrement requiere que la clave local no venga como null.
+    const { id: _remoteOrPlaceholderId, ...evidenceWithoutLocalId } = evidence;
+    return manager.addEvidenceAtomically(evidenceWithoutLocalId, photoBlob);
   },
 
   async createProject(project: Project): Promise<number> {
