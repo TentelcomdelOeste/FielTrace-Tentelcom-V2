@@ -1632,7 +1632,7 @@ async function addEvidenceSheet(
   );
   const PHOTO_CELL_WIDTH_PX = PHOTO_CELL_WIDTH_EMU / EMU_PER_PIXEL;
   const PHOTO_CELL_HEIGHT_PX = PHOTO_CELL_HEIGHT_EMU / EMU_PER_PIXEL;
-  const PHOTO_SIDE_MARGIN_PX = 12;
+  const PHOTO_SIDE_MARGIN_PX = 4;
   const PHOTO_VERTICAL_MARGIN_PX = 8;
   const PHOTO_BOX_WIDTH_PX = PHOTO_CELL_WIDTH_PX - PHOTO_SIDE_MARGIN_PX * 2;
   const PHOTO_BOX_HEIGHT_PX = PHOTO_CELL_HEIGHT_PX - PHOTO_VERTICAL_MARGIN_PX * 2;
@@ -2146,7 +2146,7 @@ async function addEvidenceSheet(
               PHOTO_BOX_WIDTH_PX / sourceWidth,
               PHOTO_BOX_HEIGHT_PX / sourceHeight,
             );
-            const scale = sourceWidth > sourceHeight ? fitScale * 0.72 : fitScale;
+            const scale = sourceWidth > sourceHeight ? fitScale * 0.93 : fitScale;
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
