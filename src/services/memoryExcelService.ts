@@ -1,5 +1,7 @@
 import ExcelJS from 'exceljs';
 import { deliverGeneratedFile } from './fileDownloadService';
+import { firebaseService } from './firebaseService';
+import { storageService } from './storageService';
 
 type MemoryEvidence = Record<string, any>;
 
@@ -94,9 +96,16 @@ const getPhotoUrl = (ev: MemoryEvidence) =>
     ev.image?.url ||
     ev.storageUrl ||
     ev.url ||
-    ev.photoPath ||
     ''
   ).trim();
+
+const isFetchablePhotoSource = (value: unknown) =>
+  /^(https?:\/\/|data:image\/|blob:|file:)/i.test(String(value || '').trim());
+
+// photoPath suele ser una clave local de IndexedDB, no una URL descargable.
+// Se conserva como referencia para recuperar el Blob local cuando haga falta.
+const hasPhotoReference = (ev: MemoryEvidence) =>
+  Boolean(getPhotoUrl(ev) || String(ev.photoStoragePath || '').trim() || String(ev.photoPath || '').trim());
 
 // Las puntas se guardan en Firebase como dos subcategorías (INICIAL/FINAL),
 // pero en Memoria Fotográfica representan un único set de 2 fotografías.
@@ -188,7 +197,7 @@ const getExcelImagePrefetchConcurrency = () => {
   return 6;
 };
 const excelImageCache = new Map<string, Promise<ExcelImageData>>();
-let excelImagePrefetchQueue: string[] = [];
+let excelImagePrefetchQueue: MemoryEvidence[] = [];
 let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 let excelImagePrefetchGeneration = 0;
@@ -253,8 +262,9 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
 
   const isNativeWebView = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const canUseProxy = /^https?:\/\//i.test(url);
   const proxyOrigin = isNativeWebView ? STORAGE_IMAGE_PROXY_ORIGIN : window.location.origin;
-  const proxyUrl = typeof window !== 'undefined'
+  const proxyUrl = typeof window !== 'undefined' && canUseProxy
     ? `${proxyOrigin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
 
@@ -363,49 +373,118 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
   }
 }
 
+const getExcelImageCacheKey = (ev: MemoryEvidence) => [
+  String(ev.uuid || ev.id || ''),
+  getPhotoUrl(ev),
+  String(ev.photoStoragePath || ''),
+  String(ev.photoPath || ''),
+].join('|');
+
+const freshStoragePhotoUrlCache = new Map<string, Promise<string>>();
+
+async function getFreshStoragePhotoUrl(storagePath: string): Promise<string> {
+  let promise = freshStoragePhotoUrlCache.get(storagePath);
+  if (!promise) {
+    promise = firebaseService.getEvidencePhotoUrl(storagePath);
+    freshStoragePhotoUrlCache.set(storagePath, promise);
+  }
+  return promise;
+}
+
+async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
+  const candidates: string[] = [];
+  const addCandidate = (value: unknown) => {
+    const candidate = String(value || '').trim();
+    if (candidate && isFetchablePhotoSource(candidate) && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  };
+
+  // Recent evidence records may keep an expired/broken download URL. Resolve a
+  // fresh URL from the canonical Storage path first, matching the gallery recovery.
+  const storagePath = String(ev.photoStoragePath || '').trim();
+  if (storagePath && !/^https?:\/\//i.test(storagePath)) {
+    try {
+      addCandidate(await getFreshStoragePhotoUrl(storagePath));
+    } catch (error) {
+      console.warn('[MemoryExcel] No se pudo renovar la URL de Storage; se probarán las referencias restantes.');
+    }
+  }
+
+  addCandidate(getPhotoUrl(ev));
+
+  // On this device, photos may still exist in IndexedDB even when the cloud URL
+  // is stale or the record only has a local photoPath key.
+  const photoPath = String(ev.photoPath || '').trim();
+  if (photoPath) {
+    try {
+      addCandidate(await storageService.getPhotoBlob(photoPath));
+    } catch (error) {
+      console.warn('[MemoryExcel] No se pudo recuperar la copia local de una fotografía.');
+    }
+  }
+
+  let lastError: unknown;
+  for (const source of candidates) {
+    try {
+      return await fetchOriginalImage(source);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new Error('No se encontró una URL remota válida ni una copia local para esta fotografía.');
+}
+
 function primeExcelImagePrefetch() {
   // Bound total prefetched entries, not only active network requests.
-  // Completed image buffers stay in the cache until the worksheet consumes them;
-  // limiting only active fetches allowed hundreds of completed buffers to pile up.
+  // Completed image buffers stay in the cache until the worksheet consumes them.
   while (
     excelImagePrefetchActive < getExcelImagePrefetchConcurrency() &&
     excelImageCache.size < getExcelImagePrefetchConcurrency() &&
     excelImagePrefetchCursor < excelImagePrefetchQueue.length
   ) {
-    const url = excelImagePrefetchQueue[excelImagePrefetchCursor++];
-    if (excelImageCache.has(url)) continue;
+    const ev = excelImagePrefetchQueue[excelImagePrefetchCursor++];
+    const cacheKey = getExcelImageCacheKey(ev);
+    if (excelImageCache.has(cacheKey)) continue;
 
     excelImagePrefetchActive += 1;
     const generation = excelImagePrefetchGeneration;
-    const promise = fetchOriginalImage(url)
+    const promise = fetchEvidenceImage(ev)
       .finally(() => {
-        // An export may have failed or been replaced while this request was in
-        // flight. Do not let an old request mutate the new export's queue state.
+        // An export may have been replaced while this request was in flight.
         if (generation !== excelImagePrefetchGeneration) return;
         excelImagePrefetchActive -= 1;
         primeExcelImagePrefetch();
       });
 
-    excelImageCache.set(url, promise);
+    excelImageCache.set(cacheKey, promise);
   }
 }
 
-function configureExcelImagePrefetch(urls: string[]) {
+function configureExcelImagePrefetch(evidencesToPrefetch: MemoryEvidence[]) {
   // Invalidate callbacks from any previous export before resetting shared state.
   excelImagePrefetchGeneration += 1;
   excelImageCache.clear();
-  excelImagePrefetchQueue = Array.from(new Set(urls.filter(Boolean)));
+  freshStoragePhotoUrlCache.clear();
+  const unique = new Map<string, MemoryEvidence>();
+  for (const ev of evidencesToPrefetch) {
+    if (hasPhotoReference(ev)) unique.set(getExcelImageCacheKey(ev), ev);
+  }
+  excelImagePrefetchQueue = Array.from(unique.values());
   excelImagePrefetchCursor = 0;
   excelImagePrefetchActive = 0;
   primeExcelImagePrefetch();
 }
 
-async function getExcelImage(url: string): Promise<ExcelImageData> {
-  let promise = excelImageCache.get(url);
+async function getExcelImage(ev: MemoryEvidence): Promise<ExcelImageData> {
+  const cacheKey = getExcelImageCacheKey(ev);
+  let promise = excelImageCache.get(cacheKey);
 
   if (!promise) {
-    promise = fetchOriginalImage(url);
-    excelImageCache.set(url, promise);
+    promise = fetchEvidenceImage(ev);
+    excelImageCache.set(cacheKey, promise);
   }
 
   try {
@@ -415,13 +494,12 @@ async function getExcelImage(url: string): Promise<ExcelImageData> {
     throw error;
   } finally {
     // Mantener un máximo pequeño de fotografías adelantadas en memoria.
-    if (excelImageCache.get(url) === promise) {
-      excelImageCache.delete(url);
+    if (excelImageCache.get(cacheKey) === promise) {
+      excelImageCache.delete(cacheKey);
     }
     primeExcelImagePrefetch();
   }
 }
-
 
 const styleHeader = (cell: ExcelJS.Cell, fill: string = '102033') => {
   cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
@@ -1360,10 +1438,9 @@ const addFiberTipsSheet = async (
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
-        const url = getPhotoUrl(ev);
-        if (url) {
+        if (hasPhotoReference(ev)) {
           try {
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(ev);
             // El recuadro real mide aproximadamente 200 px de ancho en Excel.
             // Limitar el ancho aquí evita que las fotos horizontales invadan celdas vecinas.
             const photoBoxWidthPx = 180;
@@ -1580,10 +1657,9 @@ async function addEvidenceSheet(
         imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
         if (ev) {
-          const url = getPhotoUrl(ev);
-          if (url) {
+          if (hasPhotoReference(ev)) {
             try {
-              const image = await getExcelImage(url);
+              const image = await getExcelImage(ev);
               // Mantener la imagen dentro del ancho real del recuadro en Excel.
               const photoBoxWidthPx = 180;
               const photoBoxHeightPx = 300;
@@ -1718,10 +1794,9 @@ async function addEvidenceSheet(
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
-            const url = getPhotoUrl(ev);
-            if (url) {
+            if (hasPhotoReference(ev)) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1850,10 +1925,9 @@ async function addEvidenceSheet(
           imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
           if (ev) {
-            const url = getPhotoUrl(ev);
-            if (url) {
+            if (hasPhotoReference(ev)) {
               try {
-                const image = await getExcelImage(url);
+                const image = await getExcelImage(ev);
 
                 const totalCellWidthEmu = [col, col + 1, col + 2].reduce((sum, currentCol) => {
                   const width = sheet.getColumn(currentCol).width || EXCEL_DEFAULT_COL_WIDTH;
@@ -1967,12 +2041,11 @@ async function addEvidenceSheet(
       imageCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
       if (ev) {
-        const url = getPhotoUrl(ev);
-        if (url) {
+        if (hasPhotoReference(ev)) {
           try {
             // Cada fotografía se descarga, reduce y agrega individualmente.
             // No se acumulan las fotos originales en memoria.
-            const image = await getExcelImage(url);
+            const image = await getExcelImage(ev);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
             const fitScale = Math.min(
@@ -2101,11 +2174,10 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
 
   // Preparar el pipeline de descargas únicamente para las secciones elegidas.
   // Así, al desmarcar libros, tampoco se descargan sus fotografías.
-  const imageUrls = evidences
+  const imageEvidence = evidences
     .filter(ev => !selectedCategories || selectedCategories.has(normalizeMemoryCategory(ev?.category)))
-    .map(getPhotoUrl)
-    .filter(Boolean);
-  configureExcelImagePrefetch(imageUrls);
+    .filter(hasPhotoReference);
+  configureExcelImagePrefetch(imageEvidence);
 
   const preparationStart = now();
   const workbook = new ExcelJS.Workbook();
@@ -2155,7 +2227,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
   if (typeof console !== 'undefined') {
     console.info('[MemoryExcel] Diagnóstico de rendimiento:', JSON.stringify({
       evidenceCount: evidences.length,
-      uniqueImageUrls: new Set(imageUrls).size,
+      uniqueImageUrls: new Set(imageEvidence.map(getPhotoUrl).filter(Boolean)).size,
       imagesProcessed: excelImageMetrics.processed,
       imageFailures: excelImageMetrics.failed,
       downloadedImageMB: Number((excelImageMetrics.downloadedBytes / (1024 * 1024)).toFixed(2)),
@@ -2182,6 +2254,7 @@ export async function generateMemoryExcel(project: any, evidences: MemoryEvidenc
     // Invalidate in-flight callbacks before resetting shared queue state.
     excelImagePrefetchGeneration += 1;
     excelImageCache.clear();
+    freshStoragePhotoUrlCache.clear();
     excelImagePrefetchQueue = [];
     excelImagePrefetchCursor = 0;
     excelImagePrefetchActive = 0;
