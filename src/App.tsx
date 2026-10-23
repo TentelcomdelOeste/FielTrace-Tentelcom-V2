@@ -1303,8 +1303,20 @@ export default function App() {
     try {
       const isProjectUpload = slot.target === 'project';
       const project: any = isProjectUpload ? selectedProject : memorySelectedProject;
-      const projectUuid = String(project?.uuid || project?.id || '');
-      if (!projectUuid) throw new Error('No se encontró el identificador del proyecto.');
+      const projectName = String(project?.name || project?.projectName || '').trim();
+      const fallbackProjectKey = projectName
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      // Permite subir la evidencia aunque el proyecto no tenga UUID/ID persistido.
+      // Se usa una clave estable derivada del nombre cuando está disponible.
+      const projectUuid = String(
+        project?.uuid ||
+        project?.id ||
+        (fallbackProjectKey ? `legacy_project_${fallbackProjectKey}` : `legacy_project_unidentified_${slot.category.toLowerCase()}`)
+      );
 
       const uuid = crypto.randomUUID ? crypto.randomUUID() : ('ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
       const now = new Date();
