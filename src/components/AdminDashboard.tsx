@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, LoaderCircle, ShieldCheck, Users, FolderKanban, Images, Cloud, Save, Check, AlertTriangle, Power } from 'lucide-react';
+import { initializeApp, getApps } from 'firebase/app';
+import { createUserWithEmailAndPassword, getAuth, signOut as firebaseSignOut } from 'firebase/auth';
+import firebaseConfigData from '../../firebase-applet-config.json';
+import { ArrowLeft, LoaderCircle, ShieldCheck, Users, FolderKanban, Images, Cloud, Save, Check, AlertTriangle, Power, UserPlus } from 'lucide-react';
 import { auth, db } from '../services/firebaseService';
 
 export type AreaPermissions = {
@@ -46,6 +49,9 @@ export default function AdminDashboard({ onClose }: Props) {
   const [savingUid, setSavingUid] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [creatingUser, setCreatingUser] = useState(false);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -131,6 +137,74 @@ export default function AdminDashboard({ onClose }: Props) {
     }
   };
 
+  const createUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (creatingUser) return;
+    setCreatingUser(true);
+    setError('');
+    setNotice('');
+    let secondaryAuth: ReturnType<typeof getAuth> | undefined;
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser || currentUser.email?.toLowerCase() !== ADMIN_EMAIL) {
+        throw new Error('Solo el administrador principal puede crear usuarios.');
+      }
+
+      // Crear la cuenta con una instancia secundaria para no cerrar la sesión del administrador.
+      const appName = 'fieldtrace-user-provisioning';
+      const secondaryApp = getApps().find(item => item.name === appName) ||
+        initializeApp({
+          apiKey: firebaseConfigData.apiKey,
+          authDomain: firebaseConfigData.authDomain,
+          projectId: firebaseConfigData.projectId,
+          storageBucket: firebaseConfigData.storageBucket,
+          messagingSenderId: firebaseConfigData.messagingSenderId,
+          appId: firebaseConfigData.appId,
+        }, appName);
+      secondaryAuth = getAuth(secondaryApp);
+      const credential = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        newUserEmail.trim(),
+        newUserPassword
+      );
+
+      await setDoc(doc(db, 'users', credential.user.uid), {
+        uid: credential.user.uid,
+        email: newUserEmail.trim(),
+        role: 'user',
+        active: true,
+        permissions: DEFAULT_PERMISSIONS,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await firebaseSignOut(secondaryAuth);
+      setNewUserEmail('');
+      setNewUserPassword('');
+      await loadUsers();
+      setNotice('Usuario creado en Firebase Authentication y registrado en la base de datos.');
+    } catch (cause: any) {
+      console.error('[AdminDashboard] No se pudo crear el usuario:', cause);
+      const code = String(cause?.code || '');
+      if (code === 'auth/email-already-in-use') {
+        setError('Ese correo ya existe en Firebase Authentication.');
+      } else if (code === 'auth/weak-password') {
+        setError('La contraseña debe tener al menos 6 caracteres.');
+      } else if (code === 'auth/invalid-email') {
+        setError('El correo electrónico no tiene un formato válido.');
+      } else if (code === 'permission-denied' || code === 'firestore/permission-denied') {
+        setError('La cuenta se creó en Authentication, pero Firestore rechazó su perfil. Revisá las reglas de la colección users.');
+      } else {
+        setError(cause?.message || 'No se pudo crear el usuario.');
+      }
+    } finally {
+      if (secondaryAuth?.currentUser) {
+        await firebaseSignOut(secondaryAuth).catch(() => {});
+      }
+      setCreatingUser(false);
+    }
+  };
+
   return (
     <main className="min-h-[100dvh] bg-slate-950 text-white px-4 py-5 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-4xl">
@@ -156,6 +230,24 @@ export default function AdminDashboard({ onClose }: Props) {
             <div className="rounded-2xl bg-slate-950/70 border border-white/5 p-3"><p className="text-xs text-slate-400">Administradores</p><p className="text-2xl font-black mt-1">{users.filter(user => user.role === 'admin').length}</p></div>
             <div className="rounded-2xl bg-slate-950/70 border border-white/5 p-3"><p className="text-xs text-slate-400">Tu sesión</p><p className="text-sm font-bold mt-2 truncate">{auth.currentUser?.email}</p></div>
           </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/10 bg-slate-900 p-5 sm:p-6 mb-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-xl bg-emerald-500/15 p-3"><UserPlus className="w-5 h-5 text-emerald-300"/></div>
+            <div>
+              <h2 className="font-bold text-lg">Crear nuevo usuario</h2>
+              <p className="text-sm text-slate-400 mt-1">La cuenta se creará en Firebase Authentication y su perfil se guardará en Firestore con acceso habilitado.</p>
+            </div>
+          </div>
+          <form onSubmit={createUser} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input type="email" required autoComplete="email" value={newUserEmail} onChange={event => setNewUserEmail(event.target.value)} placeholder="Correo electrónico" aria-label="Correo del nuevo usuario" className="min-w-0 rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500"/>
+            <input type="password" required minLength={6} autoComplete="new-password" value={newUserPassword} onChange={event => setNewUserPassword(event.target.value)} placeholder="Contraseña (mínimo 6)" aria-label="Contraseña del nuevo usuario" className="min-w-0 rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500"/>
+            <button type="submit" disabled={creatingUser || !newUserEmail.trim() || newUserPassword.length < 6} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 px-4 py-3 text-sm font-bold">
+              {creatingUser ? <LoaderCircle className="w-4 h-4 animate-spin"/> : <UserPlus className="w-4 h-4"/>}
+              {creatingUser ? 'Creando usuario...' : 'Crear usuario'}
+            </button>
+          </form>
         </section>
 
         {error && <div role="alert" className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200 flex gap-2"><AlertTriangle className="w-5 h-5 shrink-0"/>{error}</div>}
