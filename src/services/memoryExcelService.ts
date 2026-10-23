@@ -264,7 +264,7 @@ async function fetchNativeRemoteImageDataUrl(url: string): Promise<string | null
     const timeoutId = window.setTimeout(() => {
       nativeImageRequests.delete(requestId);
       resolve(null);
-    }, 35000);
+    }, 60000);
     nativeImageRequests.set(requestId, {
       chunks: [],
       totalChunks: 0,
