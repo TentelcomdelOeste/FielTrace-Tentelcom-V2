@@ -1748,7 +1748,7 @@ async function addEvidenceSheet(
                 );
                 // Fotos horizontales llevan un margen adicional para evitar
                 // que Excel las dibuje sobre el borde del recuadro.
-                const scale = image.width > image.height ? fitScale * 0.88 : fitScale;
+                const scale = image.width > image.height ? fitScale * 0.72 : fitScale;
                 const imageWidth = Math.max(1, Math.floor(image.width * scale));
                 const imageHeight = Math.max(1, Math.floor(image.height * scale));
 
@@ -1880,7 +1880,7 @@ async function addEvidenceSheet(
                 );
                 // Fotos horizontales llevan un margen adicional para evitar
                 // que Excel las dibuje sobre el borde del recuadro.
-                const scale = image.width > image.height ? fitScale * 0.88 : fitScale;
+                const scale = image.width > image.height ? fitScale * 0.72 : fitScale;
                 const imageWidth = Math.max(1, Math.floor(image.width * scale));
                 const imageHeight = Math.max(1, Math.floor(image.height * scale));
 
@@ -1979,7 +1979,7 @@ async function addEvidenceSheet(
               PHOTO_BOX_WIDTH_PX / sourceWidth,
               PHOTO_BOX_HEIGHT_PX / sourceHeight,
             );
-            const scale = sourceWidth > sourceHeight ? fitScale * 0.88 : fitScale;
+            const scale = sourceWidth > sourceHeight ? fitScale * 0.72 : fitScale;
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
