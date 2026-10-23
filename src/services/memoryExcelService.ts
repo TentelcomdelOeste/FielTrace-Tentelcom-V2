@@ -139,6 +139,9 @@ const getDescription = (ev: MemoryEvidence, index: number, category: string) => 
 };
 
 const STORAGE_IMAGE_PROXY_PATH = '/.netlify/functions/storage-image';
+// En APK, window.location.origin es https://localhost y no contiene funciones Netlify.
+// Usamos el dominio publicado de la app como proxy remoto para descargar imágenes sin CORS.
+const STORAGE_IMAGE_PROXY_ORIGIN = 'https://field-trace063.netlify.app';
 
 // Excel no necesita la resolución completa de una foto de cámara.
 // Las imágenes se optimizan individualmente antes de entrar al workbook.
@@ -248,16 +251,17 @@ async function fetchOriginalImage(url: string): Promise<ExcelImageData> {
     return new Response(blob, { status: 200, headers: { 'content-type': mime } });
   };
 
+  const isNativeWebView = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const proxyOrigin = isNativeWebView ? STORAGE_IMAGE_PROXY_ORIGIN : window.location.origin;
   const proxyUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    ? `${proxyOrigin}${STORAGE_IMAGE_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
 
   let response: Response;
-  // En APK, las solicitudes directas a Firebase Storage suelen fallar por
-  // CORS (origin https://localhost). Ir primero al proxy evita una petición
-  // fallida por cada foto y el tiempo extra antes del reintento.
-  const useProxyFirst = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  // En APK, el proxy debe apuntar al sitio Netlify publicado; https://localhost
+  // solo aloja el WebView y no ejecuta funciones Netlify.
+  const useProxyFirst = isNativeWebView;
   try {
     response = useProxyFirst && proxyUrl !== url
       ? await fetchImage(proxyUrl, true)
@@ -1360,8 +1364,10 @@ const addFiberTipsSheet = async (
         if (url) {
           try {
             const image = await getExcelImage(url);
-            const photoBoxWidthPx = 600;
-            const photoBoxHeightPx = 450;
+            // El recuadro real mide aproximadamente 200 px de ancho en Excel.
+            // Limitar el ancho aquí evita que las fotos horizontales invadan celdas vecinas.
+            const photoBoxWidthPx = 180;
+            const photoBoxHeightPx = 300;
             const scale = Math.min(photoBoxWidthPx / image.width, photoBoxHeightPx / image.height);
             const imageWidth = Math.max(1, Math.round(image.width * scale));
             const imageHeight = Math.max(1, Math.round(image.height * scale));
@@ -1578,8 +1584,9 @@ async function addEvidenceSheet(
           if (url) {
             try {
               const image = await getExcelImage(url);
-              const photoBoxWidthPx = 600;
-              const photoBoxHeightPx = 450;
+              // Mantener la imagen dentro del ancho real del recuadro en Excel.
+              const photoBoxWidthPx = 180;
+              const photoBoxHeightPx = 300;
               const scale = Math.min(
                 photoBoxWidthPx / image.width,
                 photoBoxHeightPx / image.height,
@@ -1735,10 +1742,13 @@ async function addEvidenceSheet(
                 const availableWidthPx = Math.max(1, totalCellWidthEmu / EMU_PER_PIXEL - 12);
                 const availableHeightPx = Math.max(1, totalCellHeightEmu / EMU_PER_PIXEL - 12);
 
-                const scale = Math.min(
+                const fitScale = Math.min(
                   availableWidthPx / image.width,
                   availableHeightPx / image.height,
                 );
+                // Fotos horizontales llevan un margen adicional para evitar
+                // que Excel las dibuje sobre el borde del recuadro.
+                const scale = image.width > image.height ? fitScale * 0.88 : fitScale;
                 const imageWidth = Math.max(1, Math.floor(image.width * scale));
                 const imageHeight = Math.max(1, Math.floor(image.height * scale));
 
@@ -1864,10 +1874,13 @@ async function addEvidenceSheet(
                 const availableWidthPx = Math.max(1, totalCellWidthEmu / EMU_PER_PIXEL - 12);
                 const availableHeightPx = Math.max(1, totalCellHeightEmu / EMU_PER_PIXEL - 12);
 
-                const scale = Math.min(
+                const fitScale = Math.min(
                   availableWidthPx / image.width,
                   availableHeightPx / image.height,
                 );
+                // Fotos horizontales llevan un margen adicional para evitar
+                // que Excel las dibuje sobre el borde del recuadro.
+                const scale = image.width > image.height ? fitScale * 0.88 : fitScale;
                 const imageWidth = Math.max(1, Math.floor(image.width * scale));
                 const imageHeight = Math.max(1, Math.floor(image.height * scale));
 
@@ -1962,10 +1975,11 @@ async function addEvidenceSheet(
             const image = await getExcelImage(url);
             const sourceWidth = image.width || 4;
             const sourceHeight = image.height || 3;
-            const scale = Math.min(
+            const fitScale = Math.min(
               PHOTO_BOX_WIDTH_PX / sourceWidth,
               PHOTO_BOX_HEIGHT_PX / sourceHeight,
             );
+            const scale = sourceWidth > sourceHeight ? fitScale * 0.88 : fitScale;
             const imageWidth = Math.max(1, Math.round(sourceWidth * scale));
             const imageHeight = Math.max(1, Math.round(sourceHeight * scale));
 
