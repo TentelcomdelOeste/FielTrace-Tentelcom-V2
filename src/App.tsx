@@ -7625,6 +7625,7 @@ export default function App() {
                                     type="button"
                                     disabled={memoryUploadLoading}
                                     onClick={() => uploadMissingMemoryPhoto({
+                                      target: 'project',
                                       category: 'NAPS',
                                       napId: group[0]?.napId || '',
                                       napNumber: Number(group[0]?.napNumber || groupIndex + 1),
