@@ -32,7 +32,10 @@ import com.getcapacitor.BridgeWebChromeClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import android.content.ContentValues;
 import android.os.Build;
@@ -429,6 +432,153 @@ public class MainActivity extends BridgeActivity {
         }
       } catch (Exception ignored) {}
       return arr.toString();
+    }
+
+    /**
+     * Descarga imágenes de Firebase Storage desde código nativo para la exportación
+     * XLSX. Evita el bloqueo CORS del WebView Android (https://localhost).
+     * Entrega el JPEG optimizado en fragmentos al JavaScript para no hacer una
+     * única llamada evaluateJavascript excesivamente grande.
+     */
+    @JavascriptInterface
+    public void fetchRemoteImageDataUrl(String imageUrl, String requestId, int maxSide) {
+      final String requestedUrl = imageUrl == null ? "" : imageUrl.trim();
+      final String safeRequestId = requestId == null ? "" : requestId;
+      if (safeRequestId.isEmpty() || !isAllowedFirebaseImageUrl(requestedUrl)) {
+        dispatchRemoteImageChunk(safeRequestId, 0, 0, "");
+        return;
+      }
+
+      final int boundedMaxSide = Math.max(512, Math.min(maxSide <= 0 ? 2000 : maxSide, 2048));
+      Thread worker = new Thread(() -> {
+        HttpURLConnection connection = null;
+        try {
+          URL url = new URL(requestedUrl);
+          connection = (HttpURLConnection) url.openConnection();
+          connection.setInstanceFollowRedirects(true);
+          connection.setConnectTimeout(15000);
+          connection.setReadTimeout(25000);
+          connection.setRequestMethod("GET");
+          connection.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+          connection.connect();
+
+          URL finalUrl = connection.getURL();
+          if (!isAllowedFirebaseImageUrl(finalUrl.toString())) {
+            throw new IllegalArgumentException("Unsupported final image host");
+          }
+          int status = connection.getResponseCode();
+          if (status < 200 || status >= 300) {
+            throw new IllegalStateException("Image request returned HTTP " + status);
+          }
+
+          ByteArrayOutputStream downloaded = new ByteArrayOutputStream();
+          byte[] readBuffer = new byte[16 * 1024];
+          int totalBytes = 0;
+          try (InputStream input = connection.getInputStream()) {
+            int read;
+            while ((read = input.read(readBuffer)) != -1) {
+              totalBytes += read;
+              if (totalBytes > 30 * 1024 * 1024) {
+                throw new IllegalStateException("Image exceeds native export limit");
+              }
+              downloaded.write(readBuffer, 0, read);
+            }
+          }
+
+          byte[] imageBytes = downloaded.toByteArray();
+          BitmapFactory.Options bounds = new BitmapFactory.Options();
+          bounds.inJustDecodeBounds = true;
+          BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, bounds);
+          if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw new IllegalStateException("Downloaded data is not a decodable image");
+          }
+
+          int sample = 1;
+          while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > boundedMaxSide) {
+            sample *= 2;
+          }
+          BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
+          decodeOptions.inSampleSize = sample;
+          decodeOptions.inPreferredConfig = Bitmap.Config.ARGB_8888;
+          Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, decodeOptions);
+          if (bitmap == null) {
+            throw new IllegalStateException("Image decoding failed");
+          }
+
+          try {
+            int currentMaxSide = Math.max(bitmap.getWidth(), bitmap.getHeight());
+            if (currentMaxSide > boundedMaxSide) {
+              float scale = (float) boundedMaxSide / currentMaxSide;
+              Bitmap scaled = Bitmap.createScaledBitmap(
+                  bitmap,
+                  Math.max(1, Math.round(bitmap.getWidth() * scale)),
+                  Math.max(1, Math.round(bitmap.getHeight() * scale)),
+                  true
+              );
+              if (scaled != bitmap) {
+                bitmap.recycle();
+                bitmap = scaled;
+              }
+            }
+
+            ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 90, jpeg)) {
+              throw new IllegalStateException("Could not encode image for Excel");
+            }
+            String base64 = Base64.encodeToString(jpeg.toByteArray(), Base64.NO_WRAP);
+            // Keep each Java-to-JavaScript transfer small and safe for WebView.
+            final int chunkSize = 24000;
+            int totalChunks = (base64.length() + chunkSize - 1) / chunkSize;
+            if (totalChunks <= 0) {
+              dispatchRemoteImageChunk(safeRequestId, 0, 0, "");
+              return;
+            }
+            for (int index = 0; index < totalChunks; index++) {
+              int start = index * chunkSize;
+              int end = Math.min(base64.length(), start + chunkSize);
+              dispatchRemoteImageChunk(safeRequestId, index, totalChunks, base64.substring(start, end));
+            }
+          } finally {
+            if (!bitmap.isRecycled()) bitmap.recycle();
+          }
+        } catch (Exception error) {
+          android.util.Log.w("FieldTraceImageExport", "Native image fetch/decode failed: " +
+              error.getClass().getSimpleName());
+          dispatchRemoteImageChunk(safeRequestId, 0, 0, "");
+        } finally {
+          if (connection != null) connection.disconnect();
+        }
+      }, "FieldTraceRemoteImageExport");
+      worker.start();
+    }
+
+    private boolean isAllowedFirebaseImageUrl(String value) {
+      try {
+        URL url = new URL(value);
+        String host = url.getHost() == null ? "" : url.getHost().toLowerCase(Locale.ROOT);
+        return "https".equalsIgnoreCase(url.getProtocol()) &&
+            ("firebasestorage.googleapis.com".equals(host) ||
+             "storage.googleapis.com".equals(host));
+      } catch (Exception ignored) {
+        return false;
+      }
+    }
+
+    private void dispatchRemoteImageChunk(String requestId, int index, int total, String chunk) {
+      if (requestId == null || requestId.isEmpty()) return;
+      runOnUiThread(() -> {
+        try {
+          WebView webView = MainActivity.this.bridge != null
+              ? MainActivity.this.bridge.getWebView()
+              : null;
+          if (webView == null) return;
+          String javascript = "window.__fieldTraceReceiveRemoteImageChunk && " +
+              "window.__fieldTraceReceiveRemoteImageChunk(" +
+              JSONObject.quote(requestId) + "," + index + "," + total + "," +
+              JSONObject.quote(chunk == null ? "" : chunk) + ");";
+          webView.evaluateJavascript(javascript, null);
+        } catch (Exception ignored) {}
+      });
     }
 
     @JavascriptInterface
