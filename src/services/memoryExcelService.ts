@@ -473,6 +473,8 @@ async function getFreshStoragePhotoUrl(storagePath: string): Promise<string> {
 }
 
 async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
+  const isNativeWebView = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const candidates: string[] = [];
   const addCandidate = (value: unknown) => {
     const candidate = String(value || '').trim();
