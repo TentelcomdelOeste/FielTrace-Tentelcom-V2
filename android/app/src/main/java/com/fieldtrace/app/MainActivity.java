@@ -467,11 +467,12 @@ public class MainActivity extends BridgeActivity {
           connection.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
           connection.connect();
 
+          int status = connection.getResponseCode();
+          // Resolve redirects before validating the final destination.
           URL finalUrl = connection.getURL();
           if (!isAllowedFirebaseImageUrl(finalUrl.toString())) {
             throw new IllegalArgumentException("Unsupported final image host");
           }
-          int status = connection.getResponseCode();
           if (status < 200 || status >= 300) {
             throw new IllegalStateException("Image request returned HTTP " + status);
           }
