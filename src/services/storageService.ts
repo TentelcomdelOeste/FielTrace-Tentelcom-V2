@@ -229,6 +229,10 @@ async function syncProjectImmediately(project: Project): Promise<boolean> {
 }
 
 export const storageService = {
+  async addEvidenceAtomically(evidence: any, photoBlob?: Blob): Promise<number> {
+    return manager.addEvidenceAtomically(evidence, photoBlob);
+  },
+
   async createProject(project: Project): Promise<number> {
     const uuid = crypto.randomUUID ? crypto.randomUUID() : 'proj_' + Date.now() + Math.random().toString(36).substr(2, 9);
     const projectToSave: Project = {
