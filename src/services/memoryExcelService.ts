@@ -202,6 +202,86 @@ let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 let excelImagePrefetchGeneration = 0;
 
+const nativeImageRequests = new Map<string, {
+  chunks: string[];
+  totalChunks: number;
+  timeoutId: number;
+  resolve: (dataUrl: string | null) => void;
+}>();
+
+declare global {
+  interface Window {
+    FieldTraceNative?: {
+      fetchRemoteImageDataUrl?: (imageUrl: string, requestId: string, maxSide: number) => void;
+    };
+    __fieldTraceReceiveRemoteImageChunk?: (
+      requestId: string,
+      index: number,
+      totalChunks: number,
+      chunk: string,
+    ) => void;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__fieldTraceReceiveRemoteImageChunk = (requestId, index, totalChunks, chunk) => {
+    const pending = nativeImageRequests.get(requestId);
+    if (!pending) return;
+
+    if (!totalChunks || index < 0 || index >= totalChunks) {
+      window.clearTimeout(pending.timeoutId);
+      nativeImageRequests.delete(requestId);
+      pending.resolve(null);
+      return;
+    }
+
+    if (pending.totalChunks !== 0 && pending.totalChunks !== totalChunks) {
+      window.clearTimeout(pending.timeoutId);
+      nativeImageRequests.delete(requestId);
+      pending.resolve(null);
+      return;
+    }
+
+    pending.totalChunks = totalChunks;
+    pending.chunks[index] = chunk || '';
+    if (pending.chunks.filter(part => part !== undefined).length === totalChunks) {
+      window.clearTimeout(pending.timeoutId);
+      nativeImageRequests.delete(requestId);
+      pending.resolve(`data:image/jpeg;base64,${pending.chunks.join('')}`);
+    }
+  };
+}
+
+async function fetchNativeRemoteImageDataUrl(url: string): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  const isNativeWebView = window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1';
+  const nativeBridge = window.FieldTraceNative;
+  if (!isNativeWebView || typeof nativeBridge?.fetchRemoteImageDataUrl !== 'function') return null;
+
+  const requestId = `excel-image-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return new Promise<string | null>(resolve => {
+    const timeoutId = window.setTimeout(() => {
+      nativeImageRequests.delete(requestId);
+      resolve(null);
+    }, 35000);
+    nativeImageRequests.set(requestId, {
+      chunks: [],
+      totalChunks: 0,
+      timeoutId,
+      resolve,
+    });
+
+    try {
+      nativeBridge.fetchRemoteImageDataUrl!(url, requestId, 2000);
+    } catch (error) {
+      window.clearTimeout(timeoutId);
+      nativeImageRequests.delete(requestId);
+      resolve(null);
+    }
+  });
+}
+
 const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 25_000;
 
 // Diagnóstico de rendimiento por exportación. Solo acumula métricas agregadas;
@@ -411,7 +491,7 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
   if (isNativeWebView && photoPath) {
     try {
       localPhotoUrl = String(await storageService.getPhotoBlob(photoPath) || '').trim();
-      if (localPhotoUrl) {
+      if (localPhotoUrl && /^(blob:|data:image\/|file:)/i.test(localPhotoUrl)) {
         try {
           return await fetchOriginalImage(localPhotoUrl);
         } catch (error) {
@@ -452,6 +532,17 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
 
   let lastError: unknown;
   for (const source of candidates) {
+    if (isNativeWebView && /^https:\/\//i.test(source)) {
+      const nativeDataUrl = await fetchNativeRemoteImageDataUrl(source);
+      if (nativeDataUrl) {
+        try {
+          return await fetchOriginalImage(nativeDataUrl);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+    }
+
     try {
       return await fetchOriginalImage(source);
     } catch (error) {
