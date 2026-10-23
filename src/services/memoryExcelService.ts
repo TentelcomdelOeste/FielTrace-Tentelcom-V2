@@ -399,9 +399,24 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
       candidates.push(candidate);
     }
   };
+  const isNativeWebView = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const photoPath = String(ev.photoPath || '').trim();
+  const addLocalPhoto = async () => {
+    if (!photoPath) return;
+    try {
+      addCandidate(await storageService.getPhotoBlob(photoPath));
+    } catch (error) {
+      console.warn('[MemoryExcel] No se pudo recuperar la copia local de una fotografía.');
+    }
+  };
+
+  // En APK se prioriza la copia de IndexedDB: evita depender de CORS o de la
+  // disponibilidad de Netlify cuando la foto ya existe en este dispositivo.
+  if (isNativeWebView) await addLocalPhoto();
 
   // Recent evidence records may keep an expired/broken download URL. Resolve a
-  // fresh URL from the canonical Storage path first, matching the gallery recovery.
+  // fresh URL from the canonical Storage path, matching the gallery recovery.
   const storagePath = String(ev.photoStoragePath || '').trim();
   if (storagePath && !/^https?:\/\//i.test(storagePath)) {
     try {
@@ -413,16 +428,8 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
 
   addCandidate(getPhotoUrl(ev));
 
-  // On this device, photos may still exist in IndexedDB even when the cloud URL
-  // is stale or the record only has a local photoPath key.
-  const photoPath = String(ev.photoPath || '').trim();
-  if (photoPath) {
-    try {
-      addCandidate(await storageService.getPhotoBlob(photoPath));
-    } catch (error) {
-      console.warn('[MemoryExcel] No se pudo recuperar la copia local de una fotografía.');
-    }
-  }
+  // In browser/shared projects, try the local cache after cloud references.
+  if (!isNativeWebView) await addLocalPhoto();
 
   let lastError: unknown;
   for (const source of candidates) {
