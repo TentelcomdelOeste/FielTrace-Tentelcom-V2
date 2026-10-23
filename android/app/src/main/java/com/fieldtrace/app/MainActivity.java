@@ -181,6 +181,8 @@ public class MainActivity extends BridgeActivity {
       settings.setMediaPlaybackRequiresUserGesture(false);
       settings.setDomStorageEnabled(true);
       settings.setJavaScriptEnabled(true);
+      // Match the known-good camera composition: transparent WebView over a
+      // black native root, preventing uncovered preview pixels from appearing gray.
       webView.setBackgroundColor(Color.TRANSPARENT);
       webView.getRootView().setBackgroundColor(Color.BLACK);
       if (getWindow() != null && getWindow().getDecorView() != null) {

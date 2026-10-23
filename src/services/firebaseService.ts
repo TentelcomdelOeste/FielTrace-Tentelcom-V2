@@ -7,7 +7,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL, getBytes, deleteObject } from 'firebase/storage';
 import firebaseConfigData from '../../firebase-applet-config.json';
@@ -380,6 +380,38 @@ export const firebaseService = {
     if (!uid) throw new Error('No fue posible autenticar la sesión anónima.');
     const snapshot = await getDocs(collection(db, 'projects', String(projectUuid), 'evidences'));
     return snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+  },
+
+  /**
+   * Escucha cambios confirmados en la nube para mantener la memoria fotográfica
+   * actualizada en los dispositivos que tienen abierto el mismo proyecto.
+   * Se ignoran snapshots servidos únicamente desde caché para no borrar datos
+   * locales válidos cuando el dispositivo está desconectado.
+   */
+  subscribeToCloudProjectEvidences(
+    projectUuid: string,
+    onChange: (evidences: any[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    let active = true;
+    const unsubscribe = onSnapshot(
+      collection(db, 'projects', String(projectUuid), 'evidences'),
+      { includeMetadataChanges: true },
+      snapshot => {
+        if (!active || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
+        onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data(), uuid: item.data().uuid || item.id })));
+      },
+      error => {
+        if (active) {
+          console.error('[Firebase] Error escuchando evidencias compartidas:', error);
+          onError?.(error);
+        }
+      }
+    );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   },
 
   /**
