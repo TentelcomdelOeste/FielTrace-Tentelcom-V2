@@ -511,7 +511,9 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
   // Recent evidence records may keep an expired/broken download URL. Resolve a
   // fresh URL from the canonical Storage path, matching the gallery recovery.
   const storagePath = String(ev.photoStoragePath || '').trim();
-  if (storagePath && !/^https?:\/\//i.test(storagePath)) {
+  if (storagePath && /^https?:\/\//i.test(storagePath)) {
+    addCandidate(storagePath);
+  } else if (storagePath) {
     try {
       addCandidate(await getFreshStoragePhotoUrl(storagePath));
     } catch (error) {
@@ -520,6 +522,9 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
   }
 
   addCandidate(getPhotoUrl(ev));
+  // Compatibilidad con registros antiguos donde photoPath era la propia URL,
+  // no solo la clave local de IndexedDB.
+  addCandidate(photoPath);
 
   // En web/proyectos compartidos, conserva la alternativa de la copia local.
   if (!isNativeWebView && photoPath) {
