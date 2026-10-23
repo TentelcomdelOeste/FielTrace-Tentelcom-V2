@@ -202,86 +202,6 @@ let excelImagePrefetchCursor = 0;
 let excelImagePrefetchActive = 0;
 let excelImagePrefetchGeneration = 0;
 
-const nativeImageRequests = new Map<string, {
-  chunks: string[];
-  totalChunks: number;
-  timeoutId: number;
-  resolve: (dataUrl: string | null) => void;
-}>();
-
-declare global {
-  interface Window {
-    FieldTraceNative?: {
-      fetchRemoteImageDataUrl?: (imageUrl: string, requestId: string, maxSide: number) => void;
-    };
-    __fieldTraceReceiveRemoteImageChunk?: (
-      requestId: string,
-      index: number,
-      totalChunks: number,
-      chunk: string,
-    ) => void;
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.__fieldTraceReceiveRemoteImageChunk = (requestId, index, totalChunks, chunk) => {
-    const pending = nativeImageRequests.get(requestId);
-    if (!pending) return;
-
-    if (!totalChunks || index < 0 || index >= totalChunks) {
-      window.clearTimeout(pending.timeoutId);
-      nativeImageRequests.delete(requestId);
-      pending.resolve(null);
-      return;
-    }
-
-    if (pending.totalChunks !== 0 && pending.totalChunks !== totalChunks) {
-      window.clearTimeout(pending.timeoutId);
-      nativeImageRequests.delete(requestId);
-      pending.resolve(null);
-      return;
-    }
-
-    pending.totalChunks = totalChunks;
-    pending.chunks[index] = chunk || '';
-    if (pending.chunks.filter(part => part !== undefined).length === totalChunks) {
-      window.clearTimeout(pending.timeoutId);
-      nativeImageRequests.delete(requestId);
-      pending.resolve(`data:image/jpeg;base64,${pending.chunks.join('')}`);
-    }
-  };
-}
-
-async function fetchNativeRemoteImageDataUrl(url: string): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-  const isNativeWebView = window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
-  const nativeBridge = window.FieldTraceNative;
-  if (!isNativeWebView || typeof nativeBridge?.fetchRemoteImageDataUrl !== 'function') return null;
-
-  const requestId = `excel-image-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  return new Promise<string | null>(resolve => {
-    const timeoutId = window.setTimeout(() => {
-      nativeImageRequests.delete(requestId);
-      resolve(null);
-    }, 60000);
-    nativeImageRequests.set(requestId, {
-      chunks: [],
-      totalChunks: 0,
-      timeoutId,
-      resolve,
-    });
-
-    try {
-      nativeBridge.fetchRemoteImageDataUrl!(url, requestId, 2000);
-    } catch (error) {
-      window.clearTimeout(timeoutId);
-      nativeImageRequests.delete(requestId);
-      resolve(null);
-    }
-  });
-}
-
 const EXCEL_IMAGE_FETCH_TIMEOUT_MS = 25_000;
 
 // Diagnóstico de rendimiento por exportación. Solo acumula métricas agregadas;
@@ -479,41 +399,11 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
       candidates.push(candidate);
     }
   };
-  const isNativeWebView = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const photoPath = String(ev.photoPath || '').trim();
-  const isLocalPhotoKey = Boolean(photoPath) &&
-    !/^(https?:\/\/|data:|blob:|file:)/i.test(photoPath);
-
-  // En APK, prueba primero la copia local sin esperar a Firebase/Netlify.
-  // Así una foto ya guardada en el dispositivo no depende de CORS ni de red.
-  let localPhotoUrl = '';
-  if (isNativeWebView && photoPath) {
-    try {
-      localPhotoUrl = String(await storageService.getPhotoBlob(photoPath) || '').trim();
-      if (localPhotoUrl && /^(blob:|data:image\/|file:)/i.test(localPhotoUrl)) {
-        try {
-          return await fetchOriginalImage(localPhotoUrl);
-        } catch (error) {
-          // Si la copia local no puede leerse, continuar con Storage.
-        } finally {
-          // getPhotoBlob crea esta URL al recuperar una clave de IndexedDB.
-          if (isLocalPhotoKey && localPhotoUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(localPhotoUrl);
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('[MemoryExcel] No se pudo recuperar la copia local de una fotografía.');
-    }
-  }
 
   // Recent evidence records may keep an expired/broken download URL. Resolve a
-  // fresh URL from the canonical Storage path, matching the gallery recovery.
+  // fresh URL from the canonical Storage path first, matching the gallery recovery.
   const storagePath = String(ev.photoStoragePath || '').trim();
-  if (storagePath && /^https?:\/\//i.test(storagePath)) {
-    addCandidate(storagePath);
-  } else if (storagePath) {
+  if (storagePath && !/^https?:\/\//i.test(storagePath)) {
     try {
       addCandidate(await getFreshStoragePhotoUrl(storagePath));
     } catch (error) {
@@ -522,12 +412,11 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
   }
 
   addCandidate(getPhotoUrl(ev));
-  // Compatibilidad con registros antiguos donde photoPath era la propia URL,
-  // no solo la clave local de IndexedDB.
-  addCandidate(photoPath);
 
-  // En web/proyectos compartidos, conserva la alternativa de la copia local.
-  if (!isNativeWebView && photoPath) {
+  // On this device, photos may still exist in IndexedDB even when the cloud URL
+  // is stale or the record only has a local photoPath key.
+  const photoPath = String(ev.photoPath || '').trim();
+  if (photoPath) {
     try {
       addCandidate(await storageService.getPhotoBlob(photoPath));
     } catch (error) {
@@ -537,17 +426,6 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
 
   let lastError: unknown;
   for (const source of candidates) {
-    if (isNativeWebView && /^https:\/\//i.test(source)) {
-      const nativeDataUrl = await fetchNativeRemoteImageDataUrl(source);
-      if (nativeDataUrl) {
-        try {
-          return await fetchOriginalImage(nativeDataUrl);
-        } catch (error) {
-          lastError = error;
-        }
-      }
-    }
-
     try {
       return await fetchOriginalImage(source);
     } catch (error) {
