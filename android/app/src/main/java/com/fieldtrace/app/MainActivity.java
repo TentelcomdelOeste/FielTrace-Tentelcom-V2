@@ -32,7 +32,6 @@ import com.getcapacitor.BridgeWebChromeClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -53,6 +52,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.text.SimpleDateFormat;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -68,6 +68,8 @@ import androidx.media3.transformer.Transformer;
 
 public class MainActivity extends BridgeActivity {
   private static final String ALBUM_NAME = "Field Trace";
+  // Limit native image decodes to reduce peak RAM on phones during Excel exports.
+  private static final Semaphore REMOTE_IMAGE_EXPORT_SLOTS = new Semaphore(2);
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
@@ -452,7 +454,10 @@ public class MainActivity extends BridgeActivity {
       final int boundedMaxSide = Math.max(512, Math.min(maxSide <= 0 ? 2000 : maxSide, 2048));
       Thread worker = new Thread(() -> {
         HttpURLConnection connection = null;
+        boolean slotAcquired = false;
         try {
+          REMOTE_IMAGE_EXPORT_SLOTS.acquire();
+          slotAcquired = true;
           URL url = new URL(requestedUrl);
           connection = (HttpURLConnection) url.openConnection();
           connection.setInstanceFollowRedirects(true);
@@ -547,6 +552,7 @@ public class MainActivity extends BridgeActivity {
           dispatchRemoteImageChunk(safeRequestId, 0, 0, "");
         } finally {
           if (connection != null) connection.disconnect();
+          if (slotAcquired) REMOTE_IMAGE_EXPORT_SLOTS.release();
         }
       }, "FieldTraceRemoteImageExport");
       worker.start();
