@@ -402,18 +402,31 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
   const isNativeWebView = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const photoPath = String(ev.photoPath || '').trim();
-  const addLocalPhoto = async () => {
-    if (!photoPath) return;
+  const isLocalPhotoKey = Boolean(photoPath) &&
+    !/^(https?:\/\/|data:|blob:|file:)/i.test(photoPath);
+
+  // En APK, prueba primero la copia local sin esperar a Firebase/Netlify.
+  // Así una foto ya guardada en el dispositivo no depende de CORS ni de red.
+  let localPhotoUrl = '';
+  if (isNativeWebView && photoPath) {
     try {
-      addCandidate(await storageService.getPhotoBlob(photoPath));
+      localPhotoUrl = String(await storageService.getPhotoBlob(photoPath) || '').trim();
+      if (localPhotoUrl) {
+        try {
+          return await fetchOriginalImage(localPhotoUrl);
+        } catch (error) {
+          // Si la copia local no puede leerse, continuar con Storage.
+        } finally {
+          // getPhotoBlob crea esta URL al recuperar una clave de IndexedDB.
+          if (isLocalPhotoKey && localPhotoUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(localPhotoUrl);
+          }
+        }
+      }
     } catch (error) {
       console.warn('[MemoryExcel] No se pudo recuperar la copia local de una fotografía.');
     }
-  };
-
-  // En APK se prioriza la copia de IndexedDB: evita depender de CORS o de la
-  // disponibilidad de Netlify cuando la foto ya existe en este dispositivo.
-  if (isNativeWebView) await addLocalPhoto();
+  }
 
   // Recent evidence records may keep an expired/broken download URL. Resolve a
   // fresh URL from the canonical Storage path, matching the gallery recovery.
@@ -428,8 +441,14 @@ async function fetchEvidenceImage(ev: MemoryEvidence): Promise<ExcelImageData> {
 
   addCandidate(getPhotoUrl(ev));
 
-  // In browser/shared projects, try the local cache after cloud references.
-  if (!isNativeWebView) await addLocalPhoto();
+  // En web/proyectos compartidos, conserva la alternativa de la copia local.
+  if (!isNativeWebView && photoPath) {
+    try {
+      addCandidate(await storageService.getPhotoBlob(photoPath));
+    } catch (error) {
+      console.warn('[MemoryExcel] No se pudo recuperar la copia local de una fotografía.');
+    }
+  }
 
   let lastError: unknown;
   for (const source of candidates) {
